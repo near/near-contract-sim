@@ -13,6 +13,12 @@ since the last tag: **Breaking** for a `!` title, **Added** for `feat`,
 title. `explore` is experimental and changes more often than the rest;
 its changes follow the same rules.
 
+## 0.1.1 (2026-10-29)
+
+### Added
+
+- explore: Run per-step edges on new enumerate steps placed at rest ([#5](https://github.com/near/near-contract-sim/pull/5))
+
 ## 0.1.0 (2026-10-28)
 
 The first release. It runs NEAR contracts on nearcore
