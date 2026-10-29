@@ -1,0 +1,27 @@
+[package]
+name = "vault"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Token vault specimen for near-contract-sim: deposits, withdrawals with a callback, daily rewards"
+repository = "https://github.com/near/near-contract-sim"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# The planted bug: on_withdraw does not give the shares back when the payout fails.
+forgetful = []
+
+[dependencies]
+near-sdk = { version = "=5.29.1", features = ["unstable"] }
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
+
+[workspace]

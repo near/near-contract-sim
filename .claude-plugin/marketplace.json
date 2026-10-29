@@ -1,0 +1,15 @@
+{
+  "name": "near-contract-sim",
+  "description": "The near-contract-sim agent skill: tests for NEAR contracts on an in-process simulator.",
+  "owner": {
+    "name": "NEAR",
+    "url": "https://github.com/near/near-contract-sim"
+  },
+  "plugins": [
+    {
+      "name": "near-contract-sim",
+      "source": ".",
+      "description": "Writes and runs tests for NEAR contracts with near-contract-sim, invariant campaigns included."
+    }
+  ]
+}

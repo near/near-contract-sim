@@ -1,0 +1,36 @@
+[package]
+name = "custody"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Intents-inspired multi-position custodian specimen for near-contract-sim: a deposit-with-notify flow whose resolver callback does input-dependent work"
+repository = "https://github.com/near/near-contract-sim"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# The two planted bugs, one per build. The default build is the fixed one.
+#
+# `bug_gas`: the deposit resolver gets a flat, small gas budget sized for
+# one position, while the work it does (a storage write per position) grows
+# with the number of positions. Large deposits run it out of gas.
+bug_gas = []
+# `bug_log`: the deposit resolver emits one refund event covering every
+# position, and the deposit does not check that it fits. Many or long ids,
+# or a long memo, push the log past the host's 16 KiB per-receipt limit and
+# trap the callback. The fixed build checks the worst-case log size up front.
+bug_log = []
+
+[dependencies]
+near-sdk = { version = "=5.29.1", features = ["unstable"] }
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
+
+[workspace]

@@ -1,0 +1,332 @@
+name: CI
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      diff_cases:
+        description: "Differential test: number of scenarios"
+        default: "10"
+      diff_seed:
+        description: "Differential test: generator seed"
+        default: "1"
+      diff_congested:
+        description: "Differential test: number of random congested scenarios"
+        default: "2"
+      diff_populate:
+        description: "Differential test: mainnet-like accounts (and big-contract entries) patched into both chains first"
+        default: "5000"
+      diff_fixed:
+        description: "Differential test: include fixed scenarios (0 to replay an older random seed's original order)"
+        default: "1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  # Tests' failure renderings in color (a pipe otherwise turns it off).
+  CLICOLOR_FORCE: "1"
+  # A cold `cargo test --all-targets --all-features` compiles ~580 crates and
+  # build scripts (nearcore via git), dev-dependencies included; a dependent
+  # builds ~460 crates. Dropping debuginfo roughly halves the target dir,
+  # which is what the cache has to upload.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  # The suite is CPU-bound, mostly in this crate (explore's searches):
+  # unoptimized it took ~95 CPU-minutes, with every dependency at
+  # opt-level 2 (as the quickstart sets for a test crate) ~90, and with
+  # this crate and its tests at 1 as well ~26. Debug assertions and
+  # overflow checks are separate profile keys and stay on everywhere.
+  # In the env, so rust-cache's key (which hashes CARGO_* variables)
+  # follows them; tests/consumer/run.sh reads the dependencies' level to
+  # share the build, and mutants.yml sets the same.
+  "CARGO_PROFILE_DEV_PACKAGE_*_OPT_LEVEL": "2"
+  CARGO_PROFILE_DEV_OPT_LEVEL: "1"
+
+# A pull request from a fork runs on GitHub-hosted runners with GitHub's
+# cache: the WarpBuild runners and their cache are paid for, and only
+# branches of this repository use them. Every job keeps its name either way,
+# so the required checks report for both. A fork's build is cold (the cache
+# is only saved from main), hence its longer timeouts.
+jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-24.04' || 'warp-ubuntu-2404-x64-2x' }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # rust-toolchain.toml pins the channel; install it explicitly with the component.
+      - name: Install Rust (rust-toolchain.toml) with rustfmt
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal --component rustfmt
+
+      - run: cargo fmt --check
+
+      - run: rustfmt --check --edition 2024 tests/consumer/*.rs
+
+      # No tracked file, binaries included, may hold a path from the build
+      # machine: a wasm built without --remap-path-prefix keeps the home
+      # directory, or the temporary directory it was built in, in its panic
+      # locations. The pattern matches a home directory under /home or
+      # /Users, the same flattened into a dash-separated directory name, and
+      # an agent's temporary, scratch or project directory. Its literals are
+      # bracketed (`scratchpa[d]`) so that this file doesn't match itself.
+      # To allow a file, add an `allow` line with its path and the reason.
+      - name: No build-machine paths in tracked files
+        run: |
+          allow=$(mktemp)
+          # <path>  # <reason>
+          cat > "$allow" <<'EOF'
+          EOF
+          hits=$(git ls-files -z | xargs -0 grep -l -a -E '/(Users|home)/[^/[:space:]]+/|(^|[^[:alnum:]])-(Users|home)-[^/[:space:]]+|/tmp/claud[e]-[0-9]+/|scratchpa[d]/|\.claud[e]/project[s]/' | grep -v -x -F -f <(sed 's/ *#.*//; /^$/d' "$allow") || true)
+          if [ -n "$hits" ]; then
+            echo "::error::build-machine paths in tracked files:"
+            echo "$hits"
+            exit 1
+          fi
+
+  clippy:
+    name: Clippy
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-24.04' || 'warp-ubuntu-2404-x64-8x' }}
+    timeout-minutes: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 120 || 60 }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust (rust-toolchain.toml) with clippy
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal --component clippy
+
+      # librocksdb-sys (via near-store) runs bindgen, which needs libclang;
+      # warp-ubuntu images don't ship it (same as nearcore's install-clang action).
+      - name: Install libclang
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends llvm clang libclang-dev
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-provider: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'github' || 'warpbuild' }}
+          shared-key: "linux-clippy"
+          cache-all-crates: true
+          # Only main (or a manual run) populates the cache; PRs restore from it.
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+
+      - name: Disk space
+        run: df -h / "$HOME"
+
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+
+      # Rustdoc's links, the crate doc's map among them, with and without
+      # SimTransport.
+      - name: Rustdoc
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: |
+          cargo doc --no-deps
+          cargo doc --no-deps --all-features
+
+      # The `near-kit` feature (SimTransport) stays out of a default build.
+      - name: Default dependencies
+        run: |
+          if cargo tree -e normal --prefix none | grep -E '^(near-kit|near-jsonrpc-primitives) '; then
+            exit 1
+          fi
+
+  test:
+    name: Test
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-24.04' || 'warp-ubuntu-2404-x64-8x' }}
+    timeout-minutes: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 120 || 60 }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust (rust-toolchain.toml)
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+
+      # A GitHub-hosted runner (a fork's pull request) has less free disk
+      # than the cold build of the test suite needs.
+      - name: Free disk space
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
+      # tests/fixture_build.rs checks the fuzz fixture's build script.
+      - name: Install cargo-near and the wasm target
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/download/cargo-near-v0.22.0/cargo-near-installer.sh | sh
+          rustup target add wasm32-unknown-unknown --toolchain "$(sed -n 's/^channel = "\(.*\)"/\1/p' tests/contracts/fuzz-contract/rust-toolchain.toml)"
+
+      # librocksdb-sys (via near-store) runs bindgen, which needs libclang;
+      # warp-ubuntu images don't ship it (same as nearcore's install-clang action).
+      - name: Install libclang
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends llvm clang libclang-dev
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-provider: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'github' || 'warpbuild' }}
+          shared-key: "linux-test"
+          cache-all-crates: true
+          # A manual run warms a branch's new key before merge.
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+
+      - name: Disk space
+        run: df -h / "$HOME"
+
+      - name: Print rustc version
+        run: rustc --version
+
+      - name: Build tests
+        run: cargo test --all-targets --all-features --no-run
+
+      # nextest runs every test in a process of its own, all binaries at
+      # once; `cargo test` runs the binaries one after another, so one long
+      # test held up the rest (doctests below: nextest skips them).
+      - name: Run tests
+        run: cargo nextest run --all-targets --all-features --profile ci
+
+      # In a debug build nearcore's own assertion on the outcome count stops
+      # a dropped transaction before the simulator's panic can name it.
+      - name: Runtime boundary checks without debug assertions
+        run: >-
+          cargo test --test chain --test clock
+          --config profile.dev.package.node-runtime.debug-assertions=false
+          --config profile.dev.package.near-contract-sim.debug-assertions=false
+
+      # --all-targets skips doctests.
+      - name: Run doctests
+        run: cargo test --doc
+
+      - name: Consumers (the quickstart and first harness, the README, near-kit)
+        run: tests/consumer/run.sh
+
+      - name: Disk space after build
+        if: always()
+        run: df -h / && du -sh target ~/.cargo/registry ~/.cargo/git 2>/dev/null || true
+
+  proptest:
+    name: Property tests (128 cases)
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-24.04' || 'warp-ubuntu-2404-x64-8x' }}
+    timeout-minutes: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 120 || 60 }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust (rust-toolchain.toml)
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+
+      # A GitHub-hosted runner (a fork's pull request) has less free disk
+      # than the cold build of the test suite needs.
+      - name: Free disk space
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
+      - name: Install libclang
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends llvm clang libclang-dev
+
+      # Same cache as the test job; never saves.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-provider: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'github' || 'warpbuild' }}
+          shared-key: "linux-test"
+          cache-all-crates: true
+          save-if: false
+
+      - name: Run property tests
+        run: cargo test --test prop_invariants
+        env:
+          NCS_INV_CASES: "128"
+
+  differential:
+    name: Differential vs sandbox
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-24.04' || 'warp-ubuntu-2404-x64-8x' }}
+    timeout-minutes: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 120 || 60 }}
+    services:
+      # Must match the nearcore pin (2.14.0, protocol 88). A fresh chain:
+      # the simulator mirrors its account set for exact trie-node gas.
+      sandbox:
+        image: nearprotocol/sandbox:2.14.0
+        ports:
+          - 3030:3030
+        options: >-
+          --health-cmd "curl -sf http://localhost:3030/status || exit 1"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 60
+      # A second one for tests/transport.rs's patched world, whose accounts
+      # the differential's chain must not hold.
+      patched:
+        image: nearprotocol/sandbox:2.14.0
+        ports:
+          - 3031:3030
+        options: >-
+          --health-cmd "curl -sf http://localhost:3030/status || exit 1"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Retain history through cross-transaction yield callbacks
+        run: tests/differential/retain-history.sh "${{ job.services.sandbox.id }}"
+
+      - name: Install Rust (rust-toolchain.toml)
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+
+      # A GitHub-hosted runner (a fork's pull request) has less free disk
+      # than the cold build of the test suite needs.
+      - name: Free disk space
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
+      - name: Install libclang
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends llvm clang libclang-dev
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-provider: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'github' || 'warpbuild' }}
+          shared-key: "linux-test"
+          cache-all-crates: true
+          save-if: false
+
+      - name: A sim's world patched into a sandbox
+        run: cargo test --all-features --test transport -- --ignored
+        env:
+          NCS_SANDBOX_RPC: http://localhost:3031
+
+      - name: Wait for the sandbox
+        run: |
+          for _ in $(seq 1 60); do curl -sf http://localhost:3030/status >/dev/null && break; sleep 2; done
+          curl -sf http://localhost:3030/status | head -c 300
+
+      - name: Differential test
+        run: cargo test --test differential -- --ignored --nocapture
+        env:
+          NCS_SANDBOX_RPC: http://localhost:3030
+          NCS_DIFF_CASES: ${{ inputs.diff_cases || '10' }}
+          # Plus random congested scenarios, the hand-written overfull-chunk
+          # ones, and a mainnet-shaped trie under all of them.
+          NCS_DIFF_CONGESTED: ${{ inputs.diff_congested || '2' }}
+          NCS_DIFF_POPULATE: ${{ inputs.diff_populate || '5000' }}
+          NCS_DIFF_FIXED: ${{ inputs.diff_fixed || '1' }}
+          NCS_DIFF_SEED: ${{ inputs.diff_seed || github.run_number }}
+          NCS_DIFF_DIR: ${{ runner.temp }}/ncs-diff
+
+      - name: Upload mismatch details
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: differential-results
+          path: ${{ runner.temp }}/ncs-diff

@@ -1,0 +1,20 @@
+;; Takes each nonce once: `use` panics on a nonce it has seen.
+;;   use -> input: the nonce, u64 little-endian. Stores "n" + it.
+(module
+  (import "env" "input" (func $input (param i64)))
+  (import "env" "read_register" (func $read_register (param i64 i64)))
+  (import "env" "storage_has_key" (func $has (param i64 i64) (result i64)))
+  (import "env" "storage_write" (func $storage_write (param i64 i64 i64 i64 i64) (result i64)))
+  (import "env" "panic_utf8" (func $panic_utf8 (param i64 i64)))
+  (memory 1)
+  (export "memory" (memory 0))
+  (data (i32.const 0) "nonce used")
+  (data (i32.const 64) "n")
+  (func (export "use")
+    (call $input (i64.const 0))
+    (call $read_register (i64.const 0) (i64.const 65))
+    (if (i64.eq (call $has (i64.const 9) (i64.const 64)) (i64.const 1))
+      (then (call $panic_utf8 (i64.const 10) (i64.const 0))))
+    (drop (call $storage_write (i64.const 9) (i64.const 64) (i64.const 1) (i64.const 64)
+                               (i64.const 1))))
+)

@@ -1,0 +1,15 @@
+# CI's test run (ci.yml): every failure, and each test's time, in the log.
+[profile.ci]
+fail-fast = false
+failure-output = "immediate-final"
+status-level = "all"
+final-status-level = "slow"
+slow-timeout = { period = "60s" }
+
+# cargo-mutants' runs (.cargo/mutants.toml): a test a mutant sends into a
+# loop is killed after 20 minutes and counts as a failure, so the mutant is
+# caught, rather than holding its shard until the 45-minute mutant timeout.
+# The slowest test takes ~2.5 min at CI's opt-level 1, so ~9 min in the
+# shards' opt-level 0 builds.
+[profile.mutants]
+slow-timeout = { period = "120s", terminate-after = 10 }

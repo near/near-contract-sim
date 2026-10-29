@@ -1,0 +1,118 @@
+[package]
+name = "near-contract-sim"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/near/near-contract-sim"
+description = "In-process NEAR contract simulator driven by nearcore's own Runtime::apply over an in-memory trie"
+readme = "README.md"
+keywords = ["near", "blockchain", "testing", "simulator", "smart-contracts"]
+categories = ["development-tools::testing", "cryptography::cryptocurrencies"]
+# Not on crates.io: nearcore's node-runtime and near-store aren't published
+# there, so the crate is a git dependency (see the nearcore block below).
+publish = false
+# For a future crates.io package (a git dependency ignores this): the
+# library, its licenses, changelog and the agent skill, whose references/
+# holds the guides. Tests and fixtures stay in the repo, but for the ones
+# src/'s unit tests load: every tests/res/*.wat, and probe.wasm,
+# fungible_token.wasm, mtoken_events.wasm and vault.wasm.
+include = [
+    "/src",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE-*",
+    "/skills",
+    "/tests/res/*.wat",
+    "/tests/res/probe.wasm",
+    "/tests/res/fungible_token.wasm",
+    "/tests/res/mtoken_events.wasm",
+    "/tests/res/vault.wasm",
+]
+
+# ---------------------------------------------------------------------------
+# nearcore dependencies
+#
+# All nearcore crates MUST come from the same source, otherwise types like
+# `near_primitives::receipt::Receipt` get duplicated and nothing type-checks.
+#
+# Today: git, pinned to the 2.14.0 release tag (node-runtime and
+# near-store are `publish = false` upstream).
+#
+# After the upstream publish PR lands (node-runtime -> near-runtime, and
+# near-store/near-runtime on crates.io), each line below becomes the
+# commented crates.io line next to it: one-line change per dep.
+# ---------------------------------------------------------------------------
+[dependencies]
+# crates.io later: node-runtime = { package = "near-runtime", version = "0.38" }
+node-runtime = { git = "https://github.com/near/nearcore", tag = "2.14.0" }
+# crates.io later: near-store = "0.38"
+# `near_store::test_utils::TestTriesBuilder` is compiled unconditionally in
+# 2.14 (no feature needed). NOTE: near-store pulls rocksdb (C++ build) even
+# though we only ever use the in-memory TestDB.
+near-store = { git = "https://github.com/near/nearcore", tag = "2.14.0" }
+# crates.io later: near-primitives = "0.38"
+near-primitives = { git = "https://github.com/near/nearcore", tag = "2.14.0" }
+# crates.io later: near-parameters = "0.38"
+near-parameters = { git = "https://github.com/near/nearcore", tag = "2.14.0" }
+# crates.io later: near-crypto = { version = "0.38", features = ["rand"] }
+near-crypto = { git = "https://github.com/near/nearcore", tag = "2.14.0", features = ["rand"] }
+# crates.io later: near-vm-runner = "0.38"
+near-vm-runner = { git = "https://github.com/near/nearcore", tag = "2.14.0" }
+# SimTransport's requests, views and errors (feature `near-kit`).
+# crates.io later: near-jsonrpc-primitives = { version = "0.38", optional = true }
+near-jsonrpc-primitives = { git = "https://github.com/near/nearcore", tag = "2.14.0", optional = true }
+# crates.io later: near-time = { version = "0.38", optional = true }
+near-time = { git = "https://github.com/near/nearcore", tag = "2.14.0", optional = true }
+
+# `rc`: snapshots store the outcome history, which is behind `Arc`s.
+borsh = { version = "1", features = ["derive", "rc"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["arbitrary_precision", "float_roundtrip"] }
+# Compiles stubs (src/stub.wat) and the tests' WAT contracts (tests/res/*.wat).
+wat = "1"
+# `explore` generates plans and shrinks them with proptest.
+proptest = "1.11"
+# `explore` runs searches, scans and replays on a large stack of its own,
+# as nested strategies recurse deeply in a debug build.
+stacker = "0.1"
+# `explore` reads the gas constants in a fixture's contracts, to draw gas at
+# exactly those thresholds (the version nearcore's VM runner uses).
+wasmparser = "0.236"
+# Names a trap's function from a Rust contract's name section (src/trap.rs).
+rustc-demangle = "0.1"
+# `key::borsh_keccak`: near-sdk maps with the Keccak256 hasher (the version
+# nearcore uses).
+sha3 = "0.10"
+# `ActionCosts::iter()`, to tell send fees apart in gas profiles (the
+# version nearcore uses).
+strum = "0.24"
+# SimTransport implements near-kit's `RpcTransport`, which sits behind its
+# default `rpc` feature: reqwest, which near-store already brings.
+# 0.18.3 is the first near-kit whose secp256k1 signatures nodes accept.
+near-kit = { version = "0.18.3", optional = true }
+# The sleep of a timed-out wait.
+tokio = { version = "1", features = ["time"], optional = true }
+
+# docs.rs builds every feature, and tags what one needs.
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+# `SimTransport`: near-kit's RPC client answered in-process by a `Sim`.
+near-kit = ["dep:near-kit", "dep:near-jsonrpc-primitives", "dep:near-time", "dep:tokio"]
+
+[dev-dependencies]
+base64 = "0.22"
+# The crate root's example builds the wasm with cargo-near's library.
+cargo-near-build = "0.11"
+# Differential test client (tests/differential/sandbox.rs).
+near-kit = "0.18.3"
+# `test-util`: tests run on a paused clock (`start_paused`).
+tokio = { version = "1", features = ["rt", "time", "macros", "test-util"] }
+
+# Debug info is most of the dependencies' build output; without it a shared
+# compile cache can reuse rocksdb and what links it. This crate keeps its own.
+[profile.dev.package."*"]
+debug = false

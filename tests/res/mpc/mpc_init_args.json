@@ -1,0 +1,36 @@
+{
+  "parameters": {
+    "participants": {
+      "next_id": 3,
+      "participants": [
+        [
+          "p0.near",
+          0,
+          {
+            "url": "http://p0.near:3000",
+            "tls_public_key": "ed25519:AKnL4NNf3DGWZJS6cPknBuEGnVsV4A4m5tgebLHaRSZ9"
+          }
+        ],
+        [
+          "p1.near",
+          1,
+          {
+            "url": "http://p1.near:3000",
+            "tls_public_key": "ed25519:9hSR6S7WPtxmTojgo6GG3k4yDPecgJY292j7xrsUGWBu"
+          }
+        ],
+        [
+          "p2.near",
+          2,
+          {
+            "url": "http://p2.near:3000",
+            "tls_public_key": "ed25519:GyGKxMyg1p9SsHfm15MkNUu1u9TN2JtTspcdmrtGUdse"
+          }
+        ]
+      ]
+    },
+    "threshold": 2
+  },
+  "tee_verifier_account_id": "tee-verifier.near",
+  "init_config": null
+}

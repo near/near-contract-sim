@@ -1,0 +1,219 @@
+name: Mutants
+# Mutation testing of src/ with cargo-mutants, sharded across runners.
+#   schedule / workflow_dispatch: every mutant in src/ (config: .cargo/mutants.toml)
+#   pull_request (src/ changed):  only mutants on lines the PR changes (--in-diff)
+# A pull request from a fork skips it: every job here runs on paid WarpBuild
+# runners (13 of them, up to 150 min each, for a PR), which only branches of
+# this repository use. The plan job is skipped, so the rest are too. To
+# mutation-test a fork's change, push it to a branch here.
+# Surviving ("missed") mutants fail the summary job; see its step summary.
+on:
+  schedule:
+    - cron: "17 3 * * 1" # Mondays 03:17 UTC
+  workflow_dispatch:
+    inputs:
+      shards:
+        description: "Number of shards (runners)"
+        default: "8"
+      files:
+        description: "Only mutate these files (space-separated globs, e.g. src/chain/mod.rs)"
+        default: ""
+      re:
+        description: "Only mutants whose name matches this regex (--re)"
+        default: ""
+  pull_request:
+    paths:
+      - "src/**"
+      - ".cargo/mutants.toml"
+      - ".github/workflows/mutants.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Same as ci.yml, so the shared rust-cache key below matches its cache.
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  "CARGO_PROFILE_DEV_PACKAGE_*_OPT_LEVEL": "2"
+  CARGO_PROFILE_DEV_OPT_LEVEL: "1"
+
+jobs:
+  plan:
+    name: Plan shards
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: warp-ubuntu-2404-x64-2x
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+      count: ${{ steps.plan.outputs.count }}
+    steps:
+      - id: plan
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ]; then n=12; else n="${{ inputs.shards || '8' }}"; fi
+          echo "count=$n" >> "$GITHUB_OUTPUT"
+          # Plus one job for the unmutated baseline, which the shards skip.
+          echo "shards=$(jq -nc "[range($n)] + [\"baseline\"]")" >> "$GITHUB_OUTPUT"
+
+  mutants:
+    name: ${{ matrix.shard == 'baseline' && 'Baseline' || format('Shard {0}', matrix.shard) }}
+    needs: plan
+    runs-on: warp-ubuntu-2404-x64-8x
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # PRs check out the merge commit; HEAD^1 is the base branch tip.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 1 }}
+
+      - name: Install Rust (rust-toolchain.toml)
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+
+      # tests/fixture_build.rs checks the fuzz fixture's build script.
+      - name: Install cargo-near and the wasm target
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/download/cargo-near-v0.22.0/cargo-near-installer.sh | sh
+          rustup target add wasm32-unknown-unknown --toolchain "$(sed -n 's/^channel = "\(.*\)"/\1/p' tests/contracts/fuzz-contract/rust-toolchain.toml)"
+
+      # librocksdb-sys (via near-store) runs bindgen, which needs libclang.
+      - name: Install libclang
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends llvm clang libclang-dev
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants,cargo-nextest
+
+      # Restore ci.yml's test cache (populated on main, same profile env) so
+      # every shard starts with the ~580 crates and build scripts of a cold
+      # `cargo test --all-targets --all-features` already built.
+      # Never saved from here: mutated builds must not pollute it.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-provider: warpbuild
+          shared-key: "linux-test"
+          cache-all-crates: true
+          save-if: false
+
+      - name: Diff to mutate
+        if: github.event_name == 'pull_request'
+        run: git diff HEAD^1 HEAD -- src > "$RUNNER_TEMP/pr.diff" && wc -l "$RUNNER_TEMP/pr.diff"
+
+      - name: cargo mutants (${{ matrix.shard }}/${{ needs.plan.outputs.count }})
+        env:
+          FILES: ${{ inputs.files }}
+          RE: ${{ inputs.re }}
+        run: |
+          # The shards skip cargo-mutants' unmutated run (a full test run
+          # each, most of a shard's time) and the Baseline job runs it once,
+          # alongside them; the summary fails if it fails.
+          args=(--in-place --no-shuffle --all-features)
+          for f in $FILES; do args+=(--file "$f"); done
+          [ -n "$RE" ] && args+=(--re "$RE")
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            if [ ! -s "$RUNNER_TEMP/pr.diff" ]; then
+              [ "${{ matrix.shard }}" = baseline ] && exit 0
+              mkdir -p mutants.out
+              echo "src/ unchanged: nothing to mutate" > mutants.out/skipped.txt
+              exit 0
+            fi
+            args+=(--in-diff "$RUNNER_TEMP/pr.diff")
+          fi
+          if [ "${{ matrix.shard }}" = baseline ]; then
+            # What cargo-mutants runs first (.cargo/mutants.toml's filter),
+            # when there is a mutant to test.
+            if [ -z "$(cargo mutants --list "${args[@]}")" ]; then exit 0; fi
+            exec cargo nextest run --all-features -E 'not test(=the_public_api_is_the_committed_list)'
+          fi
+          # A mutant's time is mostly its build (the crate and every test
+          # binary): ~190 s each at ci.yml's opt-level 1. At 0, incrementally
+          # (only the mutated function changes), a shard's first build takes
+          # ~3.5 min (it rebuilds the dependencies too) and the rest ~35..65 s,
+          # while a caught mutant's tests still stop within a minute or two.
+          # A full run at 0 is 10..15 min; the timeout is cargo-mutants' 3x.
+          export CARGO_PROFILE_DEV_OPT_LEVEL=0 CARGO_INCREMENTAL=1
+          args+=(--baseline skip --timeout 2700 --sharding round-robin
+                 --shard "${{ matrix.shard }}/${{ needs.plan.outputs.count }}")
+          cargo mutants --list "${args[@]}" | tee mutants-list.txt
+          # --in-place: the checkout is disposable, and it keeps the restored
+          # target/ (a copied tree would rebuild every dependency).
+          set +e
+          cargo mutants "${args[@]}"
+          code=$?
+          # With no mutants (a diff of comments only) cargo-mutants writes
+          # nothing; the summary counts a shard by a file in mutants.out.
+          [ -d mutants.out ] || { mkdir mutants.out; echo "no mutants in the diff" > mutants.out/skipped.txt; }
+          # 0 = all caught, 2 = missed, 3 = timeouts: the summary job judges.
+          # Anything else (a build or usage error) fails the shard.
+          case $code in 0|2|3) exit 0 ;; *) exit $code ;; esac
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutants-shard-${{ matrix.shard }}
+          path: |
+            mutants.out
+            mutants-list.txt
+          if-no-files-found: ignore
+
+  summary:
+    name: Summary
+    needs: [plan, mutants]
+    if: always() && needs.plan.result == 'success'
+    runs-on: warp-ubuntu-2404-x64-2x
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: mutants-shard-*
+          path: shards
+
+      - name: Aggregate
+        run: |
+          cat_all() { cat shards/*/mutants.out/"$1" 2>/dev/null | sort -t: -k1,1 -k2,2n || true; }
+          n() { grep -c "^$1:" "$2" || true; }
+          for k in caught missed timeout unviable; do cat_all "$k.txt" > "$k.txt"; done
+          {
+            echo "## Mutation testing (${{ github.event_name }})"
+            echo
+            echo "| file | caught | missed | timeout | unviable | confirmed caught |"
+            echo "|---|---:|---:|---:|---:|---:|"
+            for f in $(cat caught.txt missed.txt timeout.txt unviable.txt | cut -d: -f1 | sort -u); do
+              c=$(n "$f" caught.txt); m=$(n "$f" missed.txt)
+              t=$(n "$f" timeout.txt); u=$(n "$f" unviable.txt)
+              echo "| $f | $c | $m | $t | $u | $(( c * 100 / (c + m + t > 0 ? c + m + t : 1) ))% |"
+            done
+            c=$(wc -l < caught.txt); m=$(wc -l < missed.txt); t=$(wc -l < timeout.txt); u=$(wc -l < unviable.txt)
+            echo "| **total** | $c | $m | $t | $u | $(( c * 100 / (c + m + t > 0 ? c + m + t : 1) ))% |"
+            echo
+            echo "Confirmed caught = caught / (caught + missed + timeout). Timeouts are inconclusive; unviable mutants do not compile."
+            if [ -s missed.txt ]; then
+              echo; echo "### Missed (surviving) mutants"; echo; echo '```'; cat missed.txt; echo '```'
+            fi
+            if [ -s timeout.txt ]; then
+              echo; echo "### Timeouts"; echo; echo '```'; cat timeout.txt; echo '```'
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          shards=$(ls -d shards/*/mutants.out 2>/dev/null | wc -l || true)
+          if [ "${{ needs.mutants.result }}" != success ] || [ "$shards" -ne "${{ needs.plan.outputs.count }}" ]; then
+            echo "::error::a shard failed (${shards}/${{ needs.plan.outputs.count }} reported)"; exit 1
+          fi
+          if [ -s timeout.txt ]; then
+            echo "::warning::$(wc -l < timeout.txt) mutants timed out; inspect before treating them as caught"
+          fi
+          if [ -s missed.txt ]; then
+            echo "::error::$(wc -l < missed.txt) mutants survived"; exit 1
+          fi
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutants-summary
+          path: "*.txt"

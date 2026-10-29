@@ -1,0 +1,39 @@
+use near_sdk::{env, near, Gas, GasWeight, PromiseResult, Promise, AccountId};
+#[near(contract_state)]
+#[derive(Default)]
+pub struct C { last: String, yid: Vec<u8> }
+#[near]
+impl C {
+    pub fn seed_len(&self) -> u64 { env::random_seed().len() as u64 }
+    pub fn seed_arr(&self) -> String { hex(&env::random_seed_array()) }
+    pub fn pk(&self) -> String { format!("{:?}", env::signer_account_pk()) }
+    pub fn ts(&self) -> u64 { env::block_timestamp() }
+    pub fn height(&self) -> u64 { env::block_height() }
+    pub fn start_yield(&mut self) {
+        let _idx = env::promise_yield_create("on_resume", b"{}", Gas::from_tgas(10), GasWeight(0), 0);
+        self.yid = env::read_register(0).unwrap();
+        self.last = format!("yielded:{}", hex(&self.yid));
+    }
+    pub fn resume(&mut self) -> bool {
+        let id: [u8;32] = self.yid.clone().try_into().unwrap();
+        env::promise_yield_resume(&id, b"\"hello\"")
+    }
+    #[private]
+    pub fn on_resume(&mut self) {
+        self.last = match env::promise_result(0) {
+            PromiseResult::Successful(d) => format!("resumed:{}", String::from_utf8_lossy(&d)),
+            PromiseResult::Failed => "timeout".into(),
+        };
+    }
+    pub fn call_missing(&mut self) -> Promise {
+        let missing: AccountId = "missing.test.near".parse().unwrap();
+        Promise::new(missing).function_call("ping".to_string(), vec![], near_sdk::NearToken::from_near(0), Gas::from_tgas(5))
+            .then(Promise::new(env::current_account_id()).function_call("on_cb".to_string(), vec![], near_sdk::NearToken::from_near(0), Gas::from_tgas(5)))
+    }
+    #[private]
+    pub fn on_cb(&mut self) {
+        self.last = match env::promise_result(0) { PromiseResult::Successful(_) => "cb-ok".into(), PromiseResult::Failed => "cb-failed".into() };
+    }
+    pub fn last(&self) -> String { self.last.clone() }
+}
+fn hex(b: &[u8]) -> String { b.iter().map(|x| format!("{x:02x}")).collect() }

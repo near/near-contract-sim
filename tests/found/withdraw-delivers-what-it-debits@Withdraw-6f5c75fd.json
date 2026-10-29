@@ -1,0 +1,100 @@
+{
+  "format": 3,
+  "check": "withdraw delivers what it debits",
+  "site": "Withdraw",
+  "label": "forced (PromiseFailed at vault.near::on_withdraw)",
+  "fixture": "6bf0599a",
+  "plan": {
+    "steps": [
+      {
+        "op": {
+          "Deposit": {
+            "who": "Alice",
+            "amount": {
+              "Exact": 100
+            }
+          }
+        },
+        "then": "Settle"
+      },
+      {
+        "op": {
+          "Withdraw": {
+            "who": "Alice",
+            "amount": {
+              "Exact": 40
+            }
+          }
+        },
+        "then": "Settle",
+        "inject": [
+          {
+            "tx": 0,
+            "at": {
+              "filter": {
+                "Call": [
+                  "vault.near",
+                  "on_withdraw"
+                ]
+              },
+              "nth": 0,
+              "exact": true
+            },
+            "fault": "PromiseFailed"
+          }
+        ]
+      }
+    ]
+  },
+  "sites": [
+    "vault.near::on_withdraw"
+  ],
+  "checks": [
+    "unhandled failure",
+    "failed callback",
+    "conservation",
+    "must not fail",
+    "gas margin",
+    "storage paid by the contract",
+    "total_shares is the sum of shares",
+    "the vault holds what it owes",
+    "withdraw delivers what it debits",
+    "deposit credits what it takes"
+  ],
+  "id": {
+    "check": "withdraw delivers what it debits",
+    "site": {
+      "Op": "Withdraw"
+    },
+    "cause": null,
+    "ops": [
+      "Withdraw"
+    ],
+    "receipt": null,
+    "class": null,
+    "faults": [
+      [
+        "vault.near::on_withdraw",
+        "PromiseFailed"
+      ]
+    ]
+  },
+  "also": [
+    {
+      "check": "the vault holds what it owes",
+      "site": "World",
+      "cause": null,
+      "ops": [
+        "Withdraw"
+      ],
+      "receipt": null,
+      "class": null,
+      "faults": [
+        [
+          "vault.near::on_withdraw",
+          "PromiseFailed"
+        ]
+      ]
+    }
+  ]
+}

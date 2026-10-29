@@ -1,0 +1,30 @@
+[package]
+name = "desk"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Ticket desk specimen for near-contract-sim: a batch redemption whose settling callback has a fixed gas budget"
+repository = "https://github.com/near/near-contract-sim"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# desk_band.wasm: `redeem` sends `deliver` and a weight-only
+# `release` and returns that chain, behind a gas guard; between the guard
+# and the least gas the redeem succeeds at, `release` runs out and the
+# pending amount stays locked.
+band = []
+
+[dependencies]
+near-sdk = { version = "=5.29.1", features = ["unstable"] }
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
+
+[workspace]

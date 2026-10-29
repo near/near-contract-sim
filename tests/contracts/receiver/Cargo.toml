@@ -1,0 +1,23 @@
+[package]
+name = "receiver"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Notify receiver for the custody specimen: declines half of every deposited position"
+repository = "https://github.com/near/near-contract-sim"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = { version = "=5.29.1" }
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
+
+[workspace]

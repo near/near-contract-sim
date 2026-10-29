@@ -1,0 +1,29 @@
+# cargo-mutants configuration (see .github/workflows/mutants.yml).
+# Run in CI only: every mutant rebuilds the crate and relinks every test
+# binary against nearcore, about a minute each.
+
+# nextest runs the integration-test binaries in parallel; `cargo test` runs
+# them one after another.
+test_tool = "nextest"
+
+# The public-API gate runs `cargo doc` and no mutant changes the API.
+# The first failure kills the run: a mutant that a unit test catches at
+# once but that makes a gas scan read without end isn't left to time out.
+additional_cargo_test_args = [
+    "-E", "not test(=the_public_api_is_the_committed_list)", "--max-fail=1:immediate",
+    "--profile", "mutants",
+]
+
+# Baseline `cargo nextest run` is ~20 s; nothing legitimate takes 3x that.
+timeout_multiplier = 3.0
+
+# Mutants that no test can (or should) observe. One reason per entry.
+exclude_re = [
+    # Equivalent: the failed callback at `at` committed nothing, so it is never in `wrote`.
+    'replace < with <= in Log::wrote_before',
+    # Equivalent: `false` is the default's body.
+    'replace Op::refused -> bool with false',
+    # Equivalent but for a nondeterministic op: a case's rerun has the same receipts.
+    'run.rs:455:60: replace && with \|\| in Harness<O, W>::name_traps',
+    'run.rs:457:21: replace && with \|\| in Harness<O, W>::name_traps',
+]

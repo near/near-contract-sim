@@ -1,0 +1,952 @@
+constant near_contract_sim::builtin::CONSERVATION = pub const CONSERVATION: &str = "conservation";
+constant near_contract_sim::builtin::FAILED_CALLBACK = pub const FAILED_CALLBACK: &str = "failed callback";
+constant near_contract_sim::builtin::UNHANDLED_FAILURE = pub const UNHANDLED_FAILURE: &str = "unhandled failure";
+constant near_contract_sim::explore::LIVENESS_EPOCHS = pub const LIVENESS_EPOCHS: u64 = 8;
+constant near_contract_sim::explore::builtin::CONSERVATION = pub const CONSERVATION: &str = "conservation";
+constant near_contract_sim::explore::builtin::FAILED_CALLBACK = pub const FAILED_CALLBACK: &str = "failed callback";
+constant near_contract_sim::explore::builtin::MARGIN = pub const MARGIN: &str = "gas margin";
+constant near_contract_sim::explore::builtin::MUST_NOT_FAIL = pub const MUST_NOT_FAIL: &str = "must not fail";
+constant near_contract_sim::explore::builtin::SELF_ONLY = pub const SELF_ONLY: &str = "self-only method runs for an outsider";
+constant near_contract_sim::explore::builtin::SERIALIZABLE = pub const SERIALIZABLE: &str = "outcome some serial order gives";
+constant near_contract_sim::explore::builtin::STORAGE_FOR_CALLERS = pub const STORAGE_FOR_CALLERS: &str = "storage paid by the contract";
+constant near_contract_sim::explore::builtin::UNHANDLED_FAILURE = pub const UNHANDLED_FAILURE: &str = "unhandled failure";
+enum near_contract_sim::AccessKeyPermission
+enum near_contract_sim::Action
+enum near_contract_sim::ActionErrorKind
+enum near_contract_sim::ExecutionStatus
+enum near_contract_sim::Failure = #[non_exhaustive]pub enum Failure
+enum near_contract_sim::Failure impl = impl Failure
+enum near_contract_sim::Failure method message = pub fn message(&self) -> Option<&str>
+enum near_contract_sim::Failure variant AccountDoesNotExist = AccountDoesNotExist(AccountId)
+enum near_contract_sim::Failure variant Action = Action(ActionErrorKind)
+enum near_contract_sim::Failure variant GasLimitExceeded = GasLimitExceeded
+enum near_contract_sim::Failure variant Host = Host(String)
+enum near_contract_sim::Failure variant InvalidTx = InvalidTx(InvalidTxError)
+enum near_contract_sim::Failure variant OutOfGas = OutOfGas
+enum near_contract_sim::Failure variant Panic = Panic(String)
+enum near_contract_sim::Fault = #[non_exhaustive]pub enum Fault
+enum near_contract_sim::Fault variant Gas = Gas(Gas)
+enum near_contract_sim::Fault variant Hold = Hold(u64)
+enum near_contract_sim::Fault variant HoldResult = HoldResult(u64)
+enum near_contract_sim::Fault variant HoldUntil = HoldUntil(Receipts)
+enum near_contract_sim::Fault variant OutOfGas = OutOfGas
+enum near_contract_sim::Fault variant PromiseFailed = PromiseFailed
+enum near_contract_sim::Fault variant ReturnValue = ReturnValue(Vec<u8>)
+enum near_contract_sim::FinalExecutionStatus
+enum near_contract_sim::GasLimits = #[non_exhaustive]pub enum GasLimits
+enum near_contract_sim::GasLimits impl = impl GasLimits
+enum near_contract_sim::GasLimits method name = pub fn name(self) -> &'static str
+enum near_contract_sim::GasLimits variant Custom = Custom
+enum near_contract_sim::GasLimits variant Custom.field.burnt = burnt: Gas
+enum near_contract_sim::GasLimits variant Custom.field.prepaid = prepaid: Gas
+enum near_contract_sim::GasLimits variant Custom.fields
+enum near_contract_sim::GasLimits variant Legacy300 = Legacy300
+enum near_contract_sim::GasLimits variant Protocol = Protocol
+enum near_contract_sim::GlobalContractDeployMode
+enum near_contract_sim::GlobalContractIdentifier
+enum near_contract_sim::InvalidTxError
+enum near_contract_sim::KeyType
+enum near_contract_sim::NearKind = #[non_exhaustive]pub enum NearKind
+enum near_contract_sim::NearKind variant AccountDeletion = AccountDeletion
+enum near_contract_sim::NearKind variant Deposit = Deposit
+enum near_contract_sim::NearKind variant DepositRefund = DepositRefund
+enum near_contract_sim::NonceMode
+enum near_contract_sim::PendingState = #[non_exhaustive]pub enum PendingState
+enum near_contract_sim::PendingState variant AwaitingResults = AwaitingResults
+enum near_contract_sim::PendingState variant Buffered = Buffered
+enum near_contract_sim::PendingState variant Held = Held
+enum near_contract_sim::PendingState variant Held.field.blocks_left = blocks_left: u64
+enum near_contract_sim::PendingState variant Held.fields
+enum near_contract_sim::PendingState variant HeldUntil = HeldUntil
+enum near_contract_sim::PendingState variant HeldUntil.field.receipt_id = receipt_id: Option<CryptoHash>
+enum near_contract_sim::PendingState variant HeldUntil.fields
+enum near_contract_sim::PendingState variant InFlight = InFlight
+enum near_contract_sim::PendingState variant Yield = Yield
+enum near_contract_sim::PendingState variant Yield.field.expires_at = expires_at: u64
+enum near_contract_sim::PendingState variant Yield.fields
+enum near_contract_sim::PromiseResult = #[non_exhaustive]pub enum PromiseResult
+enum near_contract_sim::PromiseResult impl = impl PromiseResult
+enum near_contract_sim::PromiseResult method json = pub fn json(value: impl Serialize) -> Self
+enum near_contract_sim::PromiseResult variant Failed = Failed
+enum near_contract_sim::PromiseResult variant Successful = Successful(Vec<u8>)
+enum near_contract_sim::PublicKey
+enum near_contract_sim::PublicKeyHandle
+enum near_contract_sim::Refund = #[non_exhaustive]pub enum Refund
+enum near_contract_sim::Refund variant AccountDeletion = AccountDeletion
+enum near_contract_sim::Refund variant Deposit = Deposit
+enum near_contract_sim::Refund variant Gas = Gas
+enum near_contract_sim::SecretKey
+enum near_contract_sim::Signature
+enum near_contract_sim::Site = #[non_exhaustive]pub enum Site
+enum near_contract_sim::Site variant Key = Key
+enum near_contract_sim::Site variant Key.field.key = key: String
+enum near_contract_sim::Site variant Key.field.op = op: Option<String>
+enum near_contract_sim::Site variant Key.fields
+enum near_contract_sim::Site variant Op = Op(String)
+enum near_contract_sim::Site variant Receipt = Receipt
+enum near_contract_sim::Site variant Receipt.field.method = method: Option<String>
+enum near_contract_sim::Site variant Receipt.field.op = op: Option<String>
+enum near_contract_sim::Site variant Receipt.field.receiver = receiver: Option<AccountId>
+enum near_contract_sim::Site variant Receipt.fields
+enum near_contract_sim::Site variant World = World
+enum near_contract_sim::StateRecord
+enum near_contract_sim::TxExecutionError
+enum near_contract_sim::explore::Gap = pub enum Gap
+enum near_contract_sim::explore::Gap variant Blocks = Blocks(u16)
+enum near_contract_sim::explore::Gap variant EpochEdge = EpochEdge(i8)
+enum near_contract_sim::explore::Gap variant Epochs = Epochs(u8)
+enum near_contract_sim::explore::Gap variant Settle = Settle
+enum near_contract_sim::explore::Label = pub enum Label
+enum near_contract_sim::explore::Label variant Forced = Forced(String)
+enum near_contract_sim::explore::Label variant Shown = Shown
+enum near_contract_sim::explore::Label variant ShownAt = ShownAt(String)
+enum near_contract_sim::explore::Reach = pub enum Reach
+enum near_contract_sim::explore::Reach variant AtBound = AtBound(String)
+enum near_contract_sim::explore::Reach variant Below = Below
+enum near_contract_sim::explore::Reach variant Crossed = Crossed
+enum near_contract_sim::explore::Reach variant Crossed.field.at = at: u128
+enum near_contract_sim::explore::Reach variant Crossed.fields
+enum near_contract_sim::explore::Reach variant EntryCap = EntryCap
+enum near_contract_sim::explore::Reach variant EntryCap.field.cap = cap: u128
+enum near_contract_sim::explore::Reach variant EntryCap.field.evidence = evidence: String
+enum near_contract_sim::explore::Reach variant EntryCap.fields
+enum near_contract_sim::explore::Reach variant Exhausted = Exhausted(String)
+enum near_contract_sim::explore::Reach variant NoEffect = NoEffect
+enum near_contract_sim::explore::Reach variant Stopped = Stopped(String)
+enum near_contract_sim::explore::Resource = pub enum Resource
+enum near_contract_sim::explore::Resource variant LogBytes = LogBytes
+enum near_contract_sim::explore::Resource variant PrepaidGas = PrepaidGas
+enum near_contract_sim::explore::Resource variant ReceiptGas = ReceiptGas
+enum near_contract_sim::explore::Resource variant StoragePaid = StoragePaid
+enum near_contract_sim::explore::Shrink = pub enum Shrink
+enum near_contract_sim::explore::Shrink variant Cut = Cut(u32, String)
+enum near_contract_sim::explore::Shrink variant Done = Done(u32)
+enum near_contract_sim::explore::Shrink variant No = No
+enum near_contract_sim::explore::Status = pub enum Status<O>
+enum near_contract_sim::explore::Status variant Gone = Gone(Run<O>)
+enum near_contract_sim::explore::Status variant NotReached = NotReached(Run<O>)
+enum near_contract_sim::explore::Status variant Shows = Shows(Run<O>)
+enum near_contract_sim::explore::Status variant Stale = Stale(String)
+enum near_contract_sim::explore::StepGas = pub enum StepGas
+enum near_contract_sim::explore::StepGas variant Exactly = Exactly(Gas)
+enum near_contract_sim::explore::StepGas variant LeastPlus = LeastPlus(Gas)
+enum near_contract_sim::explore::Verdict = pub enum Verdict
+enum near_contract_sim::explore::Verdict variant Clean = Clean
+enum near_contract_sim::explore::Verdict variant Findings = Findings
+enum near_contract_sim::explore::Verdict variant HarnessError = HarnessError
+enum near_contract_sim::explore::Verdict variant Incomplete = Incomplete
+enum near_contract_sim::explore::Why = #[non_exhaustive]pub enum Why
+enum near_contract_sim::explore::Why variant Grid = Grid
+enum near_contract_sim::explore::Why variant Probe = Probe
+enum near_contract_sim::explore::Why variant Solved = Solved
+enum near_contract_sim::explore::amount::Amount = pub enum Amount
+enum near_contract_sim::explore::amount::Amount impl = impl Amount
+enum near_contract_sim::explore::amount::Amount method of = pub fn of(self, balance: u128) -> Result<u128, AmountError>
+enum near_contract_sim::explore::amount::Amount variant All = All
+enum near_contract_sim::explore::amount::Amount variant AllMinus = AllMinus(u128)
+enum near_contract_sim::explore::amount::Amount variant AllPlus = AllPlus(u128)
+enum near_contract_sim::explore::amount::Amount variant Exact = Exact(u128)
+enum near_contract_sim::explore::amount::Amount variant Fraction = Fraction(u32, u32)
+enum near_contract_sim::explore::amount::Amount variant One = One
+enum near_contract_sim::explore::amount::Amount variant Zero = Zero
+enum near_contract_sim::explore::input::Answer = pub enum Answer
+enum near_contract_sim::explore::input::Answer impl = impl Answer
+enum near_contract_sim::explore::input::Answer method reply = pub fn reply(self, value: impl Serialize) -> Reply
+enum near_contract_sim::explore::input::Answer variant Panic = Panic
+enum near_contract_sim::explore::input::Answer variant Returns = Returns(Shape)
+enum near_contract_sim::explore::input::Shape = pub enum Shape
+enum near_contract_sim::explore::input::Shape impl = impl Shape
+enum near_contract_sim::explore::input::Shape method json = pub fn json(self, value: impl Serialize) -> String
+enum near_contract_sim::explore::input::Shape variant Bytes = Bytes(usize)
+enum near_contract_sim::explore::input::Shape variant Empty = Empty
+enum near_contract_sim::explore::input::Shape variant Huge = Huge
+enum near_contract_sim::explore::input::Shape variant Limit = Limit
+enum near_contract_sim::explore::input::Shape variant Malformed = Malformed
+enum near_contract_sim::explore::input::Shape variant Unknown = Unknown
+enum near_contract_sim::explore::input::Shape variant Valid = Valid
+enum near_contract_sim::prelude::KeyType
+enum near_contract_sim::prelude::PublicKey
+enum near_contract_sim::prelude::SecretKey
+fn near_contract_sim::explore::amount::any = pub fn any() -> impl Strategy<Value = Amount> + Clone
+fn near_contract_sim::explore::edges = pub fn edges<K: Eq + Clone>(range: RangeInclusive<u64>, step: u64, radius: u64, probe: impl Fn(u64) -> K) -> Vec<Region<K>>
+fn near_contract_sim::explore::gas::mixed = pub fn mixed() -> impl Strategy<Value = Option<StepGas>>
+fn near_contract_sim::explore::gas::off = pub fn off() -> impl Strategy<Value = Option<StepGas>>
+fn near_contract_sim::explore::gas::wide = pub fn wide() -> impl Strategy<Value = Option<StepGas>>
+fn near_contract_sim::explore::input::answer = pub fn answer() -> impl Strategy<Value = Answer> + Clone
+fn near_contract_sim::explore::input::gas = pub fn gas() -> impl Strategy<Value = Gas> + Clone
+fn near_contract_sim::explore::input::id = pub fn id() -> Text
+fn near_contract_sim::explore::input::list = pub fn list<S: Strategy>(element: S) -> List<S>
+fn near_contract_sim::explore::input::pick = pub fn pick() -> impl Strategy<Value = Pick> + Clone
+fn near_contract_sim::explore::input::shape = pub fn shape() -> impl Strategy<Value = Shape> + Clone
+fn near_contract_sim::explore::input::text = pub fn text() -> Text
+fn near_contract_sim::explore::plans = pub fn plans<O: Clone + Debug + 'static>(ops: impl Strategy<Value = O> + 'static) -> Plans<O>
+fn near_contract_sim::explore::submit_injected = pub fn submit_injected<O: Op<W>, W: AsMut<Sim>>(world: &mut W, op: &O, injections: impl IntoIterator<Item = (Receipts, Fault)>) -> Result<(), Skip>
+fn near_contract_sim::explore::trie_siblings = pub fn trie_siblings(account: &AccountId, key: &[u8]) -> Vec<(AccountId, Vec<u8>)>
+fn near_contract_sim::key::borsh = pub fn borsh(prefix: &[u8], key: &impl BorshSerialize) -> Vec<u8>
+fn near_contract_sim::key::borsh_keccak = pub fn borsh_keccak(prefix: &[u8], key: &impl BorshSerialize) -> Vec<u8>
+fn near_contract_sim::key::borsh_sha256 = pub fn borsh_sha256(prefix: &[u8], key: &impl BorshSerialize) -> Vec<u8>
+mod near_contract_sim
+mod near_contract_sim::builtin
+mod near_contract_sim::explore
+mod near_contract_sim::explore::amount
+mod near_contract_sim::explore::builtin
+mod near_contract_sim::explore::gas
+mod near_contract_sim::explore::input
+mod near_contract_sim::explore::prelude
+mod near_contract_sim::key
+mod near_contract_sim::nearcore
+mod near_contract_sim::prelude
+struct near_contract_sim::AccessKey
+struct near_contract_sim::AccountId
+struct near_contract_sim::AccountView
+struct near_contract_sim::Busy = #[non_exhaustive]pub struct Busy
+struct near_contract_sim::Busy structfield blocks = blocks: u64
+struct near_contract_sim::Busy structfield idle = idle: bool
+struct near_contract_sim::Config = #[non_exhaustive]pub struct Config
+struct near_contract_sim::Config impl = impl Config
+struct near_contract_sim::Config method runtime_config = pub fn runtime_config(&self) -> &'static Arc<RuntimeConfig>
+struct near_contract_sim::Config structfield block_gas_limit = block_gas_limit: Option<Gas>
+struct near_contract_sim::Config structfield block_time = block_time: Duration
+struct near_contract_sim::Config structfield chain_id = chain_id: String
+struct near_contract_sim::Config structfield epoch_length = epoch_length: u64
+struct near_contract_sim::Config structfield epoch_reward = epoch_reward: Balance
+struct near_contract_sim::Config structfield gas_limits = gas_limits: GasLimits
+struct near_contract_sim::Config structfield gas_price = gas_price: Balance
+struct near_contract_sim::Config structfield gas_pricing = gas_pricing: Option<ProtocolVersion>
+struct near_contract_sim::Config structfield max_blocks = max_blocks: u64
+struct near_contract_sim::Config structfield minimum_stake = minimum_stake: Balance
+struct near_contract_sim::Config structfield protocol_version = protocol_version: ProtocolVersion
+struct near_contract_sim::Config structfield seed = seed: u64
+struct near_contract_sim::CryptoHash
+struct near_contract_sim::Delta = pub struct Delta
+struct near_contract_sim::Delta associatedconstant ZERO = pub const ZERO: Delta
+struct near_contract_sim::Delta impl = impl Delta
+struct near_contract_sim::Delta method between = pub const fn between(before: u128, after: u128) -> Delta
+struct near_contract_sim::Delta method checked_add = pub fn checked_add(self, other: Delta) -> Option<Delta>
+struct near_contract_sim::Delta method gain = pub const fn gain(amount: u128) -> Delta
+struct near_contract_sim::Delta method loss = pub const fn loss(amount: u128) -> Delta
+struct near_contract_sim::Delta method magnitude = pub const fn magnitude(self) -> u128
+struct near_contract_sim::Effects = #[non_exhaustive]pub struct Effects
+struct near_contract_sim::Effects impl = impl Effects
+struct near_contract_sim::Effects method gas_paid = pub fn gas_paid(&self) -> Balance
+struct near_contract_sim::Effects method near_deposited = pub fn near_deposited(&self, who: impl IntoAccountId) -> Balance
+struct near_contract_sim::Effects method near_net = pub fn near_net(&self, who: impl IntoAccountId) -> Delta
+struct near_contract_sim::Effects method near_paid = pub fn near_paid(&self, from: impl IntoAccountId, to: impl IntoAccountId) -> Balance
+struct near_contract_sim::Effects method storage_bytes = pub fn storage_bytes(&self, who: impl IntoAccountId) -> i64
+struct near_contract_sim::Effects method token_net = pub fn token_net(&self, token: impl WhichToken, who: impl IntoAccountId) -> Result<Delta, Unobserved>
+struct near_contract_sim::Effects method token_supply_net = pub fn token_supply_net(&self, token: impl WhichToken) -> Result<Delta, Unobserved>
+struct near_contract_sim::Effects structfield near = near: Vec<NearMove>
+struct near_contract_sim::Effects structfield pending = pending: Vec<PendingReceipt>
+struct near_contract_sim::Effects structfield storage = storage: Vec<StorageChange>
+struct near_contract_sim::Effects structfield token_moves = token_moves: Vec<TokenMove>
+struct near_contract_sim::Finding = #[non_exhaustive]pub struct Finding
+struct near_contract_sim::Finding impl = impl Finding
+struct near_contract_sim::Finding method key = pub fn key(&self) -> Option<&str>
+struct near_contract_sim::Finding structfield block = block: u64
+struct near_contract_sim::Finding structfield cause = cause: Option<String>
+struct near_contract_sim::Finding structfield check = check: String
+struct near_contract_sim::Finding structfield injected = injected: bool
+struct near_contract_sim::Finding structfield message = message: String
+struct near_contract_sim::Finding structfield occurrences = occurrences: u32
+struct near_contract_sim::Finding structfield receipt_id = receipt_id: Option<CryptoHash>
+struct near_contract_sim::Finding structfield since = since: Option<u64>
+struct near_contract_sim::Finding structfield site = site: Site
+struct near_contract_sim::Finding structfield tx = tx: Option<CryptoHash>
+struct near_contract_sim::Findings = pub struct Findings
+struct near_contract_sim::Findings deref = Methods from Deref<Target = [Finding]>
+struct near_contract_sim::Findings impl = impl Findings
+struct near_contract_sim::Findings method assert_none = pub fn assert_none(&self)
+struct near_contract_sim::Fixture = pub struct Fixture
+struct near_contract_sim::Fixture impl = impl Fixture
+struct near_contract_sim::Fixture method account = pub fn account(self, id: impl IntoAccountId, balance: Balance) -> Self
+struct near_contract_sim::Fixture method args = pub fn args(self, args: impl Into<Vec<u8>>) -> Self
+struct near_contract_sim::Fixture method args_borsh = pub fn args_borsh(self, args: impl BorshSerialize) -> Self
+struct near_contract_sim::Fixture method args_json = pub fn args_json(self, args: impl Serialize) -> Self
+struct near_contract_sim::Fixture method build = pub fn build(&self) -> Sim
+struct near_contract_sim::Fixture method call = pub fn call(self, signer: impl IntoAccountId, receiver: impl IntoAccountId, method: &str) -> Self
+struct near_contract_sim::Fixture method config = pub fn config(self, edit: impl FnOnce(&mut Config)) -> Self
+struct near_contract_sim::Fixture method contract = pub fn contract(self, id: impl IntoAccountId, wasm: impl Into<Vec<u8>>) -> Self
+struct near_contract_sim::Fixture method deposit = pub fn deposit(self, deposit: Balance) -> Self
+struct near_contract_sim::Fixture method ft_register = pub fn ft_register(self, token: impl IntoAccountId, accounts: impl IntoIterator<Item = impl IntoAccountId>) -> Self
+struct near_contract_sim::Fixture method ft_transfer = pub fn ft_transfer(self, token: impl IntoAccountId, from: impl IntoAccountId, to: impl IntoAccountId, amount: u128) -> Self
+struct near_contract_sim::Fixture method gas = pub fn gas(self, gas: Gas) -> Self
+struct near_contract_sim::Fixture method init = pub fn init(self, method: &str) -> Self
+struct near_contract_sim::Fixture method new = pub fn new() -> Self
+struct near_contract_sim::Fixture method setup = pub fn setup(self, name: &str, step: impl Fn(&mut Sim) + Send + Sync + 'static) -> Self
+struct near_contract_sim::Fixture method stub = pub fn stub(self, id: impl IntoAccountId, stub: Stub) -> Self
+struct near_contract_sim::Fixture method token = pub fn token(self, token: Token) -> Self
+struct near_contract_sim::FunctionCallPermission
+struct near_contract_sim::Gas
+struct near_contract_sim::IncomingCall = #[non_exhaustive]pub struct IncomingCall
+struct near_contract_sim::IncomingCall impl = impl IncomingCall
+struct near_contract_sim::IncomingCall method args_json = pub fn args_json<T: DeserializeOwned>(&self) -> Result<T, Error>
+struct near_contract_sim::IncomingCall structfield args = args: Vec<u8>
+struct near_contract_sim::IncomingCall structfield block_height = block_height: u64
+struct near_contract_sim::IncomingCall structfield deposit = deposit: Balance
+struct near_contract_sim::IncomingCall structfield gas = gas: Gas
+struct near_contract_sim::IncomingCall structfield method_name = method_name: String
+struct near_contract_sim::IncomingCall structfield predecessor_id = predecessor_id: AccountId
+struct near_contract_sim::IncomingCall structfield receipt_id = receipt_id: CryptoHash
+struct near_contract_sim::IncomingCall structfield signer_id = signer_id: AccountId
+struct near_contract_sim::IncomingCall structfield succeeded = succeeded: bool
+struct near_contract_sim::NearMove = #[non_exhaustive]pub struct NearMove
+struct near_contract_sim::NearMove structfield amount = amount: Balance
+struct near_contract_sim::NearMove structfield from = from: AccountId
+struct near_contract_sim::NearMove structfield kind = kind: NearKind
+struct near_contract_sim::NearMove structfield method = method: Option<String>
+struct near_contract_sim::NearMove structfield receipt_id = receipt_id: CryptoHash
+struct near_contract_sim::NearMove structfield to = to: AccountId
+struct near_contract_sim::PendingReceipt = #[non_exhaustive]pub struct PendingReceipt
+struct near_contract_sim::PendingReceipt structfield deposit = deposit: Balance
+struct near_contract_sim::PendingReceipt structfield method_names = method_names: Vec<String>
+struct near_contract_sim::PendingReceipt structfield predecessor_id = predecessor_id: AccountId
+struct near_contract_sim::PendingReceipt structfield receipt_id = receipt_id: CryptoHash
+struct near_contract_sim::PendingReceipt structfield receiver_id = receiver_id: AccountId
+struct near_contract_sim::PendingReceipt structfield state = state: PendingState
+struct near_contract_sim::PendingReceipt structfield tx = tx: CryptoHash
+struct near_contract_sim::PendingYield = #[non_exhaustive]pub struct PendingYield
+struct near_contract_sim::PendingYield structfield callback_args = callback_args: Vec<Vec<u8>>
+struct near_contract_sim::PendingYield structfield callback_methods = callback_methods: Vec<String>
+struct near_contract_sim::PendingYield structfield data_id = data_id: CryptoHash
+struct near_contract_sim::PendingYield structfield expires_at = expires_at: u64
+struct near_contract_sim::PendingYield structfield receipt_id = receipt_id: CryptoHash
+struct near_contract_sim::PendingYield structfield receiver_id = receiver_id: AccountId
+struct near_contract_sim::PendingYield structfield tx = tx: CryptoHash
+struct near_contract_sim::ReceiptOutcome = #[non_exhaustive]pub struct ReceiptOutcome
+struct near_contract_sim::ReceiptOutcome impl = impl ReceiptOutcome
+struct near_contract_sim::ReceiptOutcome method args_json = pub fn args_json<T: DeserializeOwned>(&self) -> Result<T, Error>
+struct near_contract_sim::ReceiptOutcome method failure = pub fn failure(&self) -> Option<Failure>
+struct near_contract_sim::ReceiptOutcome method headroom = pub fn headroom(&self) -> Gas
+struct near_contract_sim::ReceiptOutcome method is_callback = pub fn is_callback(&self) -> bool
+struct near_contract_sim::ReceiptOutcome method is_refund = pub fn is_refund(&self) -> bool
+struct near_contract_sim::ReceiptOutcome method is_success = pub fn is_success(&self) -> bool
+struct near_contract_sim::ReceiptOutcome method method = pub fn method(&self) -> Option<&str>
+struct near_contract_sim::ReceiptOutcome method storage_ops = pub fn storage_ops(&self) -> StorageOps
+struct near_contract_sim::ReceiptOutcome method value = pub fn value(&self) -> Option<&[u8]>
+struct near_contract_sim::ReceiptOutcome structfield actions = actions: Vec<String>
+struct near_contract_sim::ReceiptOutcome structfield args = args: Vec<Vec<u8>>
+struct near_contract_sim::ReceiptOutcome structfield attached_gas = attached_gas: Gas
+struct near_contract_sim::ReceiptOutcome structfield block_height = block_height: u64
+struct near_contract_sim::ReceiptOutcome structfield block_timestamp_ns = block_timestamp_ns: u64
+struct near_contract_sim::ReceiptOutcome structfield delivered = delivered: bool
+struct near_contract_sim::ReceiptOutcome structfield deposit = deposit: Balance
+struct near_contract_sim::ReceiptOutcome structfield fault = fault: Option<Fault>
+struct near_contract_sim::ReceiptOutcome structfield gas_burnt = gas_burnt: Gas
+struct near_contract_sim::ReceiptOutcome structfield gas_profile = gas_profile: BTreeMap<String, u64>
+struct near_contract_sim::ReceiptOutcome structfield held = held: Option<u64>
+struct near_contract_sim::ReceiptOutcome structfield logs = logs: Vec<String>
+struct near_contract_sim::ReceiptOutcome structfield method_names = method_names: Vec<String>
+struct near_contract_sim::ReceiptOutcome structfield predecessor_id = predecessor_id: AccountId
+struct near_contract_sim::ReceiptOutcome structfield prepaid_exec_fees = prepaid_exec_fees: Gas
+struct near_contract_sim::ReceiptOutcome structfield receipt_id = receipt_id: CryptoHash
+struct near_contract_sim::ReceiptOutcome structfield receipt_ids = receipt_ids: Vec<CryptoHash>
+struct near_contract_sim::ReceiptOutcome structfield receiver_id = receiver_id: AccountId
+struct near_contract_sim::ReceiptOutcome structfield refund = refund: Option<Refund>
+struct near_contract_sim::ReceiptOutcome structfield result_held = result_held: Option<u64>
+struct near_contract_sim::ReceiptOutcome structfield status = status: ExecutionStatus
+struct near_contract_sim::ReceiptOutcome structfield storage = storage: Vec<StorageChange>
+struct near_contract_sim::ReceiptOutcome structfield token_moves = token_moves: Vec<TokenMove>
+struct near_contract_sim::ReceiptOutcome structfield tokens_burnt = tokens_burnt: Balance
+struct near_contract_sim::ReceiptOutcome structfield tx = tx: CryptoHash
+struct near_contract_sim::ReceiptOutcome structfield unhandled = unhandled: bool
+struct near_contract_sim::Receipts = pub struct Receipts
+struct near_contract_sim::Receipts impl = impl Receipts
+struct near_contract_sim::Receipts method action = pub fn action(kind: &str) -> Self
+struct near_contract_sim::Receipts method all = pub fn all() -> Self
+struct near_contract_sim::Receipts method call = pub fn call(receiver: impl IntoAccountId, method: &str) -> Self
+struct near_contract_sim::Receipts method callback = pub fn callback(method: &str) -> Self
+struct near_contract_sim::Receipts method callbacks = pub fn callbacks() -> Self
+struct near_contract_sim::Receipts method cross_contract_callbacks = pub fn cross_contract_callbacks() -> Self
+struct near_contract_sim::Receipts method in_tx = pub fn in_tx(self, hash: CryptoHash) -> Self
+struct near_contract_sim::Receipts method index = pub fn index(n: usize) -> Self
+struct near_contract_sim::Receipts method method = pub fn method(method: &str) -> Self
+struct near_contract_sim::Receipts method nth = pub fn nth(self, k: usize) -> Self
+struct near_contract_sim::Receipts method occurrence = pub fn occurrence(receiver: impl IntoAccountId, method: &str, k: usize) -> Self
+struct near_contract_sim::Receipts method receiver = pub fn receiver(id: impl IntoAccountId) -> Self
+struct near_contract_sim::Reply = pub struct Reply
+struct near_contract_sim::Reply impl = impl Reply
+struct near_contract_sim::Reply method at_limit = pub fn at_limit(self) -> Self
+struct near_contract_sim::Reply method burn = pub fn burn(self, gas: Gas) -> Self
+struct near_contract_sim::Reply method burn_leaving = pub fn burn_leaving(self, gas: Gas) -> Self
+struct near_contract_sim::Reply method bytes = pub fn bytes(bytes: impl Into<Vec<u8>>) -> Self
+struct near_contract_sim::Reply method call = pub fn call(receiver: impl IntoAccountId, method: &str, args: impl Serialize) -> StubCall
+struct near_contract_sim::Reply method fail_below = pub fn fail_below(self, gas: Gas) -> Self
+struct near_contract_sim::Reply method json = pub fn json(value: impl Serialize) -> Self
+struct near_contract_sim::Reply method logs = pub fn logs(self, lines: impl IntoIterator<Item = impl Into<String>>) -> Self
+struct near_contract_sim::Reply method pad_to = pub fn pad_to(self, len: usize) -> Self
+struct near_contract_sim::Reply method panic = pub fn panic(message: &str) -> Self
+struct near_contract_sim::SignedDelegateAction
+struct near_contract_sim::Sim = pub struct Sim
+struct near_contract_sim::Sim impl = impl Sim
+struct near_contract_sim::Sim method access_key = pub fn access_key(&self, id: impl IntoAccountId, pk: &PublicKey) -> Option<AccessKey>
+struct near_contract_sim::Sim method access_keys = pub fn access_keys(&self, id: impl IntoAccountId) -> Vec<(PublicKeyHandle, AccessKey)>
+struct near_contract_sim::Sim method account = pub fn account(&self, id: impl IntoAccountId) -> Option<AccountView>
+struct near_contract_sim::Sim method advance_by = pub fn advance_by(&mut self, d: Duration)
+struct near_contract_sim::Sim method advance_epochs = pub fn advance_epochs(&mut self, n: u64)
+struct near_contract_sim::Sim method advance_to = pub fn advance_to(&mut self, h: u64)
+struct near_contract_sim::Sim method apply_state_records = pub fn apply_state_records(&mut self, records: impl IntoIterator<Item = StateRecord>)
+struct near_contract_sim::Sim method balance = pub fn balance(&self, id: impl IntoAccountId) -> Balance
+struct near_contract_sim::Sim method cached = pub fn cached(key: impl Hash, setup: impl FnOnce() -> Sim) -> Sim
+struct near_contract_sim::Sim method call = pub fn call(&mut self, signer: impl IntoAccountId, receiver: impl IntoAccountId, method: &str) -> Tx<'_>
+struct near_contract_sim::Sim method calls_to = pub fn calls_to(&self, id: impl IntoAccountId) -> Vec<IncomingCall>
+struct near_contract_sim::Sim method contract_state = pub fn contract_state<T: BorshDeserialize>(&self, id: impl IntoAccountId) -> T
+struct near_contract_sim::Sim method create_account = pub fn create_account(&mut self, id: impl IntoAccountId, balance: Balance) -> AccountId
+struct near_contract_sim::Sim method create_account_with_key = pub fn create_account_with_key(&mut self, id: impl IntoAccountId, balance: Balance, secret_key: &SecretKey) -> AccountId
+struct near_contract_sim::Sim method create_subaccount = pub fn create_subaccount(&mut self, parent: impl IntoAccountId, name: &str, balance: Balance) -> AccountId
+struct near_contract_sim::Sim method deploy = pub fn deploy(&mut self, id: impl IntoAccountId, wasm: impl Into<Vec<u8>>)
+struct near_contract_sim::Sim method deploy_stub = pub fn deploy_stub(&mut self, id: impl IntoAccountId, stub: Stub)
+struct near_contract_sim::Sim method epoch_height = pub fn epoch_height(&self) -> u64
+struct near_contract_sim::Sim method epoch_of = pub fn epoch_of(&self, h: u64) -> u64
+struct near_contract_sim::Sim method epoch_start = pub fn epoch_start(&self, e: u64) -> u64
+struct near_contract_sim::Sim method expire = pub fn expire(&mut self, y: &PendingYield) -> TxOutcome
+struct near_contract_sim::Sim method findings = pub fn findings(&self) -> Findings
+struct near_contract_sim::Sim method gas_ceiling = pub fn gas_ceiling(&self) -> Gas
+struct near_contract_sim::Sim method gas_key_nonces = pub fn gas_key_nonces(&self, id: impl IntoAccountId, pk: &PublicKey) -> Option<Vec<Nonce>>
+struct near_contract_sim::Sim method global_contract_code = pub fn global_contract_code(&self, identifier: GlobalContractIdentifier) -> Option<Vec<u8>>
+struct near_contract_sim::Sim method global_storage_cost = pub fn global_storage_cost(&self, bytes: u64) -> Balance
+struct near_contract_sim::Sim method height = pub fn height(&self) -> u64
+struct near_contract_sim::Sim method is_idle = pub fn is_idle(&self) -> bool
+struct near_contract_sim::Sim method new = pub fn new() -> Self
+struct near_contract_sim::Sim method outcome = pub fn outcome(&self, hash: impl Borrow<CryptoHash>) -> TxOutcome
+struct near_contract_sim::Sim method pause_clock_at = pub fn pause_clock_at(&mut self, ns: u64)
+struct near_contract_sim::Sim method pending_receipts = pub fn pending_receipts(&self) -> Vec<PendingReceipt>
+struct near_contract_sim::Sim method receipts_in = pub fn receipts_in(&self, heights: impl RangeBounds<u64>) -> Vec<ReceiptOutcome>
+struct near_contract_sim::Sim method resume_clock = pub fn resume_clock(&mut self)
+struct near_contract_sim::Sim method rewarded = pub fn rewarded(&self, id: impl IntoAccountId) -> Balance
+struct near_contract_sim::Sim method run_until = pub fn run_until(&mut self, max_blocks: u64, done: impl FnMut(&Sim) -> bool) -> Result<u64, Busy>
+struct near_contract_sim::Sim method secret_key = pub fn secret_key(&self, id: impl IntoAccountId) -> SecretKey
+struct near_contract_sim::Sim method set_balance = pub fn set_balance(&mut self, id: impl IntoAccountId, amount: Balance)
+struct near_contract_sim::Sim method set_height = pub fn set_height(&mut self, h: u64)
+struct near_contract_sim::Sim method set_key = pub fn set_key(&mut self, id: impl IntoAccountId, secret_key: &SecretKey)
+struct near_contract_sim::Sim method set_state = pub fn set_state(&mut self, id: impl IntoAccountId, key: &[u8], value: Option<&[u8]>)
+struct near_contract_sim::Sim method set_timestamp_ns = pub fn set_timestamp_ns(&mut self, ns: u64)
+struct near_contract_sim::Sim method settle = pub fn settle(&mut self)
+struct near_contract_sim::Sim method state = pub fn state(&self, id: impl IntoAccountId, key: &[u8]) -> Option<Vec<u8>>
+struct near_contract_sim::Sim method state_records = pub fn state_records<I: IntoAccountId>(&self, ids: impl IntoIterator<Item = I>) -> Vec<StateRecord>
+struct near_contract_sim::Sim method state_root = pub fn state_root(&self) -> CryptoHash
+struct near_contract_sim::Sim method step = pub fn step(&mut self)
+struct near_contract_sim::Sim method storage_cost = pub fn storage_cost(&self, bytes: u64) -> Balance
+struct near_contract_sim::Sim method stub_reply = pub fn stub_reply(&mut self, id: impl IntoAccountId, method: &str, reply: Reply)
+struct near_contract_sim::Sim method timestamp_ns = pub fn timestamp_ns(&self) -> u64
+struct near_contract_sim::Sim method tx = pub fn tx(&mut self, signer: impl IntoAccountId, receiver: impl IntoAccountId) -> Tx<'_>
+struct near_contract_sim::Sim method txs = pub fn txs(&self) -> &[CryptoHash]
+struct near_contract_sim::Sim method update_contract_state = pub fn update_contract_state<T: BorshSerialize + BorshDeserialize>(&mut self, id: impl IntoAccountId, edit: impl FnOnce(&mut T))
+struct near_contract_sim::Sim method view = pub fn view(&self, id: impl IntoAccountId, method: &str, args: impl Serialize) -> ViewResult
+struct near_contract_sim::Sim method view_raw = pub fn view_raw(&self, id: impl IntoAccountId, method: &str, args: impl Into<Vec<u8>>) -> ViewResult
+struct near_contract_sim::Sim method view_state = pub fn view_state(&self, id: impl IntoAccountId, prefix: &[u8]) -> Vec<(Vec<u8>, Vec<u8>)>
+struct near_contract_sim::Sim method watch = pub fn watch(&mut self, token: Token)
+struct near_contract_sim::Sim method yields = pub fn yields(&self) -> Vec<PendingYield>
+struct near_contract_sim::Sim structfield config = config: Config
+struct near_contract_sim::SimTransport = pub struct SimTransport
+struct near_contract_sim::SimTransport impl = impl SimTransport
+struct near_contract_sim::SimTransport method near = pub fn near(&self, signer: impl IntoAccountId) -> Near
+struct near_contract_sim::SimTransport method new = pub fn new(sim: Sim) -> Self
+struct near_contract_sim::SimTransport method url = pub fn url(&self) -> &str
+struct near_contract_sim::SimTransport method with = pub fn with<R>(&self, f: impl FnOnce(&mut Sim) -> R) -> R
+struct near_contract_sim::StorageChange = #[non_exhaustive]pub struct StorageChange
+struct near_contract_sim::StorageChange structfield account = account: AccountId
+struct near_contract_sim::StorageChange structfield bytes = bytes: i64
+struct near_contract_sim::StorageChange structfield receipt_id = receipt_id: CryptoHash
+struct near_contract_sim::StorageOps = #[non_exhaustive]pub struct StorageOps
+struct near_contract_sim::StorageOps structfield cached_nodes = cached_nodes: u64
+struct near_contract_sim::StorageOps structfield evicted_bytes = evicted_bytes: u64
+struct near_contract_sim::StorageOps structfield has_keys = has_keys: u64
+struct near_contract_sim::StorageOps structfield read_bytes = read_bytes: u64
+struct near_contract_sim::StorageOps structfield reads = reads: u64
+struct near_contract_sim::StorageOps structfield removes = removes: u64
+struct near_contract_sim::StorageOps structfield trie_nodes = trie_nodes: u64
+struct near_contract_sim::StorageOps structfield writes = writes: u64
+struct near_contract_sim::StorageOps structfield written = written: Vec<WrittenKey>
+struct near_contract_sim::StorageOps structfield written_bytes = written_bytes: u64
+struct near_contract_sim::Stub = pub struct Stub
+struct near_contract_sim::Stub impl = impl Stub
+struct near_contract_sim::Stub method new = pub fn new() -> Self
+struct near_contract_sim::Stub method on = pub fn on(self, method: &str, reply: Reply) -> Self
+struct near_contract_sim::StubCall = pub struct StubCall
+struct near_contract_sim::StubCall impl = impl StubCall
+struct near_contract_sim::StubCall method deposit = pub fn deposit(self, deposit: Balance) -> Self
+struct near_contract_sim::StubCall method then = pub fn then(self, answer: Reply) -> Reply
+struct near_contract_sim::Token = pub struct Token
+struct near_contract_sim::Token impl = impl Token
+struct near_contract_sim::Token method arg = pub fn arg(self, name: &str) -> Self
+struct near_contract_sim::Token method discover = pub fn discover(self) -> Self
+struct near_contract_sim::Token method holders = pub fn holders(self, ids: impl IntoIterator<Item = impl IntoAccountId>) -> Self
+struct near_contract_sim::Token method nep141 = pub fn nep141(id: impl IntoAccountId) -> Self
+struct near_contract_sim::Token method nep171 = pub fn nep171(id: impl IntoAccountId) -> Self
+struct near_contract_sim::Token method nep245 = pub fn nep245(id: impl IntoAccountId, token_id: &str) -> Self
+struct near_contract_sim::Token method nep245_ids = pub fn nep245_ids(id: impl IntoAccountId, token_ids: impl IntoIterator<Item = impl Into<String>>) -> Self
+struct near_contract_sim::Token method pure = pub fn pure(self) -> Self
+struct near_contract_sim::Token method supply = pub fn supply(self, method: &str) -> Self
+struct near_contract_sim::Token method view = pub fn view(id: impl IntoAccountId, balance_method: &str) -> Self
+struct near_contract_sim::TokenMove = #[non_exhaustive]pub struct TokenMove
+struct near_contract_sim::TokenMove structfield delta = delta: Delta
+struct near_contract_sim::TokenMove structfield holder = holder: Option<AccountId>
+struct near_contract_sim::TokenMove structfield receipt_id = receipt_id: CryptoHash
+struct near_contract_sim::TokenMove structfield token = token: AccountId
+struct near_contract_sim::TokenMove structfield token_id = token_id: Option<String>
+struct near_contract_sim::Tx = pub struct Tx<'a>
+struct near_contract_sim::Tx impl = impl<'a> Tx<'a>
+struct near_contract_sim::Tx method action = pub fn action(self, action: impl Into<Action>) -> Self
+struct near_contract_sim::Tx method add_function_call_key = pub fn add_function_call_key(self, public_key: PublicKey, receiver: impl IntoAccountId, methods: &[&str], allowance: impl Into<Option<Balance>>) -> Self
+struct near_contract_sim::Tx method add_key = pub fn add_key(self, public_key: PublicKey, access_key: AccessKey) -> Self
+struct near_contract_sim::Tx method args = pub fn args(self, args: impl Into<Vec<u8>>) -> Self
+struct near_contract_sim::Tx method args_borsh = pub fn args_borsh(self, args: impl BorshSerialize) -> Self
+struct near_contract_sim::Tx method args_json = pub fn args_json(self, args: impl Serialize) -> Self
+struct near_contract_sim::Tx method call = pub fn call(self, method: &str) -> Self
+struct near_contract_sim::Tx method create_account = pub fn create_account(self) -> Self
+struct near_contract_sim::Tx method delete_key = pub fn delete_key(self, public_key: PublicKey) -> Self
+struct near_contract_sim::Tx method deploy = pub fn deploy(self, wasm: impl Into<Vec<u8>>) -> Self
+struct near_contract_sim::Tx method deploy_global = pub fn deploy_global(self, wasm: impl Into<Vec<u8>>, mode: GlobalContractDeployMode) -> Self
+struct near_contract_sim::Tx method deposit = pub fn deposit(self, deposit: Balance) -> Self
+struct near_contract_sim::Tx method gas = pub fn gas(self, gas: impl Into<Option<Gas>>) -> Self
+struct near_contract_sim::Tx method gas_edges = pub fn gas_edges<K: Eq + Clone>(self, range: RangeInclusive<Gas>, step: Gas, key: impl Fn(&TxOutcome) -> K) -> Vec<Region<K>>
+struct near_contract_sim::Tx method inject = pub fn inject(self, at: Receipts, fault: Fault) -> Self
+struct near_contract_sim::Tx method least_gas = pub fn least_gas(self) -> Result<Gas, Box<TxOutcome>>
+struct near_contract_sim::Tx method nonce = pub fn nonce(self, nonce: Nonce) -> Self
+struct near_contract_sim::Tx method nonce_index = pub fn nonce_index(self, index: NonceIndex) -> Self
+struct near_contract_sim::Tx method nonce_mode = pub fn nonce_mode(self, mode: NonceMode) -> Self
+struct near_contract_sim::Tx method predecessor = pub fn predecessor(self, id: impl IntoAccountId) -> Self
+struct near_contract_sim::Tx method promise_results = pub fn promise_results(self, results: impl IntoIterator<Item = PromiseResult>) -> Self
+struct near_contract_sim::Tx method relay = pub fn relay(self, relayer: impl IntoAccountId) -> TxOutcome
+struct near_contract_sim::Tx method sign_delegate = pub fn sign_delegate(self, max_block_height: u64) -> SignedDelegateAction
+struct near_contract_sim::Tx method sign_with = pub fn sign_with(self, key: impl Borrow<SecretKey>) -> Self
+struct near_contract_sim::Tx method stub_reply = pub fn stub_reply(self, stub: impl IntoAccountId, method: &str, reply: Reply) -> Self
+struct near_contract_sim::Tx method submit = pub fn submit(self) -> CryptoHash
+struct near_contract_sim::Tx method transact = pub fn transact(self) -> TxOutcome
+struct near_contract_sim::Tx method transfer = pub fn transfer(self, deposit: Balance) -> Self
+struct near_contract_sim::Tx method transfer_to_gas_key = pub fn transfer_to_gas_key(self, public_key: PublicKey, deposit: Balance) -> Self
+struct near_contract_sim::Tx method use_global = pub fn use_global(self, identifier: GlobalContractIdentifier) -> Self
+struct near_contract_sim::Tx method withdraw_from_gas_key = pub fn withdraw_from_gas_key(self, public_key: PublicKey, amount: Balance) -> Self
+struct near_contract_sim::TxOutcome = #[non_exhaustive]pub struct TxOutcome
+struct near_contract_sim::TxOutcome impl = impl TxOutcome
+struct near_contract_sim::TxOutcome method all_logs = pub fn all_logs(&self) -> Vec<&str>
+struct near_contract_sim::TxOutcome method assert_failure = pub fn assert_failure(&self) -> Failure
+struct near_contract_sim::TxOutcome method assert_headroom = pub fn assert_headroom(&self, method: &str, min: Gas) -> Gas
+struct near_contract_sim::TxOutcome method assert_panic_contains = pub fn assert_panic_contains(&self, fragment: &str) -> String
+struct near_contract_sim::TxOutcome method assert_success = pub fn assert_success(&self) -> &Self
+struct near_contract_sim::TxOutcome method bytes = pub fn bytes(&self) -> &[u8]
+struct near_contract_sim::TxOutcome method effects = pub fn effects(&self) -> &Effects
+struct near_contract_sim::TxOutcome method events = pub fn events(&self) -> Vec<Value>
+struct near_contract_sim::TxOutcome method expect_receipt = pub fn expect_receipt(&self, method: &str) -> &ReceiptOutcome
+struct near_contract_sim::TxOutcome method failure = pub fn failure(&self) -> Option<Failure>
+struct near_contract_sim::TxOutcome method first_call = pub fn first_call(&self) -> Option<&ReceiptOutcome>
+struct near_contract_sim::TxOutcome method gas_burnt = pub fn gas_burnt(&self) -> Gas
+struct near_contract_sim::TxOutcome method is_complete = pub fn is_complete(&self) -> bool
+struct near_contract_sim::TxOutcome method is_failure = pub fn is_failure(&self) -> bool
+struct near_contract_sim::TxOutcome method is_pending = pub fn is_pending(&self) -> bool
+struct near_contract_sim::TxOutcome method is_success = pub fn is_success(&self) -> bool
+struct near_contract_sim::TxOutcome method json = pub fn json<T: DeserializeOwned>(&self) -> T
+struct near_contract_sim::TxOutcome method logs = pub fn logs(&self) -> Vec<&str>
+struct near_contract_sim::TxOutcome method receipt = pub fn receipt(&self, method: &str) -> Option<&ReceiptOutcome>
+struct near_contract_sim::TxOutcome method tokens_burnt = pub fn tokens_burnt(&self) -> Balance
+struct near_contract_sim::TxOutcome method u128 = pub fn u128(&self) -> u128
+struct near_contract_sim::TxOutcome method value = pub fn value(&self) -> Option<&[u8]>
+struct near_contract_sim::TxOutcome structfield hash = hash: CryptoHash
+struct near_contract_sim::TxOutcome structfield pending = pending: Vec<PendingReceipt>
+struct near_contract_sim::TxOutcome structfield receipts = receipts: Vec<ReceiptOutcome>
+struct near_contract_sim::TxOutcome structfield status = status: FinalExecutionStatus
+struct near_contract_sim::TxOutcome structfield transaction = transaction: Option<ReceiptOutcome>
+struct near_contract_sim::Unobserved = #[non_exhaustive]pub struct Unobserved
+struct near_contract_sim::Unobserved structfield token = token: AccountId
+struct near_contract_sim::Unobserved structfield why = why: String
+struct near_contract_sim::ViewResult = #[non_exhaustive]pub struct ViewResult
+struct near_contract_sim::ViewResult impl = impl ViewResult
+struct near_contract_sim::ViewResult method assert_failure = pub fn assert_failure(&self) -> Failure
+struct near_contract_sim::ViewResult method assert_panic_contains = pub fn assert_panic_contains(&self, fragment: &str) -> String
+struct near_contract_sim::ViewResult method assert_success = pub fn assert_success(&self) -> &Self
+struct near_contract_sim::ViewResult method bytes = pub fn bytes(&self) -> &[u8]
+struct near_contract_sim::ViewResult method failure = pub fn failure(&self) -> Option<Failure>
+struct near_contract_sim::ViewResult method is_failure = pub fn is_failure(&self) -> bool
+struct near_contract_sim::ViewResult method is_success = pub fn is_success(&self) -> bool
+struct near_contract_sim::ViewResult method json = pub fn json<T: DeserializeOwned>(&self) -> T
+struct near_contract_sim::ViewResult method logs = pub fn logs(&self) -> Vec<&str>
+struct near_contract_sim::ViewResult method u128 = pub fn u128(&self) -> u128
+struct near_contract_sim::ViewResult method value = pub fn value(&self) -> Option<&[u8]>
+struct near_contract_sim::ViewResult structfield block_height = block_height: u64
+struct near_contract_sim::ViewResult structfield method_name = method_name: String
+struct near_contract_sim::ViewResult structfield receiver_id = receiver_id: AccountId
+struct near_contract_sim::ViewResult structfield result = result: Result<Vec<u8>, Failure>
+struct near_contract_sim::WrittenKey = #[non_exhaustive]pub struct WrittenKey
+struct near_contract_sim::WrittenKey structfield account = account: AccountId
+struct near_contract_sim::WrittenKey structfield key = key: Vec<u8>
+struct near_contract_sim::WrittenKey structfield len = len: Option<usize>
+struct near_contract_sim::explore::Audit = pub struct Audit<O>
+struct near_contract_sim::explore::Audit impl = impl<O: Debug> Audit<O>
+struct near_contract_sim::explore::Audit impl = impl<O> Audit<O>
+struct near_contract_sim::explore::Audit method assert_clean = pub fn assert_clean(&self) where O: Debug
+struct near_contract_sim::explore::Audit method assert_curve = pub fn assert_curve(&self, site: &str, resource: Resource, axis: &str) -> &CurveRow<O> where O: Debug
+struct near_contract_sim::explore::Audit method assert_found = pub fn assert_found(&self, check: &str, at: &str) -> &Found<O> where O: Debug
+struct near_contract_sim::explore::Audit method assert_reached = pub fn assert_reached(&self, site: &str)
+struct near_contract_sim::explore::Audit method cases = pub fn cases(&self) -> u32
+struct near_contract_sim::explore::Audit method curve = pub fn curve(&self, site: &str, resource: Resource, axis: &str) -> Option<&CurveRow<O>>
+struct near_contract_sim::explore::Audit method curves = pub fn curves(&self) -> &[CurveRow<O>]
+struct near_contract_sim::explore::Audit method done = pub fn done(&self) -> Result<String, Vec<Todo>>
+struct near_contract_sim::explore::Audit method errors = pub fn errors(&self) -> &[String]
+struct near_contract_sim::explore::Audit method found = pub fn found(&self) -> &[Found<O>]
+struct near_contract_sim::explore::Audit method found_at = pub fn found_at(&self, check: &str, at: &str) -> Option<&Found<O>>
+struct near_contract_sim::explore::Audit method incomplete = pub fn incomplete(&self) -> &[(String, String)]
+struct near_contract_sim::explore::Audit method is_clean = pub fn is_clean(&self) -> bool
+struct near_contract_sim::explore::Audit method reached = pub fn reached(&self, site: &str) -> u32
+struct near_contract_sim::explore::Audit method report = pub fn report(&self) -> Report
+struct near_contract_sim::explore::Audit method seeds = pub fn seeds(&self) -> &[u64]
+struct near_contract_sim::explore::Audit method todo = pub fn todo(&self) -> Vec<Todo>
+struct near_contract_sim::explore::Audit method with_open_gaps = pub fn with_open_gaps(&self, why: &str) -> String
+struct near_contract_sim::explore::Axes = pub struct Axes
+struct near_contract_sim::explore::Axes impl = impl Axes
+struct near_contract_sim::explore::Axes method auto = pub fn auto() -> Self
+struct near_contract_sim::explore::Axes method floor = pub fn floor(self, pointer: &str, floor: Gas) -> Self
+struct near_contract_sim::explore::Axes method only = pub fn only<'a>(pointers: impl IntoIterator<Item = &'a str>) -> Self
+struct near_contract_sim::explore::Books = pub struct Books<O, W = Sim>
+struct near_contract_sim::explore::Books impl = impl<O: Op<W>, W: World> Books<O, W>
+struct near_contract_sim::explore::Books method asset = pub fn asset(self, name: &str, held: impl Fn(&W) -> u128 + 'static) -> Self
+struct near_contract_sim::explore::Books method at_end = pub fn at_end(self) -> Self
+struct near_contract_sim::explore::Books method authorized = pub fn authorized(self, by: impl for<'a> Fn(&OpDone<'a, O, W>) -> Option<Vec<String>> + 'static) -> Self
+struct near_contract_sim::explore::Books method backs = pub fn backs(self, liability: &str, asset: &str) -> Self
+struct near_contract_sim::explore::Books method claim = pub fn claim(self, name: &str, asset: &str, open: impl Fn(&W) -> Vec<Claim> + 'static, redeem: impl Fn(&Claim) -> Plan<O> + 'static) -> Self
+struct near_contract_sim::explore::Books method keeps_no_near = pub fn keeps_no_near(self, account: &str) -> Self
+struct near_contract_sim::explore::Books method liability = pub fn liability(self, name: &str, read: impl Fn(&W) -> BTreeMap<String, u128> + 'static) -> Self
+struct near_contract_sim::explore::Books method near = pub fn near(self, name: &str, account: &str) -> Self
+struct near_contract_sim::explore::Books method new = pub fn new() -> Self
+struct near_contract_sim::explore::Books method once = pub fn once(self, name: &str, key: impl for<'a> Fn(&OpDone<'a, O, W>) -> Option<String> + 'static) -> Self
+struct near_contract_sim::explore::Books method owned = pub fn owned(self, liability: &str) -> Self
+struct near_contract_sim::explore::Books method price = pub fn price(self, liability: &str, asset: &str) -> Self
+struct near_contract_sim::explore::Books method supply = pub fn supply(self, liability: &str, supply: impl Fn(&W) -> u128 + 'static) -> Self
+struct near_contract_sim::explore::Books method tolerance = pub fn tolerance(self, name: &str, units: u128) -> Self
+struct near_contract_sim::explore::Books method watch_near = pub fn watch_near(self, account: &str) -> Self
+struct near_contract_sim::explore::Call = pub struct Call
+struct near_contract_sim::explore::Call impl = impl Call
+struct near_contract_sim::explore::Call method args = pub fn args(self, args: impl Into<Vec<u8>>) -> Self
+struct near_contract_sim::explore::Call method args_json = pub fn args_json(self, args: impl Serialize) -> Self
+struct near_contract_sim::explore::Call method deposit = pub fn deposit(self, deposit: Balance) -> Self
+struct near_contract_sim::explore::Call method gas = pub fn gas(self, gas: Gas) -> Self
+struct near_contract_sim::explore::Call method new = pub fn new(signer: impl IntoAccountId, receiver: impl IntoAccountId, method: &str) -> Self
+struct near_contract_sim::explore::Claim = pub struct Claim
+struct near_contract_sim::explore::Claim structfield amount = amount: u128
+struct near_contract_sim::explore::Claim structfield holder = holder: String
+struct near_contract_sim::explore::Claim structfield matures = matures: Option<u64>
+struct near_contract_sim::explore::Curve = pub struct Curve
+struct near_contract_sim::explore::Curve structfield axis = axis: String
+struct near_contract_sim::explore::Curve structfield limit = limit: u128
+struct near_contract_sim::explore::Curve structfield line = line: String
+struct near_contract_sim::explore::Curve structfield moved_to = moved_to: u128
+struct near_contract_sim::explore::Curve structfield reach = reach: Reach
+struct near_contract_sim::explore::Curve structfield replay = replay: Option<String>
+struct near_contract_sim::explore::Curve structfield resource = resource: Resource
+struct near_contract_sim::explore::Curve structfield site = site: String
+struct near_contract_sim::explore::Curve structfield slope = slope: f64
+struct near_contract_sim::explore::Curve structfield step = step: usize
+struct near_contract_sim::explore::Curve structfield used = used: u128
+struct near_contract_sim::explore::CurveRow = pub struct CurveRow<O>
+struct near_contract_sim::explore::CurveRow impl = impl<O> CurveRow<O>
+struct near_contract_sim::explore::CurveRow method margins = pub fn margins(&self) -> Vec<(u128, i128)>
+struct near_contract_sim::explore::CurveRow method open = pub fn open(&self) -> Option<String>
+struct near_contract_sim::explore::CurveRow structfield axis = axis: Axis
+struct near_contract_sim::explore::CurveRow structfield elsewhere = elsewhere: Vec<(u128, u128)>
+struct near_contract_sim::explore::CurveRow structfield forwarded = forwarded: Vec<(u128, u128)>
+struct near_contract_sim::explore::CurveRow structfield limit = limit: u128
+struct near_contract_sim::explore::CurveRow structfield moved_to = moved_to: u128
+struct near_contract_sim::explore::CurveRow structfield plan = plan: Plan<O>
+struct near_contract_sim::explore::CurveRow structfield points = points: Vec<(u128, u128)>
+struct near_contract_sim::explore::CurveRow structfield reach = reach: Reach
+struct near_contract_sim::explore::CurveRow structfield replay = replay: Option<PathBuf>
+struct near_contract_sim::explore::CurveRow structfield resource = resource: Resource
+struct near_contract_sim::explore::CurveRow structfield site = site: String
+struct near_contract_sim::explore::CurveRow structfield slope = slope: f64
+struct near_contract_sim::explore::CurveRow structfield step = step: usize
+struct near_contract_sim::explore::Curves = pub struct Curves<'h, O, W>
+struct near_contract_sim::explore::Curves impl = impl<O: Op<W>, W: World> Curves<'_, O, W>
+struct near_contract_sim::explore::Curves method run = pub fn run(self) -> Audit<O>
+struct near_contract_sim::explore::Curves method rungs = pub fn rungs(self, rungs: u32) -> Self
+struct near_contract_sim::explore::Curves method saves = pub fn saves(self, path: impl Into<PathBuf>, every: usize) -> Self
+struct near_contract_sim::explore::Curves method with = pub fn with(self, audit: impl Into<Report>) -> Self
+struct near_contract_sim::explore::Diff = pub struct Diff
+struct near_contract_sim::explore::Diff impl = impl Diff
+struct near_contract_sim::explore::Diff method is_empty = pub fn is_empty(&self) -> bool
+struct near_contract_sim::explore::Diff method lines = pub fn lines(&self) -> impl Iterator<Item = &str>
+struct near_contract_sim::explore::Diff structfield fixture = fixture: Vec<String>
+struct near_contract_sim::explore::Diff structfield plans = plans: Vec<PlanDiff>
+struct near_contract_sim::explore::Enumerate = pub struct Enumerate<'h, O, W>
+struct near_contract_sim::explore::Enumerate impl = impl<O: Op<W>, W: World> Enumerate<'_, O, W>
+struct near_contract_sim::explore::Enumerate method cases = pub fn cases(self, n: u32) -> Self
+struct near_contract_sim::explore::Enumerate method depth = pub fn depth(self, ops: usize) -> Self
+struct near_contract_sim::explore::Enumerate method faults = pub fn faults(self, faults: Faults) -> Self
+struct near_contract_sim::explore::Enumerate method first = pub fn first(self, ops: &[O]) -> Self
+struct near_contract_sim::explore::Enumerate method key = pub fn key(self, key: impl Fn(&W) -> u64 + 'static) -> Self
+struct near_contract_sim::explore::Enumerate method run = pub fn run(self) -> Audit<O>
+struct near_contract_sim::explore::Enumerate method saves = pub fn saves(self, path: impl Into<PathBuf>, every: usize) -> Self
+struct near_contract_sim::explore::Fail = pub struct Fail
+struct near_contract_sim::explore::Fail impl = impl Fail
+struct near_contract_sim::explore::Fail method all = pub fn all(fails: impl IntoIterator<Item = Fail>) -> Result<(), Fail>
+struct near_contract_sim::explore::Fail method cause = pub fn cause(self, cause: impl Into<String>) -> Self
+struct near_contract_sim::explore::Fail method idle = pub fn idle(why: impl Into<String>) -> Self
+struct near_contract_sim::explore::Fail method key = pub fn key(self, key: impl Into<String>) -> Self
+struct near_contract_sim::explore::Fail method new = pub fn new(message: impl Into<String>) -> Self
+struct near_contract_sim::explore::Fail method not_judged = pub fn not_judged(why: impl Into<String>) -> Self
+struct near_contract_sim::explore::Faults = pub struct Faults
+struct near_contract_sim::explore::Faults impl = impl Faults
+struct near_contract_sim::explore::Faults method and = pub fn and(self, other: Faults) -> Self
+struct near_contract_sim::explore::Faults method edges = pub fn edges() -> Self
+struct near_contract_sim::explore::Faults method new = pub fn new(at: Receipts, faults: impl IntoIterator<Item = Fault>) -> Self
+struct near_contract_sim::explore::Faults method none = pub fn none() -> Self
+struct near_contract_sim::explore::Faults method per_case = pub fn per_case(self, p: f64) -> Self
+struct near_contract_sim::explore::Faults method reorder = pub fn reorder() -> Self
+struct near_contract_sim::explore::Faults method tolerable = pub fn tolerable() -> Self
+struct near_contract_sim::explore::Found = pub struct Found<O>
+struct near_contract_sim::explore::Found structfield also = also: Vec<String>
+struct near_contract_sim::explore::Found structfield broke = broke: Option<String>
+struct near_contract_sim::explore::Found structfield cases = cases: u32
+struct near_contract_sim::explore::Found structfield finding = finding: Finding
+struct near_contract_sim::explore::Found structfield folded = folded: Vec<Finding>
+struct near_contract_sim::explore::Found structfield incidental = incidental: bool
+struct near_contract_sim::explore::Found structfield label = label: Label
+struct near_contract_sim::explore::Found structfield original = original: Run<O>
+struct near_contract_sim::explore::Found structfield replay = replay: Option<PathBuf>
+struct near_contract_sim::explore::Found structfield run = run: Run<O>
+struct near_contract_sim::explore::Found structfield shrink = shrink: Shrink
+struct near_contract_sim::explore::Harness = pub struct Harness<O, W = Sim>
+struct near_contract_sim::explore::Harness impl = impl<O: Op<W>, W: World> Harness<O, W>
+struct near_contract_sim::explore::Harness method always = pub fn always<E: Into<Fail>>(self, name: &str, check: impl Fn(&W) -> Result<(), E> + 'static) -> Self
+struct near_contract_sim::explore::Harness method anyone_may_call = pub fn anyone_may_call(self, site: &str) -> Self
+struct near_contract_sim::explore::Harness method at_end = pub fn at_end<E: Into<Fail>>(self, name: &str, check: impl Fn(&W) -> Result<(), E> + 'static) -> Self
+struct near_contract_sim::explore::Harness method at_rest = pub fn at_rest<E: Into<Fail>>(self, name: &str, check: impl Fn(&W) -> Result<(), E> + 'static) -> Self
+struct near_contract_sim::explore::Harness method at_rest_ops = pub fn at_rest_ops<E: Into<Fail>>(self, name: &str, check: impl Fn(&W, &[OpDone<'_, O, W>]) -> Result<(), E> + 'static) -> Self
+struct near_contract_sim::explore::Harness method audits = pub fn audits<'a>(self, accounts: impl IntoIterator<Item = &'a str>) -> Self
+struct near_contract_sim::explore::Harness method books = pub fn books(self, books: Books<O, W>) -> Self
+struct near_contract_sim::explore::Harness method curve = pub fn curve(&self, plan: &Plan<O>, step: usize, axis: &str) -> Curves<'_, O, W>
+struct near_contract_sim::explore::Harness method curves = pub fn curves(&self, plans: &[Plan<O>]) -> Curves<'_, O, W>
+struct near_contract_sim::explore::Harness method diff = pub fn diff(&self, other: &Harness<O, W>, plans: &[Plan<O>]) -> Diff
+struct near_contract_sim::explore::Harness method enumerate = pub fn enumerate(&self, alphabet: &[O]) -> Enumerate<'_, O, W>
+struct near_contract_sim::explore::Harness method excuse = pub fn excuse(self, todo_id: &str, why: &str) -> Self
+struct near_contract_sim::explore::Harness method fixture = pub fn fixture(&self) -> &W
+struct near_contract_sim::explore::Harness method must_not_fail = pub fn must_not_fail(self, site: &str) -> Self
+struct near_contract_sim::explore::Harness method new = pub fn new(fixture: W) -> Self
+struct near_contract_sim::explore::Harness method per_op = pub fn per_op<E: Into<Fail>>(self, name: &str, check: impl Fn(&OpDone<'_, O, W>) -> Result<(), E> + 'static) -> Self
+struct near_contract_sim::explore::Harness method per_op_for = pub fn per_op_for<E: Into<Fail>>(self, applies: impl Fn(&O) -> bool + 'static, name: &str, check: impl Fn(&OpDone<'_, O, W>) -> Result<(), E> + 'static) -> Self
+struct near_contract_sim::explore::Harness method regressions = pub fn regressions(&self) -> Vec<Regression<O>>
+struct near_contract_sim::explore::Harness method run = pub fn run(&self, plan: &Plan<O>) -> Run<O>
+struct near_contract_sim::explore::Harness method scan = pub fn scan(&self, plans: &[Plan<O>]) -> Scan<'_, O, W>
+struct near_contract_sim::explore::Harness method search = pub fn search(&self, plans: impl Strategy<Value = Plan<O>> + 'static) -> Search<'_, O, W>
+struct near_contract_sim::explore::Harness method store = pub fn store(self, dir: impl Into<PathBuf>) -> Self
+struct near_contract_sim::explore::Harness method union = pub fn union(&self, reports: &[Report]) -> Report
+struct near_contract_sim::explore::Judged = pub struct Judged
+struct near_contract_sim::explore::Judged structfield check = check: String
+struct near_contract_sim::explore::Judged structfield failed = failed: u32
+struct near_contract_sim::explore::Judged structfield idle = idle: u32
+struct near_contract_sim::explore::Judged structfield idle_why = idle_why: Option<String>
+struct near_contract_sim::explore::Judged structfield ok = ok: u32
+struct near_contract_sim::explore::Judged structfield unjudged = unjudged: u32
+struct near_contract_sim::explore::Judged structfield why = why: Option<String>
+struct near_contract_sim::explore::OpDone = pub struct OpDone<'a, O, W = Sim>
+struct near_contract_sim::explore::OpDone impl = impl<O, W> OpDone<'_, O, W>
+struct near_contract_sim::explore::OpDone method before = pub fn before(&self) -> &W
+struct near_contract_sim::explore::OpDone method calls = pub fn calls(&self) -> Vec<&ReceiptOutcome>
+struct near_contract_sim::explore::OpDone method effects = pub fn effects(&self) -> &Effects
+struct near_contract_sim::explore::OpDone method entries = pub fn entries(&self) -> Vec<&ReceiptOutcome>
+struct near_contract_sim::explore::OpDone method failed_on_value_path = pub fn failed_on_value_path(&self) -> Option<&ReceiptOutcome>
+struct near_contract_sim::explore::OpDone method isolated = pub fn isolated(&self) -> bool
+struct near_contract_sim::explore::OpDone method name = pub fn name(&self) -> &str
+struct near_contract_sim::explore::OpDone method op = pub fn op(&self) -> &O
+struct near_contract_sim::explore::OpDone method outcome = pub fn outcome(&self) -> Option<&TxOutcome>
+struct near_contract_sim::explore::OpDone method outcomes = pub fn outcomes(&self) -> &[TxOutcome]
+struct near_contract_sim::explore::OpDone method rest = pub fn rest(&self) -> bool
+struct near_contract_sim::explore::OpDone method world = pub fn world(&self) -> &W
+struct near_contract_sim::explore::OutcomeShape = pub struct OutcomeShape
+struct near_contract_sim::explore::OutcomeShape impl = impl OutcomeShape
+struct near_contract_sim::explore::OutcomeShape method of = pub fn of(outcome: &TxOutcome) -> Self
+struct near_contract_sim::explore::Paths = pub struct Paths
+struct near_contract_sim::explore::Paths structfield audited = audited: Vec<String>
+struct near_contract_sim::explore::Paths structfield left_out = left_out: Vec<String>
+struct near_contract_sim::explore::Paths structfield never_sent = never_sent: Option<Vec<String>>
+struct near_contract_sim::explore::Paths structfield total = total: u32
+struct near_contract_sim::explore::Paths structfield unreached = unreached: Vec<String>
+struct near_contract_sim::explore::Plan = pub struct Plan<O>
+struct near_contract_sim::explore::Plan impl = impl<O: DeserializeOwned> Plan<O>
+struct near_contract_sim::explore::Plan impl = impl<O: Serialize + Clone> Plan<O>
+struct near_contract_sim::explore::Plan impl = impl<O> Plan<O>
+struct near_contract_sim::explore::Plan method blocks = pub fn blocks(self, n: u16) -> Self
+struct near_contract_sim::explore::Plan method call = pub fn call(self, call: Call) -> Self
+struct near_contract_sim::explore::Plan method epochs = pub fn epochs(self, n: u8) -> Self
+struct near_contract_sim::explore::Plan method errors = pub fn errors(&self) -> &[String]
+struct near_contract_sim::explore::Plan method from_json = pub fn from_json(text: &str) -> Result<Self, String>
+struct near_contract_sim::explore::Plan method gas = pub fn gas(self, gas: impl Into<StepGas>) -> Self
+struct near_contract_sim::explore::Plan method inject = pub fn inject(self, at: Receipts, fault: Fault) -> Self
+struct near_contract_sim::explore::Plan method load = pub fn load(path: impl AsRef<Path>) -> Self
+struct near_contract_sim::explore::Plan method new = pub fn new() -> Self
+struct near_contract_sim::explore::Plan method op = pub fn op(self, op: O) -> Self
+struct near_contract_sim::explore::Plan method ops = pub fn ops(&self) -> Vec<Option<&O>>
+struct near_contract_sim::explore::Plan method refused = pub fn refused(self) -> Self
+struct near_contract_sim::explore::Plan method save = pub fn save(&self, path: impl AsRef<Path>)
+struct near_contract_sim::explore::PlanDiff = pub struct PlanDiff
+struct near_contract_sim::explore::PlanDiff structfield lines = lines: Vec<String>
+struct near_contract_sim::explore::PlanDiff structfield plan = plan: usize
+struct near_contract_sim::explore::PlanDiff structfield steps = steps: Vec<String>
+struct near_contract_sim::explore::Plans = pub struct Plans<O>
+struct near_contract_sim::explore::Plans impl = impl<O: Clone + Debug + 'static> Plans<O>
+struct near_contract_sim::explore::Plans method faults = pub fn faults(self, faults: Faults) -> Self
+struct near_contract_sim::explore::Plans method gaps = pub fn gaps(self, gaps: impl Strategy<Value = Gap> + 'static) -> Self
+struct near_contract_sim::explore::Plans method gas = pub fn gas<G: Into<StepGas> + Debug + 'static>(self, gas: impl Strategy<Value = Option<G>> + 'static) -> Self
+struct near_contract_sim::explore::Plans method len = pub fn len(self, len: RangeInclusive<usize>) -> Self
+struct near_contract_sim::explore::Plans method repeats = pub fn repeats(self, on: bool) -> Self
+struct near_contract_sim::explore::Region = #[non_exhaustive]pub struct Region<K>
+struct near_contract_sim::explore::Region structfield key = key: K
+struct near_contract_sim::explore::Region structfield range = range: RangeInclusive<u64>
+struct near_contract_sim::explore::Region structfield why = why: Why
+struct near_contract_sim::explore::Regression = pub struct Regression<O>
+struct near_contract_sim::explore::Regression impl = impl<O> Regression<O>
+struct near_contract_sim::explore::Regression method harness_changed = pub fn harness_changed(&self) -> bool
+struct near_contract_sim::explore::Regression structfield by_site = by_site: bool
+struct near_contract_sim::explore::Regression structfield check = check: String
+struct near_contract_sim::explore::Regression structfield fixture_changed = fixture_changed: bool
+struct near_contract_sim::explore::Regression structfield path = path: PathBuf
+struct near_contract_sim::explore::Regression structfield site = site: String
+struct near_contract_sim::explore::Regression structfield status = status: Status<O>
+struct near_contract_sim::explore::Report = pub struct Report
+struct near_contract_sim::explore::Report impl = impl Report
+struct near_contract_sim::explore::Report method done = pub fn done(&self) -> Result<(), Vec<Todo>>
+struct near_contract_sim::explore::Report method from_json = pub fn from_json(text: &str) -> Result<Report, String>
+struct near_contract_sim::explore::Report method json = pub fn json(&self) -> String
+struct near_contract_sim::explore::Report structfield bands = bands: Vec<String>
+struct near_contract_sim::explore::Report structfield cases = cases: u32
+struct near_contract_sim::explore::Report structfield curves = curves: Vec<Curve>
+struct near_contract_sim::explore::Report structfield done = done: usize
+struct near_contract_sim::explore::Report structfield excused = excused: Vec<(String, String, Vec<String>)>
+struct near_contract_sim::explore::Report structfield findings = findings: Vec<Row>
+struct near_contract_sim::explore::Report structfield fixed = fixed: Vec<String>
+struct near_contract_sim::explore::Report structfield fixture = fixture: String
+struct near_contract_sim::explore::Report structfield format = format: u32
+struct near_contract_sim::explore::Report structfield incomplete = incomplete: Vec<(String, String)>
+struct near_contract_sim::explore::Report structfield notes = notes: Vec<String>
+struct near_contract_sim::explore::Report structfield paths = paths: Paths
+struct near_contract_sim::explore::Report structfield seeds = seeds: Vec<u64>
+struct near_contract_sim::explore::Report structfield timings = timings: Vec<(String, f64)>
+struct near_contract_sim::explore::Report structfield todo = todo: Vec<Todo>
+struct near_contract_sim::explore::Report structfield what = what: String
+struct near_contract_sim::explore::Row = pub struct Row
+struct near_contract_sim::explore::Row structfield also = also: Vec<String>
+struct near_contract_sim::explore::Row structfield broke = broke: Option<String>
+struct near_contract_sim::explore::Row structfield cases = cases: u32
+struct near_contract_sim::explore::Row structfield check = check: String
+struct near_contract_sim::explore::Row structfield id = id: String
+struct near_contract_sim::explore::Row structfield kind = kind: String
+struct near_contract_sim::explore::Row structfield label = label: String
+struct near_contract_sim::explore::Row structfield message = message: String
+struct near_contract_sim::explore::Row structfield replay = replay: Option<String>
+struct near_contract_sim::explore::Row structfield shrink = shrink: String
+struct near_contract_sim::explore::Row structfield site = site: String
+struct near_contract_sim::explore::Row structfield steps = steps: Vec<String>
+struct near_contract_sim::explore::Run = pub struct Run<O>
+struct near_contract_sim::explore::Run impl = impl<O> Run<O>
+struct near_contract_sim::explore::Run method assert_clean = pub fn assert_clean(&self) where O: Debug
+struct near_contract_sim::explore::Run method assert_found = pub fn assert_found(&self, check: &str, at: &str) -> &Finding where O: Debug
+struct near_contract_sim::explore::Run method blocks = pub fn blocks(&self) -> u64
+struct near_contract_sim::explore::Run method findings = pub fn findings(&self) -> &[Finding]
+struct near_contract_sim::explore::Run method found_at = pub fn found_at(&self, check: &str, at: &str) -> Option<&Finding>
+struct near_contract_sim::explore::Run method is_clean = pub fn is_clean(&self) -> bool
+struct near_contract_sim::explore::Run method judged = pub fn judged(&self) -> &[Judged]
+struct near_contract_sim::explore::Run method outcomes = pub fn outcomes(&self) -> &[TxOutcome]
+struct near_contract_sim::explore::Run method plan = pub fn plan(&self) -> &Plan<O>
+struct near_contract_sim::explore::Run method reached = pub fn reached(&self) -> &BTreeSet<String>
+struct near_contract_sim::explore::Run method reason = pub fn reason(&self) -> Option<&str>
+struct near_contract_sim::explore::Run method trees = pub fn trees(&self) -> String where O: Debug
+struct near_contract_sim::explore::Run method verdict = pub fn verdict(&self) -> Verdict
+struct near_contract_sim::explore::Run method world = pub fn world<W: 'static>(&self) -> Option<&W>
+struct near_contract_sim::explore::Scan = pub struct Scan<'h, O, W>
+struct near_contract_sim::explore::Scan impl = impl<O: Op<W>, W: World> Scan<'_, O, W>
+struct near_contract_sim::explore::Scan method faults = pub fn faults(self, faults: Faults) -> Self
+struct near_contract_sim::explore::Scan method run = pub fn run(self) -> Audit<O>
+struct near_contract_sim::explore::Scan method saves = pub fn saves(self, path: impl Into<PathBuf>, every: usize) -> Self
+struct near_contract_sim::explore::Search = pub struct Search<'h, O, W>
+struct near_contract_sim::explore::Search impl = impl<O: Op<W>, W: World> Search<'_, O, W>
+struct near_contract_sim::explore::Search method cases = pub fn cases(self, n: u32) -> Self
+struct near_contract_sim::explore::Search method run = pub fn run(self) -> Audit<O>
+struct near_contract_sim::explore::Search method saves = pub fn saves(self, path: impl Into<PathBuf>, every: usize) -> Self
+struct near_contract_sim::explore::Search method seed = pub fn seed(self, seed: u64) -> Self
+struct near_contract_sim::explore::Search method seeds = pub fn seeds(self, n: u32) -> Self
+struct near_contract_sim::explore::Skip = pub struct Skip(pub String);
+struct near_contract_sim::explore::Skip structfield 0 = 0: String
+struct near_contract_sim::explore::Todo = pub struct Todo
+struct near_contract_sim::explore::Todo structfield close = close: String
+struct near_contract_sim::explore::Todo structfield id = id: String
+struct near_contract_sim::explore::Todo structfield why = why: String
+struct near_contract_sim::explore::amount::AmountError = pub struct AmountError
+struct near_contract_sim::explore::input::List = pub struct List<S>
+struct near_contract_sim::explore::input::List impl = impl<S> List<S>
+struct near_contract_sim::explore::input::List method max = pub fn max(self, max: usize) -> Self
+struct near_contract_sim::explore::input::List method min = pub fn min(self, min: usize) -> Self
+struct near_contract_sim::explore::input::ListTree = pub struct ListTree<T>
+struct near_contract_sim::explore::input::Pick = pub struct Pick(pub u32);
+struct near_contract_sim::explore::input::Pick impl = impl Pick
+struct near_contract_sim::explore::input::Pick method of = pub fn of<T>(self, items: &[T]) -> Result<&T, PickError>
+struct near_contract_sim::explore::input::Pick structfield 0 = 0: u32
+struct near_contract_sim::explore::input::PickError = pub struct PickError(/* private fields */);
+struct near_contract_sim::explore::input::Text = pub struct Text
+struct near_contract_sim::explore::input::Text impl = impl Text
+struct near_contract_sim::explore::input::Text method max = pub fn max(self, max: usize) -> Self
+struct near_contract_sim::explore::input::Text method min = pub fn min(self, min: usize) -> Self
+struct near_contract_sim::explore::input::TextTree = pub struct TextTree
+struct near_contract_sim::prelude::AccountId
+struct near_contract_sim::prelude::CryptoHash
+struct near_contract_sim::prelude::Gas
+trait near_contract_sim::IntoAccountId = pub trait IntoAccountId
+trait near_contract_sim::IntoAccountId tymethod into_account_id = fn into_account_id(self) -> AccountId
+trait near_contract_sim::WhichToken = pub trait WhichToken
+trait near_contract_sim::WhichToken impl = impl WhichToken for &String
+trait near_contract_sim::WhichToken impl = impl WhichToken for &str
+trait near_contract_sim::WhichToken impl = impl WhichToken for String
+trait near_contract_sim::WhichToken impl = impl<A: IntoAccountId, B: AsRef<str>> WhichToken for (A, B)
+trait near_contract_sim::WhichToken method which = fn which(self) -> (AccountId, Option<String>)
+trait near_contract_sim::WhichToken tymethod which = fn which(self) -> (AccountId, Option<String>)
+trait near_contract_sim::explore::Op = pub trait Op<W = Sim>: Clone + Debug + Serialize + DeserializeOwned + 'static
+trait near_contract_sim::explore::Op method axes = fn axes(&self) -> Axes
+trait near_contract_sim::explore::Op method copy = fn copy(&self, k: usize) -> Self
+trait near_contract_sim::explore::Op method name = fn name(&self) -> String
+trait near_contract_sim::explore::Op method refused = fn refused(&self, outcomes: &[TxOutcome]) -> bool
+trait near_contract_sim::explore::Op tymethod submit = fn submit(&self, world: &mut W) -> Result<(), Skip>
+trait near_contract_sim::explore::World = pub trait World: Clone + AsRef<Sim> + AsMut<Sim> + 'static
+type near_contract_sim::Balance
+type near_contract_sim::Nonce
+type near_contract_sim::NonceIndex
+type near_contract_sim::ProtocolVersion
+type near_contract_sim::prelude::Balance
+use near_contract_sim::explore::Amount
+use near_contract_sim::explore::AmountError
+use near_contract_sim::explore::Pick
+use near_contract_sim::explore::PickError
+use near_contract_sim::explore::prelude::Amount
+use near_contract_sim::explore::prelude::Audit
+use near_contract_sim::explore::prelude::Books
+use near_contract_sim::explore::prelude::Fail
+use near_contract_sim::explore::prelude::Faults
+use near_contract_sim::explore::prelude::Found
+use near_contract_sim::explore::prelude::Harness
+use near_contract_sim::explore::prelude::Label
+use near_contract_sim::explore::prelude::Op
+use near_contract_sim::explore::prelude::OpDone
+use near_contract_sim::explore::prelude::Pick
+use near_contract_sim::explore::prelude::Plan
+use near_contract_sim::explore::prelude::Report
+use near_contract_sim::explore::prelude::Run
+use near_contract_sim::explore::prelude::Skip
+use near_contract_sim::explore::prelude::Status
+use near_contract_sim::explore::prelude::StepGas
+use near_contract_sim::explore::prelude::Verdict
+use near_contract_sim::explore::prelude::builtin
+use near_contract_sim::explore::prelude::input
+use near_contract_sim::explore::prelude::plans
+use near_contract_sim::nearcore::near_crypto
+use near_contract_sim::nearcore::near_parameters
+use near_contract_sim::nearcore::near_primitives
+use near_contract_sim::prelude::Delta
+use near_contract_sim::prelude::Failure
+use near_contract_sim::prelude::Fault
+use near_contract_sim::prelude::Findings
+use near_contract_sim::prelude::Fixture
+use near_contract_sim::prelude::PromiseResult
+use near_contract_sim::prelude::Receipts
+use near_contract_sim::prelude::Reply
+use near_contract_sim::prelude::Sim
+use near_contract_sim::prelude::Stub
+use near_contract_sim::prelude::Tx
+use near_contract_sim::prelude::TxOutcome
+use near_contract_sim::prelude::builtin
+use near_contract_sim::prelude::key

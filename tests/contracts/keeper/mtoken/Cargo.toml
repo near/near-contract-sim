@@ -1,0 +1,28 @@
+[package]
+name = "mtoken"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "A minimal multi-token for the keeper specimen of near-contract-sim"
+repository = "https://github.com/near/near-contract-sim"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# mtoken_events.wasm: NEP-245 events (`mt_mint`, `mt_transfer`) and the
+# standard views `mt_balance_of` / `mt_supply`.
+events = []
+
+[dependencies]
+near-sdk = { version = "=5.29.1", features = ["unstable"] }
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
+
+[workspace]

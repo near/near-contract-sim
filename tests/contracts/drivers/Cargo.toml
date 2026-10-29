@@ -1,0 +1,30 @@
+[package]
+name = "drivers"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Drivers specimen for near-contract-sim: a settling callback with a fixed per-item gas budget whose cost grows with the entries one holder holds"
+repository = "https://github.com/near/near-contract-sim"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# drivers_funded.wasm: `settle` takes amounts and debits their sum from
+# the caller's funds (`fund`), up to 64 ids, with a smaller per-id budget.
+funded = []
+# drivers_capped.wasm: `funded`, and `settle` refuses 8 ids or more.
+capped = ["funded"]
+
+[dependencies]
+near-sdk = { version = "=5.29.1", features = ["unstable"] }
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
+
+[workspace]

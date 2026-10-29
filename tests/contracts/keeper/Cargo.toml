@@ -1,0 +1,34 @@
+[package]
+name = "keeper"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Keeper specimen for near-contract-sim: a token receiver whose resolver removes refunded entries by moving the last entry into the freed slot"
+repository = "https://github.com/near/near-contract-sim"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# keeper_closed.wasm: on_transfer only from the configured token.
+closed = []
+# With `ping`, keeper_ping_hashed.wasm: every key hashed, on_transfer takes
+# previous_owner_ids.
+hashed = []
+# keeper_ping.wasm / keeper_ping_hashed.wasm: `ping`, whose
+# self-callback `on_ping` touches no key but STATE.
+ping = []
+
+[dependencies]
+near-sdk = { version = "=5.29.1", features = ["unstable"] }
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
+
+[workspace]
+exclude = ["mtoken"]
