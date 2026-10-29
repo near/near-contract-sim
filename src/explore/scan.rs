@@ -152,32 +152,9 @@ impl<O: Op<W>, W: World> Scan<'_, O, W> {
                     let started = Instant::now();
                     let run = h.run_case(&v.plan);
                     let took = started.elapsed();
-                    for (i, rec) in run.ops.iter().enumerate() {
-                        for (least, all, site) in &rec.bands {
-                            let act = format!("{:?}", run.plan.steps[i].act);
-                            let (least, all) = (StepGas::Exactly(*least), StepGas::Exactly(*all));
-                            audit.r.bands.push(format!(
-                                "{act} (step {i}): the transaction succeeds from {least}, \
-                                 every receipt only from {all}; between, {site} fails"
-                            ));
-                        }
-                    }
                     audit.time(&v.name, took);
-                    audit.add(&run, v.at.as_deref().map(|at| (at, v.axis.as_str())));
-                    // An edge whose op skipped wasn't tried: open, never a
-                    // pass. A later op skipping is what the edge did.
-                    let skipped =
-                        run.ops.get(v.step).and_then(|o| Some((&o.name, o.skipped.as_ref()?)));
-                    if let (Some(at), Some((op, why))) = (&v.at, skipped)
-                        && run.verdict != Verdict::Incomplete
-                    {
-                        let w = v.witness;
-                        let family = super::audit::family(Some(op), Some(&v.axis));
-                        audit.incomplete.push((family, format!(
-                            "witness {w}, {at}: edge not tried: op skipped: {op} (step {}): {why}",
-                            v.step
-                        )));
-                    }
+                    let at = v.at.as_deref().map(|at| (at, v.axis.as_str()));
+                    take_in(&mut audit, &run, at, v.step, &format!("witness {}", v.witness));
                     if let Some(why) = v.meant.and_then(|e| e.differs(&run)) {
                         audit.r.errors.push(why);
                     }
@@ -199,13 +176,11 @@ impl<O: Op<W>, W: World> Scan<'_, O, W> {
         let plan = &witness.plan;
         let h = self.harness;
         let mut out = vec![];
-        let ceiling = StepGas::Exactly(h.gas_ceiling());
-        let least = StepGas::LeastPlus(Gas::ZERO);
         let from = if plan.swept.is_some() { plan.steps.len().saturating_sub(1) } else { 0 };
         for (i, step) in plan.steps.iter().enumerate().skip(from) {
-            let Some(record) = witness.ops.get(i).filter(|r| r.skipped.is_none()) else {
+            if witness.ops.get(i).is_none_or(|r| r.skipped.is_some()) {
                 continue;
-            };
+            }
             let with = |f: &dyn Fn(&mut super::Step<O>)| {
                 let mut p = plan.clone();
                 f(&mut p.steps[i]);
@@ -245,51 +220,9 @@ impl<O: Op<W>, W: World> Scan<'_, O, W> {
                 let axis = format!("{stub}::{method} answers");
                 out.push(edge(p, at, &axis, false));
             }
-            // And, holding nothing before, gives back all it was sent.
-            for a in stub_answers(h, witness, i, &Some) {
-                let at = format!("step {i}, {}::{} gives back all it was sent", a.stub, a.method);
-                let axis = format!("{}::{} gives back", a.stub, a.method);
-                out.push(edge(with(&|s| s.answers.push(a.clone())), at, &axis, false));
-            }
-            // The caller's gas, on a step with a call whose gas it sets.
-            let unpinned = record.unpinned > 0;
-            if unpinned {
-                // A gas 1 either side of a constant prints as such.
-                let mut edges = vec![(least, least.to_string())];
-                for g in gas::thresholds() {
-                    let (t, near) = (StepGas::Exactly(g), |d| g.as_gas().wrapping_add_signed(d));
-                    let near = |d| StepGas::Exactly(Gas::from_gas(near(d)));
-                    edges.extend([(near(-1), format!("{t} - 1 gas")), (t, t.to_string())]);
-                    edges.push((near(1), format!("{t} + 1 gas")));
-                }
-                for (g, shown) in edges {
-                    let at = format!("step {i}, caller gas {shown}");
-                    // The gas band, measured here only.
-                    let plan = Plan { bands: g == least, ..with(&|s| s.gas = Some(g)) };
-                    out.push(edge(plan, at, "caller gas", g == least));
-                }
-            }
-            // Each number the step's act signs, at its edges: one that
-            // touches gas or a size also at the least caller gas and the
-            // ceiling, any other as the witness ran.
-            let mut world = None;
-            for (moved, at, cross) in number_edges(h, plan, i, &mut world) {
-                // `<axis> = <value>`.
-                let axis = at.split(" = ").next().unwrap_or(&at).to_owned();
-                let gases = match (cross, unpinned) {
-                    (Cross::Both, true) => vec![Some(least), Some(ceiling)],
-                    (Cross::Ceiling, true) => vec![Some(ceiling)],
-                    _ => vec![step.gas],
-                };
-                for g in gases {
-                    let caller = match g {
-                        Some(g) if unpinned && cross != Cross::AsRan => format!(", caller gas {g}"),
-                        _ => String::new(),
-                    };
-                    let mut p = moved.clone();
-                    p.steps[i].gas = g;
-                    out.push(edge(p, format!("step {i}, {at}{caller}"), &axis, g == Some(least)));
-                }
+            // Each per-step edge: stub give-back, caller gas, numbers.
+            for e in step_edges(h, witness, i) {
+                out.push(edge(e.plan, e.at, &e.axis, e.least));
             }
             // A raw call's deposit, and the account ids its args name.
             if let Act::Call(c) = &step.act {
@@ -410,6 +343,130 @@ struct Variant<O> {
     witness: usize,
     step: usize,
     axis: String,
+}
+
+/// One per-step edge of a run's step: the plan moved there, where
+/// (`step i, <edge>`), the axis it moves, and whether it searches for
+/// the least caller gas.
+pub(crate) struct Edge<O> {
+    pub(crate) plan: Plan<O>,
+    pub(crate) at: String,
+    pub(crate) axis: String,
+    pub(crate) least: bool,
+}
+
+/// The per-step edges of step `i` of `witness`, which a scan and an
+/// enumeration both try: each stub that answered it with amounts giving
+/// back all it was sent; on a step with a call whose gas it sets, the
+/// caller's gas at the least that succeeds and at each gas constant,
+/// exactly and 1 gas either side; and each number and choice of the op's
+/// [`Axes`](super::Axes) at its edges ([`number_edges`]). None for a step
+/// that skipped.
+pub(crate) fn step_edges<O: Op<W>, W: World>(
+    h: &Harness<O, W>,
+    witness: &Run<O>,
+    i: usize,
+) -> Vec<Edge<O>> {
+    let plan = &witness.plan;
+    let mut out = vec![];
+    let Some(record) = witness.ops.get(i).filter(|r| r.skipped.is_none()) else { return out };
+    let step = &plan.steps[i];
+    let ceiling = StepGas::Exactly(h.gas_ceiling());
+    let least = StepGas::LeastPlus(Gas::ZERO);
+    let with = |f: &dyn Fn(&mut super::Step<O>)| {
+        let mut p = plan.clone();
+        f(&mut p.steps[i]);
+        p
+    };
+    let mut edge = |plan, at: String, axis: &str, least| {
+        out.push(Edge { plan, at, axis: axis.into(), least });
+    };
+    // Holding nothing before, a stub gives back all it was sent.
+    for a in stub_answers(h, witness, i, &Some) {
+        let at = format!("step {i}, {}::{} gives back all it was sent", a.stub, a.method);
+        let axis = format!("{}::{} gives back", a.stub, a.method);
+        edge(with(&|s| s.answers.push(a.clone())), at, &axis, false);
+    }
+    // The caller's gas, on a step with a call whose gas it sets.
+    let unpinned = record.unpinned > 0;
+    if unpinned {
+        // A gas 1 either side of a constant prints as such.
+        let mut edges = vec![(least, least.to_string())];
+        for g in gas::thresholds() {
+            let (t, near) = (StepGas::Exactly(g), |d| g.as_gas().wrapping_add_signed(d));
+            let near = |d| StepGas::Exactly(Gas::from_gas(near(d)));
+            edges.extend([(near(-1), format!("{t} - 1 gas")), (t, t.to_string())]);
+            edges.push((near(1), format!("{t} + 1 gas")));
+        }
+        for (g, shown) in edges {
+            let at = format!("step {i}, caller gas {shown}");
+            // The gas band, measured here only.
+            let plan = Plan { bands: g == least, ..with(&|s| s.gas = Some(g)) };
+            edge(plan, at, "caller gas", g == least);
+        }
+    }
+    // Each number the step's act signs, at its edges: one that touches
+    // gas or a size also at the least caller gas and the ceiling, any
+    // other as the witness ran.
+    let mut world = None;
+    for (moved, at, cross) in number_edges(h, plan, i, &mut world) {
+        // `<axis> = <value>`.
+        let axis = at.split(" = ").next().unwrap_or(&at).to_owned();
+        let gases = match (cross, unpinned) {
+            (Cross::Both, true) => vec![Some(least), Some(ceiling)],
+            (Cross::Ceiling, true) => vec![Some(ceiling)],
+            _ => vec![step.gas],
+        };
+        for g in gases {
+            let caller = match g {
+                Some(g) if unpinned && cross != Cross::AsRan => format!(", caller gas {g}"),
+                _ => String::new(),
+            };
+            let mut p = moved.clone();
+            p.steps[i].gas = g;
+            edge(p, format!("step {i}, {at}{caller}"), &axis, g == Some(least));
+        }
+    }
+    out
+}
+
+/// Takes `run`, a case at an edge (`at` and its axis) or a fault's
+/// variant, into `audit`: the gas bands it measured, the case itself,
+/// and, for an edge whose op `step` skipped, an open `incomplete:` item
+/// naming it (`whose`, the witness or case it varies): an edge not tried
+/// is never a pass. A later op skipping is what the edge did.
+pub(crate) fn take_in<O: Clone + std::fmt::Debug>(
+    audit: &mut Audit<O>,
+    run: &Run<O>,
+    at: Option<(&str, &str)>,
+    step: usize,
+    whose: &str,
+) {
+    for (i, rec) in run.ops.iter().enumerate() {
+        for (least, all, site) in &rec.bands {
+            let act = format!("{:?}", run.plan.steps[i].act);
+            let (least, all) = (StepGas::Exactly(*least), StepGas::Exactly(*all));
+            let band = format!(
+                "{act} (step {i}): the transaction succeeds from {least}, every receipt only \
+                 from {all}; between, {site} fails"
+            );
+            // One line a band: an enumeration meets one in many states.
+            if !audit.r.bands.contains(&band) {
+                audit.r.bands.push(band);
+            }
+        }
+    }
+    audit.add(run, at);
+    let skipped = run.ops.get(step).and_then(|o| Some((&o.name, o.skipped.as_ref()?)));
+    if let (Some((at, axis)), Some((op, why))) = (at, skipped)
+        && run.verdict != Verdict::Incomplete
+    {
+        let family = super::audit::family(Some(op), Some(axis));
+        audit.incomplete.push((
+            family,
+            format!("{whose}, {at}: edge not tried: op skipped: {op} (step {step}): {why}"),
+        ));
+    }
 }
 
 /// Each fault of `faults` at each receipt of step `i`'s transactions it
@@ -596,4 +653,95 @@ pub(crate) fn sizes<O: Op<W>, W: World>(
     };
     let (ten, more) = (probe(10), probe(99));
     ten.is_some() && ten != more
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Balance, Sim};
+    use serde::{Deserialize, Serialize};
+
+    /// A purse deposit of an amount, its call's gas set by the caller or
+    /// pinned.
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    enum Pay {
+        Deposit(u64),
+        Pinned(u64),
+    }
+
+    impl Op for Pay {
+        fn submit(&self, sim: &mut Sim) -> Result<(), super::super::Skip> {
+            let (Pay::Deposit(n) | Pay::Pinned(n)) = self;
+            let call =
+                sim.call("alice.near", "purse.near", "deposit").args(n.to_le_bytes().to_vec());
+            let pin = matches!(self, Pay::Pinned(_)).then(|| Gas::from_teragas(50));
+            call.gas(pin).submit();
+            Ok(())
+        }
+    }
+
+    fn edges(op: Pay) -> (Vec<Edge<Pay>>, Gas) {
+        let mut sim = Sim::new();
+        sim.create_account("alice.near", Balance::from_near(100));
+        sim.create_account("purse.near", Balance::from_near(10));
+        let wasm = wat::parse_str(include_str!("../../tests/res/purse.wat")).unwrap();
+        sim.deploy("purse.near", wasm);
+        let h = Harness::<Pay>::new(sim);
+        super::super::big_stack(|| {
+            gas::with_fixture(h.fixture.as_ref(), || {
+                let run = h.run_case(&Plan::new().op(op));
+                (step_edges(&h, &run, 0), h.gas_ceiling())
+            })
+        })
+    }
+
+    /// The caller's gas edges: the least first and alone searched for,
+    /// then each constant exactly and 1 gas either side; none on a step
+    /// whose call pins its gas.
+    #[test]
+    fn caller_gas_edges_are_the_least_then_each_constant_either_side() {
+        let (all, _) = edges(Pay::Deposit(5));
+        let gas: Vec<&Edge<Pay>> = all.iter().filter(|e| e.axis == "caller gas").collect();
+        assert_eq!(gas[0].plan.steps[0].gas, Some(StepGas::LeastPlus(Gas::ZERO)));
+        assert!(gas[0].least && gas[0].plan.bands, "{}", gas[0].at);
+        assert!(gas[1..].iter().all(|e| !e.least && !e.plan.bands));
+        let thresholds = gas::thresholds();
+        assert_eq!(gas.len(), 1 + 3 * thresholds.len());
+        for (k, t) in thresholds.iter().enumerate() {
+            let at =
+                |d: i64| Some(StepGas::Exactly(Gas::from_gas(t.as_gas().wrapping_add_signed(d))));
+            let got: Vec<_> =
+                gas[1 + 3 * k..4 + 3 * k].iter().map(|e| e.plan.steps[0].gas).collect();
+            assert_eq!(got, [at(-1), at(0), at(1)], "around {t}");
+            assert!(gas[1 + 3 * k].at.ends_with(" - 1 gas"), "{}", gas[1 + 3 * k].at);
+        }
+        // An amount that is no gas runs as the witness ran: no least.
+        let amounts: Vec<&Edge<Pay>> = all.iter().filter(|e| e.axis == "/Deposit").collect();
+        assert_eq!(amounts.len(), 3, "0, 1 and the max");
+        assert!(amounts.iter().all(|e| !e.least && e.plan.steps[0].gas.is_none()));
+        let (pinned, _) = edges(Pay::Pinned(5));
+        assert!(pinned.iter().all(|e| e.axis != "caller gas"), "a pinned call keeps its gas");
+        assert_eq!(pinned.len(), 3);
+    }
+
+    /// An amount taken for gas (1 Tgas to 1 PGas) also runs at each gas
+    /// constant 1 gas either side, at the ceiling; at 0, 1 and its max,
+    /// at the least caller gas and the ceiling.
+    #[test]
+    fn a_gas_like_amount_runs_its_constants_at_the_ceiling() {
+        let (all, ceiling) = edges(Pay::Deposit(5_000_000_000_000));
+        let ceiling = Some(StepGas::Exactly(ceiling));
+        let amounts: Vec<&Edge<Pay>> = all.iter().filter(|e| e.axis == "/Deposit").collect();
+        let at = |n: u64| amounts.iter().filter(move |e| e.at.contains(&format!(" = {n},")));
+        let thirty = 30_000_000_000_000;
+        for n in [thirty - 1, thirty, thirty + 1] {
+            let got: Vec<_> = at(n).map(|e| e.plan.steps[0].gas).collect();
+            assert_eq!(got, [ceiling], "{n}");
+        }
+        for n in [0, 1, u64::MAX] {
+            let got: Vec<_> = at(n).map(|e| (e.plan.steps[0].gas, e.least)).collect();
+            let least = Some(StepGas::LeastPlus(Gas::ZERO));
+            assert_eq!(got, [(least, true), (ceiling, false)], "{n}");
+        }
+    }
 }

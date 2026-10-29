@@ -53,6 +53,7 @@ tests) that load each one, directly or through a helper.
 | `open_registry.wat` | `register` (payable) stores a 1000-byte profile paid from the registry's own balance; the paying build requires 0.011 NEAR. | `curves.rs`, `report.rs` |
 | `payload_ledger.wat` | `set` and `spend` act on a holder named in the args, not the caller, as a relayed signed payload does; `spend` panics "not enough credit". | `axes.rs` |
 | `pending.wat` | Self-callbacks: `request`, `process` then `on_withdraw` then `on_result`, and `batch`, `keyed` and `pair`, each a multi-action receipt to itself. | `src/tx.rs`, `explore_replay.rs`, `explore_run.rs`, `explore_search.rs`, `outsider.rs` |
+| `purse.wat` | `deposit(n)` adds to a balance; `withdraw(n)` refuses only an empty purse, so an amount over the balance wraps it above what was deposited. | `explore_enumerate.rs` |
 | `pool_sync.wat` | A pool that books its balance less deposits as reward: two `deposit`s in one block double-count the one in flight. | `src/explore/memo_tests.rs`, `explore_enumerate.rs`, `faults.rs`, `identity.rs` |
 | `probe.wasm` | A near-sdk probe built from [probe_src.rs.txt](probe_src.rs.txt): views of the seed, key, time and height; `start_yield` and `resume`; `call_missing`; `last`. | `examples/tour.rs`, `src/sim.rs`, `accounts.rs`, `callbacks.rs`, `calls.rs` and 17 more |
 | `probe_src.rs.txt` | probe.wasm's source. | `calls.rs`, `docs.rs`, `effects.rs`, `token_effects.rs`, `trie_gas.rs` and 1 more |
