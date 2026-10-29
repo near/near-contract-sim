@@ -153,7 +153,7 @@ As on a chain, a transaction's receipt id comes from the transaction hash
 and the block height, and every later receipt, data and yield id from its
 parent's id and the height. A transaction signs the last block's hash,
 which derives from `config.seed` and the number of blocks produced. So ids
-stay unique when the height moves backwards, and they differ from a real
+stay unique when the height moves backward, and they differ from a real
 chain's for the same inputs.
 
 ### nearcore's code and the simulator's

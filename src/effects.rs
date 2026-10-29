@@ -327,7 +327,7 @@ pub struct StorageChange {
 /// too late), a view that failed, or value moved to an unwatched holder
 /// (the holders' changes don't add up to the supply's). Never a silent 0.
 ///
-/// In an [`explore`](crate::explore) check, `?` on one makes the judgement
+/// In an [`explore`](crate::explore) check, `?` on one makes the judgment
 /// *not judged* and the case incomplete: no finding, no pass. Watch the
 /// token (with [`Token::holders`] for unnamed payees), or match the `Err`.
 #[non_exhaustive]

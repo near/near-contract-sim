@@ -511,7 +511,7 @@ fn scan_fixed_deposit_flow_survives_tolerable_faults() {
 
 /// The default faults starve each receipt too, and on the fixed build a
 /// starved resolve_deposit leaves the credit unbacked (the token refunds
-/// the sender in full; the credit stays): a finding labelled forced.
+/// the sender in full; the credit stays): a finding labeled forced.
 #[test]
 fn scan_fixed_deposit_flow_reports_a_starved_resolver() {
     let report = custody().scan(&[deposit_flow()]).faults(Faults::default()).run();

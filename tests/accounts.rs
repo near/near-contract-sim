@@ -79,7 +79,7 @@ fn set_state_storage_usage_matches_storage_write() {
     assert_eq!(usage(&sim, "b.near"), base);
     sim.set_state("b.near", b"missing", None);
     assert_eq!(usage(&sim, "b.near"), base);
-    // The contract can still write afterwards (storage accounting stays consistent).
+    // The contract can still write afterward (storage accounting stays consistent).
     sim.call("alice.near", "b.near", "write").transact().assert_success();
     assert_eq!(usage(&sim, "b.near"), base + 40 + 3 + 5);
 }

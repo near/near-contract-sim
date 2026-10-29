@@ -796,7 +796,7 @@ impl Op for WhoOp {
 ///
 /// Verification boundary: the names a scan gives its variants.
 #[test]
-fn a_whole_op_replaced_is_labelled_the_op() {
+fn a_whole_op_replaced_is_labeled_the_op() {
     let h = Harness::new(world()).at_rest("only alice pays", |sim: &Sim| {
         match sim.calls_to(PAYER).iter().all(|c| c.signer_id.as_str() == "alice.near") {
             true => Ok(()),

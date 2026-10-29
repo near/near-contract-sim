@@ -298,7 +298,7 @@ impl<O> Run<O> {
     pub(crate) fn differs_from(&self, other: &Run<O>) -> Option<&'static str> {
         ((self.fingerprint != other.fingerprint).then_some("outcomes"))
             .or((self.findings != other.findings).then_some("findings"))
-            .or((self.judged != other.judged).then_some("judgements"))
+            .or((self.judged != other.judged).then_some("judgments"))
     }
 }
 
@@ -554,7 +554,7 @@ impl<O: Op<W>, W: World> Harness<O, W> {
     }
 }
 
-/// The one judgement of a written witness's failure, for
+/// The one judgment of a written witness's failure, for
 /// [`Harness::run`] and every campaign: `None` if its plan is
 /// [`Plan::refused`], or none of its transactions failed but one where
 /// it forced something (a fault, a hold), or a check other than
@@ -807,7 +807,7 @@ struct Case<'h, O, W> {
     until: Option<std::time::Instant>,
     /// The checks are judging the fixture itself: a failure is the harness's.
     on_fixture: bool,
-    /// Per-op judgements not judged because their ops overlapped.
+    /// Per-op judgments not judged because their ops overlapped.
     overlapped: u32,
 }
 
@@ -1404,7 +1404,7 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
         self.record(k, result, Site::World, height, None);
     }
 
-    /// Counts check `k`'s judgement, and records a failure as a finding.
+    /// Counts check `k`'s judgment, and records a failure as a finding.
     fn record(
         &mut self,
         k: usize,
@@ -1771,7 +1771,7 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
 ///   callers before it keeps the world. An op's own step runs after.
 ///
 /// An op is its serde value ([`Op`]), as in a replay. A raw call's args,
-/// if they parse as JSON, are keyed by that JSON, normalised: two calls
+/// if they parse as JSON, are keyed by that JSON, normalized: two calls
 /// apart only in their JSON's spacing share a key though they send other
 /// bytes, which `sent` compares, so the key isn't exact for them. An
 /// enumeration's plans hold ops only, with no setup and no `bands`: the
@@ -1791,7 +1791,7 @@ fn start_key<O: Op<W>, W: World>(plan: &Plan<O>, i: usize) -> Option<CryptoHash>
 
 #[cfg(test)]
 thread_local! {
-    /// The checks' judgements of a fixture on this thread, each a full
+    /// The checks' judgments of a fixture on this thread, each a full
     /// pass over them ([`Case::judge_fixture`]).
     pub(crate) static FIXTURE_JUDGED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// An enumeration judges the fixture in every case, as before it
@@ -1850,7 +1850,7 @@ pub(crate) fn play_plain<O: Op<W>, W: World>(world: &mut W, plan: &Plan<O>) -> V
 /// How a case names a receipt's receiver in a site: an account the plan
 /// made up (one the fixture doesn't have, named by a string of the plan,
 /// whole or as its first label) or an implicit account the fixture lacks
-/// is `<new account>`, so one behaviour is one finding whatever name was
+/// is `<new account>`, so one behavior is one finding whatever name was
 /// drawn. Any other account is itself.
 pub(crate) struct Names {
     drawn: HashSet<String>,

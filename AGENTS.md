@@ -52,10 +52,10 @@ before finishing.
 
 ## Rules
 
-- **Test first.** Reproduce a bug, or pin down new behaviour, with a
+- **Test first.** Reproduce a bug, or pin down new behavior, with a
   failing test against the actual simulator, then make it pass. A change
   to scheduling, holds, faults or replay needs a regression test of that
-  behaviour.
+  behavior.
 - **No backward-compatibility shims before 1.0.** Change or remove the
   API outright, update every caller, test and doc, and title the change
   `type!: …` so the CHANGELOG lists it under **Breaking**. Don't keep deprecated aliases or old

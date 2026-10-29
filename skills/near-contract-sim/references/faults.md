@@ -35,7 +35,7 @@ one whose failure a callback read gets no second mark. What it caused is
 judged as any receipt is, and marked `injected`: a failure downstream
 nobody learns of is a finding, and so is a failed callback once an
 earlier receipt of the transaction changed its contract's state. A
-harness audit keeps every finding that follows a fault, labelled `forced
+harness audit keeps every finding that follows a fault, labeled `forced
 (..)` ([audit.md](audit.md)).
 
 ## Pick the receipts

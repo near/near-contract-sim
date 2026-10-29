@@ -114,7 +114,7 @@ pub enum Site {
     /// A receipt.
     Receipt {
         /// Its receiver; `None` (`<new account>`) for one the plan made
-        /// up, so one behaviour is one finding whatever name was drawn.
+        /// up, so one behavior is one finding whatever name was drawn.
         receiver: Option<AccountId>,
         /// Its first called method; `None` for a transfer or a refund.
         method: Option<String>,

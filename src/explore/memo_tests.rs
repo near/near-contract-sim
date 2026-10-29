@@ -2,7 +2,7 @@
 //! enumeration reports the same with it as without, keys it exactly
 //! where the dedup key isn't, and plays each serial order once; a scan,
 //! a search and `Harness::run` play every one. And the fixture's
-//! judgements ([`Memo`](super::check::Memo)): an enumeration judges them
+//! judgments ([`Memo`](super::check::Memo)): an enumeration judges them
 //! once and reports the same as judging them in each case. In-crate,
 //! since the switches that turn both off for the reference run are a
 //! test's alone.
@@ -30,7 +30,7 @@ use std::collections::BTreeMap;
 /// `enumerate` on a fresh `harness()`, with the memo and without it (as
 /// before the memo, each case judging the fixture): one report, but for
 /// the wall-clock timings and the run's own id (`parts`). The serial
-/// orders played, and the fixture's judgements, with and without.
+/// orders played, and the fixture's judgments, with and without.
 fn same_report<O: Op>(
     harness: impl Fn() -> Harness<O>,
     enumerate: impl Fn(&Harness<O>) -> Audit<O>,
@@ -491,7 +491,7 @@ fn a_claim_queue_reports_the_same_with_and_without_the_memo() {
 fn an_enumeration_judges_the_fixture_once() {
     use QueueOp::*;
     let alphabet = [Request, Redeem(1)];
-    // The fixture's judgements while `f` runs, and the cases it says it ran.
+    // The fixture's judgments while `f` runs, and the cases it says it ran.
     let judged = |f: &dyn Fn() -> u32| {
         let before = FIXTURE_JUDGED.get();
         let cases = f();
@@ -549,7 +549,7 @@ fn a_case_with_planted_keys_judges_its_own_world() {
 /// One not judged there, or passing there and failing later, is credited
 /// to every case: its counts, and a finding's last pass, as before.
 #[test]
-fn the_fixture_s_judgements_report_as_before() {
+fn the_fixture_s_judgments_report_as_before() {
     use QueueOp::*;
     let alphabet = [Request, Redeem(1)];
     let enumerate = |h: &Harness<QueueOp>| h.enumerate(&alphabet).depth(2).run();

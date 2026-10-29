@@ -729,7 +729,7 @@ impl<O: Op<W>, W: World> Curves<'_, O, W> {
                 points.push(p);
             }
         }
-        // Refine every pair of neighbouring rungs whose outcomes differ.
+        // Refine every pair of neighboring rungs whose outcomes differ.
         let (mut budget, mut k) = (REFINES, 0);
         while k + 1 < points.len() && budget > 0 {
             let (lo, hi) = (points[k].value, points[k + 1].value);

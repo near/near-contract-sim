@@ -163,7 +163,7 @@ fn the_gas_where_a_settlement_starves_is_exact_to_one() {
 
 /// A key that holds the gas burnt changes every few gas where the child
 /// runs out of what it was attached: the guard panics, naming two
-/// neighbours, rather than bisect without end.
+/// neighbors, rather than bisect without end.
 #[test]
 fn a_key_with_gas_burnt_trips_the_guard() {
     let sim = world(wat("gas_split.wat"));

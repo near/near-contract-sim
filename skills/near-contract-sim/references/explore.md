@@ -268,7 +268,7 @@ classes, the findings, and how far each reading moved from step 0.
 `audit.to_string()` (its `Display`) prints at most 60 lines: a headline
 counting findings (shown and forced) and open items
 (`audit.with_open_gaps(why)` puts `Coverage not achieved (why)` above
-it), coverage, `not judged:` (each check's skipped judgements, and why:
+it), coverage, `not judged:` (each check's skipped judgments, and why:
 never passes), faults, the findings ranked, the notable curve rows, and
 the to-do items, each list cut short ("N more"; `{:#?}` prints all).
 

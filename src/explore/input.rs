@@ -1,4 +1,4 @@
-//! Strategies for an op's fields that favour the edges where size bugs
+//! Strategies for an op's fields that favor the edges where size bugs
 //! hide (a fixed callback gas meeting growing work, a log past 16 KiB, a
 //! key past 2 KiB), which a uniform size almost never lands on. About half
 //! the values are edges (empty, one, a few, the host's limits and one
@@ -89,7 +89,7 @@ impl Size {
     }
 }
 
-/// Strings of `[a-z0-9]` whose lengths favour the edges.
+/// Strings of `[a-z0-9]` whose lengths favor the edges.
 #[derive(Clone, Copy, Debug)]
 #[must_use]
 pub struct Text {
@@ -215,7 +215,7 @@ fn fill_from(chars: &[u8], seed: u64, len: usize) -> String {
         .collect()
 }
 
-/// Lists of `element`: 0 to 64 items, the count favouring the edges.
+/// Lists of `element`: 0 to 64 items, the count favoring the edges.
 pub fn list<S: Strategy>(element: S) -> List<S> {
     List { element, size: Size { min: 0, max: LIST_MAX } }
 }
@@ -502,7 +502,7 @@ impl fmt::Display for PickError {
 
 impl std::error::Error for PickError {}
 
-/// A [`Pick`], favouring the first few; shrinks toward the first.
+/// A [`Pick`], favoring the first few; shrinks toward the first.
 pub fn pick() -> impl Strategy<Value = Pick> + Clone {
     prop_oneof![Just(0u32), 1u32..8, any::<u32>()].prop_map(Pick)
 }
@@ -612,7 +612,7 @@ mod tests {
     /// Half the draws are edges: the host sizes and the maximum come up
     /// often, and the rest stay mostly small.
     #[test]
-    fn text_lengths_favour_the_edges() {
+    fn text_lengths_favor_the_edges() {
         let lens: Vec<usize> = draws(&text(), 4000).iter().map(String::len).collect();
         assert!(lens.iter().all(|&n| n <= TEXT_MAX));
         let count = |f: &dyn Fn(usize) -> bool| lens.iter().filter(|&&n| f(n)).count();
@@ -652,7 +652,7 @@ mod tests {
     }
 
     #[test]
-    fn list_counts_favour_the_edges_and_items_vary() {
+    fn list_counts_favor_the_edges_and_items_vary() {
         let lists = draws(&list(id()), 2000);
         let count = |n: usize| lists.iter().filter(|l| l.len() == n).count();
         assert!(lists.iter().all(|l| l.len() <= LIST_MAX));

@@ -471,7 +471,7 @@ fn alice_left_the_token() -> Sim {
 
 /// The default faults starve on_withdraw too: no prepaid gas can, since
 /// the vault reserves its gas, but a fixed budget is what input and state
-/// shape exhaust. It breaks even the fixed build, a finding labelled
+/// shape exhaust. It breaks even the fixed build, a finding labeled
 /// forced, with the fault it forced.
 #[test]
 fn starving_on_withdraw_breaks_even_the_fixed_vault() {
@@ -650,7 +650,7 @@ fn a_withdraw_never_spends_a_deposit_in_flight() {
 }
 
 /// A union of a search and curves run `with` it counts the search's
-/// judgements and sites reached once: `with` closes the curves' coverage
+/// judgments and sites reached once: `with` closes the curves' coverage
 /// by the search's, and copies no count. Its own withdraw check never
 /// runs on a deposit-only witness, so the union's count is the search's.
 #[test]

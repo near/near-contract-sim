@@ -86,7 +86,7 @@ the one call it got and the gas MPC attached ([mpc.md](mpc.md)).
 ## A stub, a fault, or the real counterparty?
 
 A stub really answers that way, so its findings are natural; a fault is
-forced, labelled `forced (..)` ([faults.md](faults.md)). Stub a callee
+forced, labeled `forced (..)` ([faults.md](faults.md)). Stub a callee
 that is untrusted or can change (a token, an oracle, a receiver); fault
 one you deploy yourself. A stub's gas, refunds and logs are invented:
 for a token standard the contract moves value through, test against

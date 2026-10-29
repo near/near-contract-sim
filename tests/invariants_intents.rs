@@ -81,7 +81,7 @@ fn signed_intents_can_overlap() {
 
 /// What the default faults find on v0.2.8: if wrap.near's `near_withdraw`
 /// fails, `do_native_withdraw` panics and the withdrawn wNEAR leaves the
-/// ledger while wrap.near still holds it. Both findings are labelled
+/// ledger while wrap.near still holds it. Both findings are labeled
 /// injected: a consequence of the forced failure, not evidence that
 /// wrap.near fails on a network.
 #[test]

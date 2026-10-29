@@ -15,7 +15,7 @@ in [harness.md](harness.md) and [explore.md](explore.md).
 | 3. Scan | `scan(&witnesses)` | its findings are read; nothing `unreached` you can't explain |
 | 4. Curves | `curves(&witnesses).with(&scan)` | no curve row open |
 | 5. Search | `search(plans(ops)).seeds(2)` | findings read, barely reached ops weighted up |
-| 6. Triage | a label and a class for each finding | every finding is labelled; by-design ones say why |
+| 6. Triage | a label and a class for each finding | every finding is labeled; by-design ones say why |
 | 7. Report | the write-up | `done()` is `Ok`, or the write-up opens with "Coverage not achieved" |
 
 ## What a clean audit claims
@@ -187,7 +187,7 @@ controls each:
   `msg`: curves show where that cost meets the budget;
 - **the state it reads**: build it in earlier steps, or change it while
   the callback is in flight (a second op in the same block). Work
-  backwards from each `require!`, `unwrap`, overflow and host limit.
+  backward from each `require!`, `unwrap`, overflow and host limit.
 
 **The world.** Every token standard and interface the contract calls,
 each with a real counterparty (the audited contract itself, an older
@@ -296,7 +296,7 @@ lock, or nothing).
 
 Findings first, ordered by impact, most severe first. Reachability is a
 label on each, never a section. A finding that follows a forced fault
-sits with the natural ones, labelled "forced", and is never "held".
+sits with the natural ones, labeled "forced", and is never "held".
 
 **Every finding of the audit is a numbered finding.** Ones sharing a
 root cause may be merged, saying which; none is dropped. A forced one

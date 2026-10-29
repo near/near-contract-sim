@@ -517,7 +517,7 @@ fn a_reply_can_call_before_it_answers() {
 /// `burn(gas)` burns a fixed amount, whatever is attached:
 /// at least 5 Tgas used, and attached less it runs out.
 ///
-/// Verification boundary: the stub template's behaviour, against actual
+/// Verification boundary: the stub template's behavior, against actual
 /// runs of the pinned runtime; no scheduling change.
 #[test]
 fn burn_uses_a_fixed_amount() {
@@ -537,7 +537,7 @@ fn burn_uses_a_fixed_amount() {
 /// attached, and succeeds at X; through a relay that forwards all it has
 /// left, a caller's gas at or below X fails.
 ///
-/// Verification boundary: the stub template's behaviour, against actual
+/// Verification boundary: the stub template's behavior, against actual
 /// runs of the pinned runtime.
 #[test]
 fn fail_below_fails_under_its_threshold() {

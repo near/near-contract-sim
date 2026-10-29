@@ -95,7 +95,7 @@ callback or the resume that wakes it.
   a flat `config.epoch_reward` per staked account per epoch, 0 by default:
   test who gets rewards, not share prices. A stake proposed in epoch `e`
   is a validator's, and first rewarded, from `e + 2`, as on a node.
-- **Time can go backwards** (`set_timestamp_ns`): handy for a fixture's
+- **Time can go backward** (`set_timestamp_ns`): handy for a fixture's
   validity window, but a state no chain reaches.
 - **`Sim::create_account` writes the account directly**, like a genesis
   record, so the `CreateAccount` action's rules (a parent for

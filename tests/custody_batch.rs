@@ -4,7 +4,7 @@
 //! item), and a batch that runs out of gas loses the amount. A deposit
 //! reaches the same callee with its own batch.
 //!
-//! The curve here runs against actual simulator behaviour. The audit's
+//! The curve here runs against actual simulator behavior. The audit's
 //! to-do gate for it is covered in tests/report.rs.
 
 mod common;

@@ -6,7 +6,7 @@
 //!
 //! The default search repeats one drawn op in about one plan in eight;
 //! with it, the trap is found from generated cases alone. This runs
-//! against actual simulator behaviour.
+//! against actual simulator behavior.
 
 mod common;
 use common::manifest_dir;
