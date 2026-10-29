@@ -12,9 +12,13 @@ code: findings, coverage, to-do items and the summary's lines. They can
 open an audit that was clean, or close one. `explore` is experimental
 and changes more often than the rest; its changes follow the same rules.
 
-## 0.1.0 (unreleased)
+## Unreleased
 
-The first release, not yet tagged. It runs NEAR contracts on nearcore
+Nothing yet.
+
+## 0.1.0 (2026-10-28)
+
+The first release. It runs NEAR contracts on nearcore
 2.14.0's runtime (protocol 88) inside `cargo test`.
 
 ### Added

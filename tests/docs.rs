@@ -500,8 +500,8 @@ fn the_public_api_is_the_committed_list() {
         gone.is_empty() && new.is_empty(),
         "the public API changed.\nGone:\n  {}\nNew:\n  {}\n\nIf you meant it, rewrite \
          tests/api/public.txt with\n  NCS_API_WRITE=1 cargo test --test docs \
-         the_public_api_is_the_committed_list\nand add a line to CHANGELOG.md's 0.1.0 \
-         (unreleased) entry: Breaking for a removed or changed item, Added for a new one.",
+         the_public_api_is_the_committed_list\nand add a line to CHANGELOG.md's \
+         Unreleased entry: Breaking for a removed or changed item, Added for a new one.",
         gone.join("\n  "),
         new.join("\n  "),
     );
