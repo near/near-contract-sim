@@ -156,7 +156,7 @@ auction-tests/
 └── tests/sim.rs
 ```
 
-`auction-tests/Cargo.toml`, with `<commit>` a commit of this repo:
+`auction-tests/Cargo.toml`, pinned to a commit of this repo (any later one works too):
 
 ```toml
 [package]
@@ -166,7 +166,7 @@ edition = "2024"
 publish = false
 
 [dev-dependencies]
-near-contract-sim = { git = "https://github.com/near/near-contract-sim", rev = "<commit>" }
+near-contract-sim = { git = "https://github.com/near/near-contract-sim", rev = "c40ce151f8b00dcc114bcd34bf58534593fef24a" }
 cargo-near-build = "0.11"
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
