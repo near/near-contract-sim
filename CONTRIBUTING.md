@@ -62,10 +62,9 @@ review its diff:
 NCS_API_WRITE=1 cargo test --test docs the_public_api_is_the_committed_list
 ```
 
-Then add a line to [CHANGELOG.md](CHANGELOG.md)'s Unreleased entry:
-**Breaking** for a removed or changed item, **Added** for a new one. A fix
-goes under **Fixed**, and a change to what a run reports for the same
-code (findings, coverage, the summary) under **Verdicts**.
+Then title the pull request `feat!: …` for a removed or changed item, or
+`feat: …` for a new one: [CHANGELOG.md](CHANGELOG.md)'s entries are
+written from titles.
 
 ## Commits and pull requests
 
@@ -73,8 +72,17 @@ Commit messages and pull request titles follow
 [Conventional Commits](https://www.conventionalcommits.org/):
 `feat(explore): …`, `fix: …`, `docs: …`, `test: …`, `ci: …`,
 `refactor: …`, `chore: …`. Mark a breaking API change with `!` after the
-type (`feat!: …`). Pull requests are squash-merged, so the title is the
-commit that lands on `main`.
+type (`feat!: …`), and a new nearcore pin too. Pull requests are
+squash-merged, so the title is the commit that lands on `main`.
+
+## Releases
+
+[release-plz](https://release-plz.dev) keeps a release pull request open
+against `main`. It bumps the version from the titles merged since the
+last tag (`!` moves the minor version while it is 0.x; `feat` and `fix`
+the patch) and writes their CHANGELOG entry. Merging it tags `vX.Y.Z` and
+publishes a GitHub release. The crate isn't on crates.io, so versions
+come from the tags.
 
 ## Docs and fixtures
 

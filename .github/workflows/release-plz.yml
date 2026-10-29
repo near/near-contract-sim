@@ -1,0 +1,69 @@
+name: Release-plz
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  # Tags `vX.Y.Z` and publishes a GitHub release when Cargo.toml's version
+  # has no tag yet (release-plz.toml: git_only).
+  release:
+    name: Release
+    if: github.repository == 'near/near-contract-sim'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rust (rust-toolchain.toml)
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+      - uses: release-plz/action@v0.5
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Opens or updates the release pull request: the next version and its
+  # CHANGELOG entry, from the Conventional Commit titles since the last tag.
+  release-pr:
+    name: Release PR
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    concurrency:
+      group: release-plz-pr
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rust (rust-toolchain.toml)
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+      - id: release-plz
+        uses: release-plz/action@v0.5
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # A push made with GITHUB_TOKEN starts no workflow, so the required
+      # checks would never run on the release branch; a dispatch is the
+      # exception.
+      - name: Run CI on the release branch
+        if: steps.release-plz.outputs.pr != '' && steps.release-plz.outputs.pr != '{}'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ fromJSON(steps.release-plz.outputs.pr).head_branch }}
+        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"

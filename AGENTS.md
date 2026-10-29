@@ -47,7 +47,8 @@ before finishing.
 - `README.md`, `skills/near-contract-sim/SKILL.md` and its `references/`:
   the user docs. Their code blocks are compiled (`tests/docs.rs`,
   `tests/consumer/run.sh`).
-- `CHANGELOG.md`: the versioning policy and the Unreleased entry.
+- `CHANGELOG.md`: the versioning policy; release-plz writes the entries
+  from pull request titles.
 
 ## Rules
 
@@ -56,14 +57,13 @@ before finishing.
   to scheduling, holds, faults or replay needs a regression test of that
   behaviour.
 - **No backward-compatibility shims before 1.0.** Change or remove the
-  API outright, update every caller, test and doc, and record it under
-  **Breaking** in the CHANGELOG. Don't keep deprecated aliases or old
+  API outright, update every caller, test and doc, and title the change
+  `type!: …` so the CHANGELOG lists it under **Breaking**. Don't keep deprecated aliases or old
   signatures alongside the new ones.
 - **Keep the public API list in sync.** When `pub` items change,
   regenerate the list with `NCS_API_WRITE=1 cargo test --test docs
-  the_public_api_is_the_committed_list`, check its diff is what you meant,
-  and add a CHANGELOG line (Breaking, Added, Fixed or Verdicts, as the
-  CHANGELOG's header defines them).
+  the_public_api_is_the_committed_list`, and check its diff is what you
+  meant.
 - **Keep the docs compiling.** A changed example changes its copy under
   `src/`, `tests/` or `examples/` as well, which `tests/docs.rs` checks.
 - **One nearcore.** Every nearcore crate comes from the same git tag
@@ -80,3 +80,4 @@ before finishing.
 - **Conventional Commits.** Commit messages and pull request titles are
   `type(scope): summary` (`feat`, `fix`, `docs`, `test`, `ci`,
   `refactor`, `chore`); `!` after the type marks a breaking API change.
+  release-plz builds the CHANGELOG and the version from them.
