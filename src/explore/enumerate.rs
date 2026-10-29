@@ -23,10 +23,10 @@ const NOT_VARIED: &str = "not varied: caller gas (as each op sets it), callers (
 /// What one with edges ([`Faults::edges`]) doesn't vary, which its report
 /// states.
 const NOT_VARIED_EDGES: &str = "not varied: callers (as each op signs; no direct call from \
-    axis.near), a stub answering more than it was sent, and on a step placed inside a flight \
-    caller gas, stub answers and argument values; a step placed at rest also ran at a scan's \
-    per-step edges (caller gas, a stub giving back all it was sent, the op's axes), each edge a \
-    case not extended";
+    axis.near), a stub answering more than it was sent, and every edge of a step placed inside a \
+    flight (it ran as the alphabet holds it). A step placed at rest also ran at a scan's per-step \
+    edges (caller gas, a stub giving back all it was sent, the op's axes): each one case (a \
+    least-gas one searches), not extended, with no fault or epoch boundary of its own";
 
 /// The verification boundary an enumeration under `faults` states, on a
 /// fixture whose epochs it places boundaries in or not (the dedup key's
@@ -171,11 +171,12 @@ impl<O: Op<W>, W: World> Harness<O, W> {
     /// - **Edges**, with [`Faults::edges`] (in [`Faults::default`]): each
     ///   new step placed at rest also runs at the scan's per-step edges
     ///   there: the caller's gas (the least that succeeds, and each gas
-    ///   constant 1 gas either side), each number and choice of its
+    ///   constant exactly and 1 gas either side), each number and choice of its
     ///   [`Op::axes`] (narrowed by [`Axes::only`](super::Axes::only)), and
     ///   each stub giving back all it was sent. Each is a leaf: a case of
-    ///   its own, never extended, so they add V cases per state at rest
-    ///   and op. A step placed inside a flight runs as the alphabet holds
+    ///   its own (one at the least caller gas searches for it, as one
+    ///   case), never extended and with no fault or epoch boundary of its
+    ///   own, so they add V cases per state at rest and op. A step placed inside a flight runs as the alphabet holds
     ///   it, and no call is sent directly from `axis.near`.
     /// - **Dedup**: after each depth, in a fixed order, each case's world
     ///   at rest is keyed: by default by every audited contract's state,
@@ -374,6 +375,12 @@ impl<O: Op<W>, W: World> Enumerate<'_, O, W> {
                 let (plan, kind, base) =
                     std::mem::replace(&mut queue[k], (Plan::new(), Kind::Edge, 0));
                 k += 1;
+                // A leaf the saves hold rebuilds no state: not run again.
+                if matches!(kind, Kind::Leaf(..)) && (ran as usize) < resumed {
+                    ran += 1;
+                    progress::step(ran);
+                    continue;
+                }
                 let run = h.run_case(&plan);
                 ran += 1;
                 // The time left is the known cases' (this depth's queue),
@@ -405,10 +412,9 @@ impl<O: Op<W>, W: World> Enumerate<'_, O, W> {
                 let last = plan.steps.len() - 1;
                 // A leaf is taken in, and goes no further.
                 if let Kind::Leaf(at, axis) = &kind {
-                    if new {
-                        take_in(&mut audit, &run, Some((at, axis)), last, "the case");
-                        Saves::tick(&self.saves, h, &audit, ran as usize, false);
-                    }
+                    let case = run.lines().join("; ");
+                    take_in(&mut audit, &run, Some((at, axis)), last, &case);
+                    Saves::tick(&self.saves, h, &audit, ran as usize, false);
                     continue;
                 }
                 if new {

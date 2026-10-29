@@ -91,8 +91,9 @@ pub struct Report {
     /// print the same summary).
     #[serde(default)]
     pub timings: Vec<(String, f64)>,
-    /// Gas bands a scan found: a step whose transaction succeeds at just
-    /// enough gas while one of its receipts fails, up to what gas.
+    /// Gas bands a scan or an enumeration with edges found, each once: a
+    /// step whose transaction succeeds at just enough gas while one of its
+    /// receipts fails, up to what gas. The summary prints the first 8.
     #[serde(default)]
     pub bands: Vec<String>,
     /// Its curve points, the sites it reached and its checks' judgments:
@@ -866,9 +867,10 @@ impl fmt::Display for Report {
             let _ = writeln!(s, "excused {id} ({} item(s)): {}", closed.len(), short(why, 200));
         }
         more(&mut s, r.excused.len(), 5, "excuse(s) (Report::excused)");
-        for band in &r.bands {
+        for band in r.bands.iter().take(8) {
             let _ = writeln!(s, "gas band: {}", short(band, 200));
         }
+        more(&mut s, r.bands.len(), 8, "gas band(s) (Report::bands)");
         if !r.fixed.is_empty() {
             let names = short(&r.fixed.join(", "), 110);
             let _ = writeln!(s, "not axes (changed, they don't deserialize): {names}");

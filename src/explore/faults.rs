@@ -28,7 +28,8 @@ use std::collections::HashMap;
 pub struct Faults {
     arms: Vec<Arm>,
     per_case: f64,
-    /// A scan also tries its edges ([`Faults::edges`]).
+    /// A scan also tries its edges, and an enumeration each step's placed
+    /// at rest ([`Faults::edges`]).
     #[serde(default)]
     edges: bool,
     /// A scan and an enumeration also reorder ([`Faults::reorder`]).

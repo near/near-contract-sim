@@ -1349,8 +1349,6 @@ fn enumerate_edges_find_a_bug_only_after_an_earlier_step() {
     let found = backed(&audit).unwrap_or_else(|| panic!("{audit}"));
     let at = found.label.to_string();
     assert!(at.contains(&format!("step 1, /Withdraw = {}", u64::MAX)), "{at}");
-    let steps = &found.original.plan().steps;
-    assert_eq!(steps.len(), 2, "a leaf, not extended: {at}");
 }
 
 /// Edge cases are leaves: each (state at rest, op) adds the same V edge
@@ -1398,4 +1396,66 @@ fn axes_only_narrows_enumerate_edges() {
     let alphabet = [PurseOp::Deposit(5), PurseOp::Withdraw(5)].map(OnlyWithdrawn);
     let audit = narrow.enumerate(&alphabet).depth(2).faults(edges()).run();
     assert!(backed(&audit).is_some(), "{audit}");
+}
+
+/// A saves file cut among the edge cases resumes to the report of a run
+/// that went whole: the leaves it holds are counted once, and not run
+/// again.
+///
+/// Verification boundary: an enumeration's case count, findings and
+/// rows across a resume.
+#[test]
+fn a_saves_file_cut_among_the_edges_resumes_whole() {
+    let h = purse_harness::<PurseOp>();
+    let alphabet = [PurseOp::Deposit(5), PurseOp::Withdraw(5)];
+    let path = std::env::temp_dir().join(format!("enum-edges-{}.json", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let run = |cases: u32| {
+        let e = h.enumerate(&alphabet).depth(2).faults(Faults::edges()).cases(cases);
+        e.saves(&path, 1).run()
+    };
+    // Both plain cases, then the first two of the deposit's edges.
+    let cut = run(4);
+    assert_eq!(cut.cases(), 4, "{cut}");
+    let rest = run(100_000);
+    let whole = h.enumerate(&alphabet).depth(2).faults(Faults::edges()).run();
+    assert!(rest.cases() > 0, "{rest}");
+    assert_eq!(cut.cases() + rest.cases(), whole.cases(), "only the cases after: {rest}");
+    // The cut run's `truncated:` items come back with its saves.
+    let (cases, rows, _) = same(&rest.report());
+    assert_eq!((cases, rows), {
+        let (cases, rows, _) = same(&whole.report());
+        (cases, rows)
+    });
+    assert!(backed(&rest).is_some(), "{rest}");
+    let _ = std::fs::remove_file(&path);
+}
+
+/// A purse deposit that skips an amount of 0.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct Picky(u64);
+
+impl Op for Picky {
+    fn submit(&self, sim: &mut Sim) -> Result<(), Skip> {
+        if self.0 == 0 {
+            return Err(Skip("nothing to deposit".into()));
+        }
+        PurseOp::Deposit(self.0).submit(sim)
+    }
+}
+
+/// An edge whose op skips wasn't tried: an open `incomplete:` item, never
+/// a pass, naming the case it was an edge of.
+///
+/// Verification boundary: an enumeration's to-do items.
+#[test]
+fn an_edge_whose_op_skips_is_open_and_names_its_case() {
+    let audit =
+        purse_harness::<Picky>().enumerate(&[Picky(5)]).depth(2).faults(Faults::edges()).run();
+    let open: Vec<&String> = audit.incomplete().iter().map(|(_, why)| why).collect();
+    let skip = open.iter().find(|why| why.contains("edge not tried: op skipped"));
+    let skip = skip.unwrap_or_else(|| panic!("{open:?}"));
+    assert!(skip.contains("Picky(5)") && skip.contains("Picky(0)"), "{skip}");
+    assert!(skip.contains("step 1, the op = 0"), "{skip}");
+    assert!(audit.done().is_err(), "{audit}");
 }

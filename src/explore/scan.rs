@@ -358,8 +358,8 @@ pub(crate) struct Edge<O> {
 /// The per-step edges of step `i` of `witness`, which a scan and an
 /// enumeration both try: each stub that answered it with amounts giving
 /// back all it was sent; on a step with a call whose gas it sets, the
-/// caller's gas at the least that succeeds and at each gas constant, 1
-/// gas either side; and each number and choice of the op's
+/// caller's gas at the least that succeeds and at each gas constant,
+/// exactly and 1 gas either side; and each number and choice of the op's
 /// [`Axes`](super::Axes) at its edges ([`number_edges`]). None for a step
 /// that skipped.
 pub(crate) fn step_edges<O: Op<W>, W: World>(
@@ -446,10 +446,14 @@ pub(crate) fn take_in<O: Clone + std::fmt::Debug>(
         for (least, all, site) in &rec.bands {
             let act = format!("{:?}", run.plan.steps[i].act);
             let (least, all) = (StepGas::Exactly(*least), StepGas::Exactly(*all));
-            audit.r.bands.push(format!(
+            let band = format!(
                 "{act} (step {i}): the transaction succeeds from {least}, every receipt only \
                  from {all}; between, {site} fails"
-            ));
+            );
+            // One line a band: an enumeration meets one in many states.
+            if !audit.r.bands.contains(&band) {
+                audit.r.bands.push(band);
+            }
         }
     }
     audit.add(run, at);
