@@ -10,7 +10,7 @@
 //!
 //! Verification boundary: the axes' plan rewrites (repeats settled before
 //! a step, a tail sent a block apart while a callback is held), against
-//! actual simulator behaviour.
+//! actual simulator behavior.
 
 mod common;
 use common::res;

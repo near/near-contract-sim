@@ -271,7 +271,7 @@ fn a_search_leaves_one_replay_per_row() {
 /// One run saves nothing, though its harness has a store, so a sweep of
 /// runs doesn't fill a campaign's store; a scan of its plan does.
 /// A finding's replays from two builds (one wasm with a custom section
-/// appended: other code, the same behaviour) are two files, so a scan
+/// appended: other code, the same behavior) are two files, so a scan
 /// on another build never overwrites the audited build's replay.
 #[test]
 fn a_run_saves_nothing_and_two_builds_keep_their_replays() {
@@ -330,7 +330,7 @@ fn a_gone_replay_says_whether_its_site_was_reached() {
 /// (here its occurrence moved past the one `on_withdraw` call) forced
 /// nothing: it reads `NotReached`, never `Gone`, though its sites ran.
 ///
-/// Verification boundary: replay judgement over an actual run whose
+/// Verification boundary: replay judgment over an actual run whose
 /// injection applied to no receipt.
 #[test]
 fn a_replay_whose_fault_lands_nowhere_is_not_reached() {
@@ -408,7 +408,7 @@ const ONLY_B: &str = r#"(module
 /// at the same check and site. A file saved before replays kept the
 /// identity matches on check and site alone, and says so.
 ///
-/// Verification boundary: replay judgement by finding identity, over an
+/// Verification boundary: replay judgment by finding identity, over an
 /// actual run on each build.
 #[test]
 fn a_replay_matches_its_own_cause_not_another_at_its_site() {
@@ -609,7 +609,7 @@ fn go() -> Plan<VaultOp> {
 /// the replay still shows: before, it held only the row's identity and
 /// read `Gone` while `cb` still failed.
 ///
-/// Verification boundary: replay judgement by the identities a replay
+/// Verification boundary: replay judgment by the identities a replay
 /// holds, over actual scans and replays on two builds.
 #[test]
 fn a_fold_its_row_shows_is_in_the_row_s_replay_and_keeps_it_showing() {

@@ -242,10 +242,10 @@ impl Op for KeepOp {
 }
 
 /// A cost that grows along an axis while the budget stays flat, though
-/// the margin stays over 25%, is labelled as such, with where the cost
+/// the margin stays over 25%, is labeled as such, with where the cost
 /// would meet the budget; never "keeps 60% … under 61%".
 #[test]
-fn a_growing_cost_on_a_flat_budget_is_labelled_with_its_projection() {
+fn a_growing_cost_on_a_flat_budget_is_labeled_with_its_projection() {
     let world = Fixture::new()
         .account("alice.near", Balance::from_near(100))
         .contract("keep.near", wat::parse_str(KEEP).unwrap())

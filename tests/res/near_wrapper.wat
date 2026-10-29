@@ -76,7 +76,7 @@
     (call $input (i64.const 0))
     (call $read_register (i64.const 0) (i64.const 1024))
     (local.set $v (call $get (call $register_len (i64.const 0)) (i64.const 1024)))
-    ;; Digits backwards from 2100, then the quotes.
+    ;; Digits backward from 2100, then the quotes.
     (local.set $at (i32.const 2100))
     (i32.store8 (local.get $at) (i32.const 34))
     (loop $digit

@@ -16,7 +16,7 @@ use std::fmt;
 #[must_use = "an audit fails nothing unless asserted: .assert_clean()"]
 #[derive(Clone, Debug)]
 pub struct Audit<O> {
-    /// What it reports as it is: the counts (cases, judgements, faults),
+    /// What it reports as it is: the counts (cases, judgments, faults),
     /// coverage, curve points, errors, seeds, bands and timings. Its
     /// findings, curve rows, to-do and excuses are filled by
     /// [`report`](Self::report) from the typed fields below.
@@ -47,7 +47,7 @@ pub struct Audit<O> {
     pub(crate) sent: Option<Vec<String>>,
 }
 
-/// Adds `j`'s judgements to its check's in `judged`, keeping the first of each why.
+/// Adds `j`'s judgments to its check's in `judged`, keeping the first of each why.
 pub(crate) fn tally(
     judged: &mut std::collections::BTreeMap<String, super::Judged>,
     j: &super::Judged,
@@ -409,7 +409,7 @@ impl<O: Op<W>, W: World> Harness<O, W> {
     }
 }
 
-/// What settling rows learnt by running, by the row's case (its plan) and
+/// What settling rows learned by running, by the row's case (its plan) and
 /// finding: a campaign that saves as it goes settles every row at each
 /// save, and reruns only the rows whose case changed.
 pub(crate) struct Settled<O> {

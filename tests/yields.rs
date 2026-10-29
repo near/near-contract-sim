@@ -263,7 +263,7 @@ fn expire_fires_earlier_yields_first() {
 }
 
 /// An overdue yield (`set_height` skipped its block) expires without
-/// moving backwards: the next block fires it.
+/// moving backward: the next block fires it.
 #[test]
 fn expire_an_overdue_yield() {
     let mut sim = probe_sim();

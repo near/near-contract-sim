@@ -95,7 +95,7 @@ pub struct Report {
     /// enough gas while one of its receipts fails, up to what gas.
     #[serde(default)]
     pub bands: Vec<String>,
-    /// Its curve points, the sites it reached and its checks' judgements:
+    /// Its curve points, the sites it reached and its checks' judgments:
     /// what [`Curves::with`](super::Curves::with) counts.
     #[serde(default, with = "seen_json")]
     pub(crate) seen: super::curves::Seen,
@@ -783,7 +783,7 @@ impl fmt::Display for Report {
         let (r, mut s) = (self, String::new());
         let p = &r.paths;
         let forced = r.findings.iter().filter(|f| f.label.starts_with("forced")).count();
-        // Each check some judgement skipped: never a pass, never hidden.
+        // Each check some judgment skipped: never a pass, never hidden.
         let skipped: Vec<String> = (r.judged.values().filter(|j| j.unjudged > 0))
             .map(|j| {
                 let of = j.ok + j.failed + j.unjudged + j.idle;

@@ -8,7 +8,7 @@ use std::ops::RangeInclusive;
 /// A maximal run of the knob where every sample read one key: what
 /// [`edges`] and [`Tx::gas_edges`](crate::Tx::gas_edges) return, in
 /// order. The regions tile the range: each starts 1 above the last's
-/// end, and each end is exact to 1 (its neighbour was read and differs).
+/// end, and each end is exact to 1 (its neighbor was read and differs).
 /// The interior was sampled, not proven: an island inside that no read
 /// landed on is part of it.
 #[non_exhaustive]
@@ -45,7 +45,7 @@ pub enum Why {
 /// sampled, not proven.
 ///
 /// It reads the start of `range`, every `step` on, and its end, then
-/// bisects every two neighbouring reads that differ until they are 1
+/// bisects every two neighboring reads that differ until they are 1
 /// apart, to a fixpoint: between two reads that differ it finds an edge,
 /// exact to 1, and every region a midpoint lands on, each refined in
 /// turn. Then it reads every point within `radius` of each edge (an
@@ -56,7 +56,7 @@ pub enum Why {
 ///
 /// What can still be missed: an island that no read lands on, farther
 /// than `radius` from every edge, whether its key equals its
-/// neighbours' or not; one between two reads that differ is found only
+/// neighbors' or not; one between two reads that differ is found only
 /// if a midpoint of their bisection lands on it.
 /// [`Tx::gas_edges`](crate::Tx::gas_edges) adds solved points for gas.
 ///
@@ -70,7 +70,7 @@ pub enum Why {
 /// the heuristic above: a window off every read is missed.
 ///
 /// Panics if `step` is 0 or `range` is empty; if the key changes more
-/// than 16 times between two neighbouring grid reads, naming where (a
+/// than 16 times between two neighboring grid reads, naming where (a
 /// heuristic guard: a key that changes nearly everywhere holds something
 /// that moves with the knob, and would bisect without end; a key with
 /// that many real edges a step needs a smaller step). It catches a leak
@@ -99,8 +99,8 @@ pub fn edges<K: Eq + Clone>(
     scan(range, step, radius, |at| (probe(at), ()), |_| BTreeSet::new())
 }
 
-/// More pairs of neighbours 1 apart that differ than this between two
-/// neighbouring grid reads, and the key is taken to leak something that
+/// More pairs of neighbors 1 apart that differ than this between two
+/// neighboring grid reads, and the key is taken to leak something that
 /// moves with the knob.
 const LEAK: usize = 16;
 /// Rounds of probing (radius, then solved points, then bisection) before
@@ -177,7 +177,7 @@ struct Scan<K, X, P> {
     step: u64,
     samples: Samples<K, X>,
     probe: P,
-    /// The edges whose neighbourhood was read.
+    /// The edges whose neighborhood was read.
     probed: BTreeSet<u64>,
 }
 
@@ -195,7 +195,7 @@ impl<K: Eq + Clone, X, P: Fn(u64) -> (K, X)> Scan<K, X, P> {
         &self.samples[&at].key
     }
 
-    /// Bisects every two neighbouring reads that differ and are more than
+    /// Bisects every two neighboring reads that differ and are more than
     /// 1 apart, until none are, reading as `why`.
     #[track_caller]
     fn refine(&mut self, why: Why) {
@@ -242,8 +242,8 @@ impl<K: Eq + Clone, X, P: Fn(u64) -> (K, X)> Scan<K, X, P> {
             .collect()
     }
 
-    /// Panics if more than [`LEAK`] pairs of neighbours 1 apart differ
-    /// between two neighbouring grid reads.
+    /// Panics if more than [`LEAK`] pairs of neighbors 1 apart differ
+    /// between two neighboring grid reads.
     #[track_caller]
     fn guard(&self) {
         let mut per_step = BTreeMap::<u64, usize>::new();
@@ -314,7 +314,7 @@ mod tests {
         found.into_iter().filter(|r| r.key).map(|r| r.range).collect()
     }
 
-    /// The regions tile `lo..=hi`, and neighbours differ.
+    /// The regions tile `lo..=hi`, and neighbors differ.
     fn tiles<K: Eq>(found: &[Region<K>], lo: u64, hi: u64) {
         assert_eq!(*found[0].range.start(), lo);
         assert_eq!(*found.last().unwrap().range.end(), hi);
@@ -451,7 +451,7 @@ mod tests {
         edges(0..=1_000_000, 100_000, 0, |g| g);
     }
 
-    /// Solved points are read, labelled `Solved`, and refined from.
+    /// Solved points are read, labeled `Solved`, and refined from.
     #[test]
     fn solved_points_are_read_and_refined() {
         let key = |g: u64| (501..=504).contains(&g);
@@ -459,7 +459,7 @@ mod tests {
         let found = scan(0..=1000, 100, 64, |g| (key(g), ()), solve);
         let at = found.iter().find(|r| r.key).unwrap();
         assert_eq!((at.range.clone(), at.why), (501..=504, Why::Solved), "{found:?}");
-        // Its neighbours, first read by the grid, stay `Grid`.
+        // Its neighbors, first read by the grid, stay `Grid`.
         assert!(found.iter().filter(|r| !r.key).all(|r| r.why == Why::Grid), "{found:?}");
         assert!(edges(0..=1000, 100, 64, key).iter().all(|r| !r.key));
     }

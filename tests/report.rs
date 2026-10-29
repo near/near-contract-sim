@@ -433,7 +433,7 @@ fn union_counts_each_run_once_and_keeps_every_excuse() {
 /// it; a union keeps the count. It is a summary line, not an open item:
 /// a check judged once is covered, as a method reached once is.
 ///
-/// Verification boundary: the report's reading of an audit's judgements,
+/// Verification boundary: the report's reading of an audit's judgments,
 /// over actual scans of overlapping ops. No schedule changes.
 #[test]
 fn a_check_not_judged_in_some_cases_is_counted() {

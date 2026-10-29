@@ -28,7 +28,7 @@ fn deposit_then_withdraw() -> Plan<VaultOp> {
 
 /// The forgetful build drops the shares of a withdraw whose payout fails:
 /// the variant failing `on_withdraw`'s call to the token shows it, every
-/// time, labelled forced, with the receipt named exactly. The fixed build
+/// time, labeled forced, with the receipt named exactly. The fixed build
 /// shows nothing.
 #[test]
 fn a_scan_finds_the_forgetful_payout_deterministically() {
@@ -187,7 +187,7 @@ impl Op for DeskOp {
     }
 }
 
-/// A starved must-not-fail receipt is a finding, labelled forced: the
+/// A starved must-not-fail receipt is a finding, labeled forced: the
 /// default scan starves `on_issued` on the fixed desk.
 #[test]
 fn a_starved_must_not_fail_receipt_is_a_forced_finding() {
@@ -239,7 +239,7 @@ fn a_witness_whose_receipt_fails_is_an_error_unless_meant_to_be_refused() {
     h.run(&over.refused()).assert_clean();
 }
 
-/// One judgement of a failed witness, by `Harness::run` and a scan alike.
+/// One judgment of a failed witness, by `Harness::run` and a scan alike.
 /// A failure no check of the harness's fired at is a harness error naming
 /// the plan (its index in the scan, its steps) and the receipt, even where
 /// another check found something: a Findings verdict doesn't hide it. A

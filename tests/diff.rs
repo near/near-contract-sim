@@ -38,7 +38,7 @@ fn deposit_then_withdraw() -> Plan<VaultOp> {
 }
 
 /// On the plain plan the builds agree; on the forgetful build's finding,
-/// as it ran (its payout failure pinned), only the forgetful behaviour
+/// as it ran (its payout failure pinned), only the forgetful behavior
 /// differs: the kept tokens, the books, and nothing about the deposit.
 #[test]
 fn the_forgetful_vault_differs_only_where_it_forgets() {

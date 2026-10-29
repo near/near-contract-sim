@@ -264,7 +264,7 @@ fn always_sees_temporary_state_but_at_rest_waits_for_the_callback() {
 fn a_starved_receipt_is_excused_but_what_it_caused_is_not() {
     // The starved callback's own out-of-gas is what the plan forced: no
     // built-in finding. That it never removed `pending` is a finding, and
-    // labelled injected.
+    // labeled injected.
     let harness = Harness::new(fixture()).at_rest("no pending", absent(b"pending"));
     let plan =
         Plan::new().op(Prog::Run(temporary_state())).inject(Receipts::callbacks(), Fault::OutOfGas);
@@ -608,13 +608,13 @@ fn counts<O>(run: &near_contract_sim::explore::Run<O>, check: &str) -> (u32, u32
     (j.ok, j.failed, j.unjudged, j.idle)
 }
 
-/// `Fail::all`: one judgement failing for two accounts is one failed
-/// judgement and two findings, each at its key; a campaign keeps a row
+/// `Fail::all`: one judgment failing for two accounts is one failed
+/// judgment and two findings, each at its key; a campaign keeps a row
 /// for each.
 ///
 /// Verification boundary: judging and finding identity, over actual runs.
 #[test]
-fn every_failure_of_one_judgement_is_a_finding() {
+fn every_failure_of_one_judgment_is_a_finding() {
     let h = Harness::new(tip_jar()).per_op("nothing moves", nothing_moves);
     let plan = Plan::new().op(Tip);
     let run = h.run(&plan);
@@ -633,10 +633,10 @@ fn every_failure_of_one_judgement_is_a_finding() {
 /// first, seen once: per op, and for a world check, where a repeat would
 /// read as a later, different failure.
 ///
-/// Verification boundary: finding identity within one judgement, over
+/// Verification boundary: finding identity within one judgment, over
 /// actual runs.
 #[test]
-fn failures_of_one_judgement_at_one_site_are_one_finding() {
+fn failures_of_one_judgment_at_one_site_are_one_finding() {
     let twice = || Fail::all([Fail::new("first"), Fail::new("second")]);
     let tipped = |sim: &Sim| sim.balance("bob.near") > Balance::from_near(10);
     let run = Harness::new(tip_jar())
@@ -649,7 +649,7 @@ fn failures_of_one_judgement_at_one_site_are_one_finding() {
         .run(&Plan::new().op(Tip));
     let checks = [("twice per op", "Tip"), ("twice at rest", "world"), ("twice with a cause", "x")];
     for (check, at) in checks {
-        assert_eq!(counts(&run, check).1, 1, "one failed judgement: {run}");
+        assert_eq!(counts(&run, check).1, 1, "one failed judgment: {run}");
         let f = run.assert_found(check, at);
         assert_eq!((f.message.as_str(), f.occurrences), ("first", 1), "{run}");
     }
@@ -660,7 +660,7 @@ fn failures_of_one_judgement_at_one_site_are_one_finding() {
 }
 
 /// `Fail::all` of nothing is a pass; failures beside an element it
-/// couldn't judge are a failed judgement; with no failure, the first
+/// couldn't judge are a failed judgment; with no failure, the first
 /// element not judged decides, else the first idle: an element that
 /// couldn't be read is never masked by one with nothing at stake.
 #[test]
@@ -826,7 +826,7 @@ fn the_harness_keeps_each_ops_world_before_and_whether_it_ran_alone() {
                 .blocks(0)
                 .op(Prog::Quiet),
         );
-    // The check read the shared world of ops not alone: those judgements
+    // The check read the shared world of ops not alone: those judgments
     // are not judged, and the run incomplete; no finding.
     assert!(run.findings().is_empty(), "{run}");
     assert_eq!(run.verdict(), Verdict::Incomplete, "{run}");

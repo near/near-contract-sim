@@ -931,11 +931,11 @@ impl Model {
 
 /// A deposit of `amount`, stepped through the model at rest.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct ModelledDeposit {
+struct ModeledDeposit {
     amount: u64,
 }
 
-impl XOp for ModelledDeposit {
+impl XOp for ModeledDeposit {
     fn submit(&self, sim: &mut Sim) -> Result<(), Skip> {
         deposit(sim, self.amount).submit();
         Ok(())
@@ -1026,12 +1026,12 @@ fn an_op_that_mints_a_share_breaks_the_books() {
 /// through every deposit of the case (`at_rest_ops`). It reads actual
 /// receipt outcomes; the harness has no copy of it, and the world keeps no
 /// record of its own.
-fn against_the_model(sim: Sim) -> Harness<ModelledDeposit> {
+fn against_the_model(sim: Sim) -> Harness<ModeledDeposit> {
     let (alice, vault, shares) = books(&sim);
     let initial = Model(alice, vault, shares);
     Harness::new(sim).at_rest_ops(
         "follows the model",
-        move |sim: &Sim, ops: &[OpDone<ModelledDeposit>]| {
+        move |sim: &Sim, ops: &[OpDone<ModeledDeposit>]| {
             let expected = ops.iter().fold(initial, |model, d| {
                 let outcome = d.outcome().expect("a deposit is one transaction");
                 model.deposit(d.op().amount, |method| {
@@ -1051,7 +1051,7 @@ fn against_the_model(sim: Sim) -> Harness<ModelledDeposit> {
 
 #[test]
 fn the_vault_follows_its_model_under_targeted_faults() {
-    let plan = Plan::new().op(ModelledDeposit { amount: 40 });
+    let plan = Plan::new().op(ModeledDeposit { amount: 40 });
     let report = against_the_model(vault_sim())
         .scan(std::slice::from_ref(&plan))
         .faults(starve_or_fail())

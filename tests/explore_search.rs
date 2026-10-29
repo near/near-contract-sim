@@ -195,7 +195,7 @@ fn a_wide_number_shrinks_all_the_way() {
 // ---- the injection while shrinking ----
 
 /// A finding first seen in a case with an injected hold, which happens
-/// without one too: shrinking drops the hold, and it is labelled shown.
+/// without one too: shrinking drops the hold, and it is labeled shown.
 #[test]
 fn an_injected_finding_shrinks_to_a_natural_one() {
     let harness = Harness::new(fixture());
@@ -203,7 +203,7 @@ fn an_injected_finding_shrinks_to_a_natural_one() {
         .len(1..=1)
         .gas(gas::off())
         .faults(Faults::new(Receipts::all(), [Fault::Hold(1)]).per_case(0.99));
-    let mut relabelled = 0;
+    let mut relabeled = 0;
     for seed in 0..24 {
         let audit = harness.search(strategy.clone()).seed(seed).cases(1).run();
         let found = audit.assert_found(builtin::UNHANDLED_FAILURE, "missing-a.near::run");
@@ -217,9 +217,9 @@ fn an_injected_finding_shrinks_to_a_natural_one() {
         assert!(!found.finding.injected, "now shown: {audit}");
         assert_eq!(found.label, Label::Shown, "{audit}");
         assert_eq!(audit.found().len(), 1, "one row, not a forced and a shown one: {audit}");
-        relabelled += 1;
+        relabeled += 1;
     }
-    assert!(relabelled >= 20, "{relabelled} of 24 seeds landed the hold");
+    assert!(relabeled >= 20, "{relabeled} of 24 seeds landed the hold");
 }
 
 /// Two detached calls, and a per-op check that the op's receipts ran

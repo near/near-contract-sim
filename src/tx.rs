@@ -684,28 +684,28 @@ impl<'a> Tx<'a> {
     ///
     /// The solved points: for each function call of the tree
     /// (`receiver::method#k`), a line through the gas it was attached at
-    /// each two neighbouring samples of a region (at least `step / 2`
+    /// each two neighboring samples of a region (at least `step / 2`
     /// apart), solved for the caller gas at which it gets 0 or exactly a
     /// static gas (the fixture's gas constants, 30 Tgas and a wallet's
     /// default). Each is read ±`2k + 4`, at most 128, where `k` is the
     /// caller gas per gas the call is attached: a call attached a share
     /// floored from it holds one value for `k` gas, and the line's error
     /// grows with it. A line is solved out to the samples beside it, a
-    /// region's first and last out across the neighbouring regions. They
+    /// region's first and last out across the neighboring regions. They
     /// find a window narrower than `step` between two samples that agree,
     /// such as the few gas where a child is attached 0 and nearcore
     /// refuses it (`FunctionCallZeroAttachedGas`). The radius probe and
-    /// the solved points are heuristics, labelled by
+    /// the solved points are heuristics, labeled by
     /// [`Why`](crate::explore::Why).
     ///
     /// It costs [`edges`]' runs, plus up to `4k + 9` a crossing a line
     /// solves in range: a static gas a call's line reaches, from up to
-    /// three neighbouring lines, and nothing caps them. Each run settles a
+    /// three neighboring lines, and nothing caps them. Each run settles a
     /// copy of the `Sim`.
     ///
     /// What can still be missed: an island no read lands on, farther than
     /// 64 gas from every edge and outside the reads around each solved
-    /// point, whether its key equals its neighbours' or not — including a
+    /// point, whether its key equals its neighbors' or not — including a
     /// branch on used gas that moves no fitted line, and a crossing whose
     /// solved point is off by more than its reads. Edges are exact for
     /// this world, build and the pinned protocol costs; trie-node gas
@@ -1127,10 +1127,10 @@ fn attached(out: &TxOutcome) -> Calls {
 
 /// The caller gas at which a call gets one of `statics`, each read
 /// ±`2k + 4` (at most 128; `k` prepaid gas per gas attached), on the
-/// lines through the gas it was attached at neighbouring samples of a
+/// lines through the gas it was attached at neighboring samples of a
 /// region (read by the grid or a probe, at least `step / 2` apart). A line is
 /// solved out to the samples either side of its pair, and the region's
-/// first and last lines out across the neighbouring regions: the child
+/// first and last lines out across the neighboring regions: the child
 /// that would get 0 usually doesn't exist where it would.
 fn solved<K: Eq>(samples: &Samples<K, Calls>, statics: &[u64], step: u64) -> BTreeSet<u64> {
     /// The most read either side of a solved point.
@@ -1351,14 +1351,14 @@ mod tests {
         (at - r..=at + r).collect()
     }
 
-    /// Each line through neighbouring samples is solved for each static
+    /// Each line through neighboring samples is solved for each static
     /// gas, read ±`2k + 4`, within the samples either side of it, and the first and
-    /// last out to the neighbouring regions: a forward capped at 200
+    /// last out to the neighboring regions: a forward capped at 200
     /// still solves to 100 for 0, where one line through the farthest
     /// samples wouldn't. A solved read is not fitted through, nor a call
     /// whose gas doesn't move, nor a pair closer than half a step.
     #[test]
-    fn solved_points_lie_on_the_lines_through_neighbouring_samples() {
+    fn solved_points_lie_on_the_lines_through_neighboring_samples() {
         let grid = |g, a| (g, true, Why::Grid, a);
         let capped =
             [grid(50, None), grid(200, Some(100)), grid(300, Some(200)), grid(400, Some(200))];

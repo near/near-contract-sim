@@ -1,5 +1,5 @@
 //! The block clock: `height()` and `timestamp_ns()` are the last block's, as
-//! RPC reports the latest block. Timestamps can go backwards, and the height
+//! RPC reports the latest block. Timestamps can go backward, and the height
 //! can be set anywhere, genesis included.
 
 mod common;
@@ -123,7 +123,7 @@ fn jump_forward() {
     assert_eq!(r, sim.height());
 }
 
-/// Going backwards: nearcore's runtime does not enforce timestamp
+/// Going backward: nearcore's runtime does not enforce timestamp
 /// monotonicity (the chain/consensus layer does), so the contract simply
 /// observes the earlier value. The simulator allows it on purpose (e.g. to
 /// replay a fixture's validity window) - but a real chain can never do this.

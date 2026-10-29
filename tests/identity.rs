@@ -1,7 +1,7 @@
 //! A finding's identity: the check, the site, the failure class on its
 //! value path and the faults forced, not the check and site alone. A
 //! finding prints no cause label; its facts are the breaking step and the
-//! row. These gates run against actual simulator behaviour: an
+//! row. These gates run against actual simulator behavior: an
 //! interleaving with nothing failed on its value path is one row whose
 //! breaking step is the second deposit, never an unrelated failed
 //! receipt of the same case.

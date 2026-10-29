@@ -114,7 +114,7 @@ pub struct Config {
     /// (placeholders before the ops existed), storage staking, refund
     /// penalties. To price a defect at an older (or newer) version's
     /// costs, as a sandbox on that version would, while contracts run on
-    /// the pinned semantics: an approximation, labelled as such on every
+    /// the pinned semantics: an approximation, labeled as such on every
     /// report made under it, and never merged into a default one. Any `n` the
     /// store holds (it keeps a config per change since genesis).
     pub gas_pricing: Option<ProtocolVersion>,
@@ -642,7 +642,7 @@ pub(crate) fn assert_vm_room(e: &FunctionCallError) {
 }
 
 /// The hash of the `n`th block (genesis's for `n = 0`). It counts blocks,
-/// not heights, so hashes stay unique when the height moves backwards.
+/// not heights, so hashes stay unique when the height moves backward.
 fn block_hash(seed: u64, n: u64) -> CryptoHash {
     hash(&[seed.to_le_bytes(), n.to_le_bytes()].concat())
 }

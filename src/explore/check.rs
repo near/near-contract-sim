@@ -45,7 +45,7 @@ pub struct Harness<O, W = Sim> {
     /// The books' readings ([`diff`](Self::diff)).
     pub(crate) readings: Vec<(String, super::books::Reading<W>)>,
     /// While an enumeration runs, what its cases share ([`Memo`]): the
-    /// end checks' verdicts, the serial orders, the fixture's judgements.
+    /// end checks' verdicts, the serial orders, the fixture's judgments.
     pub(crate) memo: Option<Rc<Memo<W>>>,
     /// What [`builtin::SERIALIZABLE`] reads, once books are declared.
     pub(crate) serial: Option<Rc<super::books::Serial<W>>>,
@@ -53,7 +53,7 @@ pub struct Harness<O, W = Sim> {
     pub(crate) exports: std::cell::OnceCell<Vec<(String, Vec<String>)>>,
     /// The longest a case runs: [`CASE_TIMEOUT`], shorter in unit tests.
     pub(crate) timeout: std::time::Duration,
-    /// What settling each finding's row learnt by running ([`Settled`](super::audit::Settled)),
+    /// What settling each finding's row learned by running ([`Settled`](super::audit::Settled)),
     /// shared by the harness's clones.
     pub(crate) settled: Rc<std::cell::RefCell<super::audit::Settled<O>>>,
 }
@@ -63,7 +63,7 @@ pub struct Harness<O, W = Sim> {
 /// the key calls equal is judged once. And of
 /// [`SERIALIZABLE`](builtin::SERIALIZABLE)'s serial orders, by the plan
 /// that reached their start, never by that key ([`books::Orders`](super::books::Orders)).
-/// And of the checks' judgements of the fixture, which every case
+/// And of the checks' judgments of the fixture, which every case
 /// without setup starts from: judged by the first, credited to each.
 pub(crate) struct Memo<W> {
     pub key: Rc<dyn Fn(&W) -> u64>,

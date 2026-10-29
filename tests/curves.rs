@@ -4,7 +4,7 @@
 //!
 //! Verification boundary: the ladders' runs (which plans run, with
 //! copies settled before a step or a tail during a hold) and the rows'
-//! judgement, against actual simulator runs. The rows are observations
+//! judgment, against actual simulator runs. The rows are observations
 //! of bounded ladders: a row below its limit proves nothing past where
 //! its axis moved.
 

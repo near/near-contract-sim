@@ -1,7 +1,7 @@
 //! Gas prices of another protocol on the pinned semantics
 //! (`Config::gas_pricing`): the prices come from nearcore's
 //! own `RuntimeConfigStore`, nothing else does, the chain's books still
-//! balance, and a report made under them is labelled and never merged
+//! balance, and a report made under them is labeled and never merged
 //! into a default one.
 //!
 //! Verification boundary: executable gas-accounting inputs, which the

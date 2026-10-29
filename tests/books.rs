@@ -1144,7 +1144,7 @@ fn prepaid_call(method: &str) -> Plan<Call> {
 /// are reported: the pool that backs what it owes shrank by 1.1e21. NEAR
 /// freed with its own bytes is kept, owed to no one.
 ///
-/// Verification boundary: the books' judgement of actual storage staking.
+/// Verification boundary: the books' judgment of actual storage staking.
 #[test]
 fn a_contract_paying_its_own_storage_from_the_pool_is_reported() {
     let on = |paused| Harness::new(prepaid(paused)).books(prepaid_books());
@@ -1336,7 +1336,7 @@ impl Op for Pay {
 /// instead, the 1 NEAR any pay gives her is also "kept, owed to no one";
 /// watched, no such check exists. A diff reads it too.
 ///
-/// Verification boundary: the books' judgement over actual runs: a new
+/// Verification boundary: the books' judgment over actual runs: a new
 /// serial-order reading, and no derived check.
 #[test]
 fn a_watched_account_s_near_is_read_by_serializable_and_never_kept() {

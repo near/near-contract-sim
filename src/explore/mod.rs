@@ -318,11 +318,11 @@ impl Fail {
         Fail { message, key, cause, unjudged, idle: false, panicked: false, more: Box::default() }
     }
 
-    /// Every failure of one judgement, each its own finding at its
+    /// Every failure of one judgment, each its own finding at its
     /// [`key`](Self::key) and [`cause`](Self::cause); `Ok(())` if there
     /// are none. A check that walks holders returns
     /// `Fail::all(holders.filter_map(..))`, not its first failure. The
-    /// judgement counts as failed once. If any element fails, those not
+    /// judgment counts as failed once. If any element fails, those not
     /// judged or idle are passed over; if none does, the first not judged
     /// decides, else the first idle: an element that couldn't be read is
     /// never masked by one with nothing at stake. Give the failures
@@ -384,7 +384,7 @@ impl Fail {
     }
 
     /// Names its cause: two causes are two findings, shrunk and saved apart.
-    /// On a [`Fail::all`], every failure's: a cause is the judgement's.
+    /// On a [`Fail::all`], every failure's: a cause is the judgment's.
     pub fn cause(mut self, cause: impl Into<String>) -> Self {
         let cause = cause.into();
         self.more.iter_mut().for_each(|f| f.cause = Some(cause.clone()));

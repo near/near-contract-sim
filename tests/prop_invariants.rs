@@ -4,7 +4,7 @@
 //! 2 users, interleaved with signed txs, same-block tx groups, views,
 //! `set_state` (write and delete), `advance_to` (short and past yield
 //! timeouts), `set_timestamp_ns` (incl. the past and relative moves) and
-//! `set_height` (incl. backwards).
+//! `set_height` (incl. backward).
 //!
 //! Case count: `NCS_INV_CASES` (default 16 per property). Long run:
 //! `NCS_INV_CASES=2000 cargo test --release --test prop_invariants`.

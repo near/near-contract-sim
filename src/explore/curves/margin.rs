@@ -89,7 +89,7 @@ type Leg = (usize, super::Axis, u128, String, bool);
 
 /// `row`'s leg, unpaid if its margin falls by more than 1% of the
 /// attached gas and keeps falling: by over 0.1% between two pairs of
-/// neighbouring points at least (one step isn't growth); `None` for the
+/// neighboring points at least (one step isn't growth); `None` for the
 /// caller's gas, a choice, or no effect.
 fn leg<O>(row: &CurveRow<O>) -> Option<Leg> {
     let skip = matches!(row.axis.kind, AxisKind::CallerGas | AxisKind::Choice);

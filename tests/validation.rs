@@ -2,7 +2,7 @@
 //! and every problem is listed, not the first.
 //!
 //! Verification boundary: the harness's refusal before any execution;
-//! nothing runs, so no simulator behaviour is involved.
+//! nothing runs, so no simulator behavior is involved.
 
 use near_contract_sim::explore::{Call, Faults, Harness, Plan, Verdict, plans};
 use near_contract_sim::{Balance, Fault, Fixture, Receipts, Sim};

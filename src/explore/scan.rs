@@ -36,7 +36,7 @@ impl<O: Op<W>, W: World> Harness<O, W> {
     /// [`Faults::default()`] unless [`Scan::faults`] says otherwise:
     ///
     /// - each fault at each receipt of each step's transactions it fits,
-    ///   one at a time (findings labelled forced);
+    ///   one at a time (findings labeled forced);
     /// - each step at the caller's gas edges: the least that succeeds
     ///   ([`StepGas::LeastPlus`]`(0)`), and each gas constant of the
     ///   fixture's wasm, 30 and 300 Tgas, exactly and 1 gas either side;
@@ -62,7 +62,7 @@ impl<O: Op<W>, W: World> Harness<O, W> {
     ///   2-char and a 64-char named id, a 64-hex implicit and an
     ///   eth-implicit one: at most 17 such edges a call.
     ///
-    /// Each plan runs once. Findings at an edge are labelled with it.
+    /// Each plan runs once. Findings at an edge are labeled with it.
     pub fn scan(&self, plans: &[Plan<O>]) -> Scan<'_, O, W> {
         Scan { harness: self, plans: plans.to_vec(), faults: Faults::default(), saves: None }
     }

@@ -41,7 +41,7 @@ tests) that load each one, directly or through a helper.
 | `holder_counter.wat` | A staking pool's holder count: `stake`, `unstake`, `transfer`, a `holders` view; every partial unstake lowers the count, which underflows. | `holder_counter.rs` |
 | `host_probe.wat` | Views that call host functions directly: `keccak256`, `ecrecover`, `ed25519_verify`, `bls12381_p1_sum`, `alt_bn128_g1_sum`. | `docs.rs` |
 | `keeper.wasm` | A multi-token keeper ([tests/contracts/keeper](../contracts/keeper)): `on_transfer` credits ids from any token; `notify` calls the receiver, then `on_resolve` refunds. | `curves.rs`, `keeper.rs` |
-| `keeper_closed.wasm` | keeper.wasm with `closed`: `on_transfer` accepts only the token it was initialised with. | `keeper.rs` |
+| `keeper_closed.wasm` | keeper.wasm with `closed`: `on_transfer` accepts only the token it was initialized with. | `keeper.rs` |
 | `keeper_ping.wasm` | keeper.wasm with `ping`: `ping` credits ids, then `on_ping` hashes rounds per id on a fixed budget. | `curves.rs` |
 | `keeper_ping_hashed.wasm` | keeper_ping.wasm with `hashed`: every storage key is hashed, and `on_transfer` takes `previous_owner_ids`. | `curves.rs` |
 | `ledger_pair.wat` | A token and receiver in one module: `send` writes, calls `on_transfer`, then `resolve`; the receiver's `settle` callback panics after its write commits. | `invariants.rs` |

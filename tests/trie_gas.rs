@@ -179,7 +179,7 @@ fn big_contract_records_are_callable() {
     assert_eq!(o.logs(), vec![format!("r{}", hex(&(1_000_000u128 * 18).to_le_bytes()))]);
 }
 
-/// A populated trie changes only the trie-node part of the gas, upwards,
+/// A populated trie changes only the trie-node part of the gas, upward,
 /// and for a write to a key among thousands of similar ones it does change.
 /// Reads don't: `storage_read` charges no trie nodes.
 #[test]
