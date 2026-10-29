@@ -77,3 +77,6 @@ before finishing.
   affects. A search or scan checks the executions it ran: never claim a
   bounded campaign proves a contract correct, or that a forced fault or
   hold can happen on the real network.
+- **Conventional Commits.** Commit messages and pull request titles are
+  `type(scope): summary` (`feat`, `fix`, `docs`, `test`, `ci`,
+  `refactor`, `chore`); `!` after the type marks a breaking API change.

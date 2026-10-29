@@ -67,6 +67,15 @@ Then add a line to [CHANGELOG.md](CHANGELOG.md)'s Unreleased entry:
 goes under **Fixed**, and a change to what a run reports for the same
 code (findings, coverage, the summary) under **Verdicts**.
 
+## Commits and pull requests
+
+Commit messages and pull request titles follow
+[Conventional Commits](https://www.conventionalcommits.org/):
+`feat(explore): …`, `fix: …`, `docs: …`, `test: …`, `ci: …`,
+`refactor: …`, `chore: …`. Mark a breaking API change with `!` after the
+type (`feat!: …`). Pull requests are squash-merged, so the title is the
+commit that lands on `main`.
+
 ## Docs and fixtures
 
 - Every `rust` block in the README and in `skills/near-contract-sim/` is
