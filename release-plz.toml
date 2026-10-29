@@ -1,0 +1,28 @@
+[workspace]
+# Not on crates.io (nearcore's runtime crates aren't published): versions
+# come from `v*` git tags, and a release is a tag plus a GitHub release.
+git_only = true
+# tests/api/public.txt and `!` titles track the API; a semver check would
+# build nearcore twice on every push to main.
+semver_check = false
+
+# CHANGELOG.md's header explains these groups.
+[changelog]
+protect_breaking_commits = true
+sort_commits = "oldest"
+trim = false
+commit_parsers = [
+  { message = '^[a-z]+(\(.*\))?!:', group = "<!-- 0 -->Breaking" },
+  { body = "BREAKING CHANGE", group = "<!-- 0 -->Breaking" },
+  { message = "^feat", group = "<!-- 1 -->Added" },
+  { message = "^fix", group = "<!-- 2 -->Fixed" },
+  { message = ".*", skip = true },
+]
+body = """
+## {{ version | trim_start_matches(pat="v") }} ({{ timestamp | date(format="%Y-%m-%d") }})
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim }}
+{% for commit in commits %}
+- {% if commit.scope %}{{ commit.scope }}: {% endif %}{{ commit.message | upper_first }}\
+{% endfor %}
+{% endfor %}"""

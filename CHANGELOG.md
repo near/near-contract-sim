@@ -6,15 +6,16 @@ change is breaking when a consumer's test stops compiling, or a saved
 replay or report file stops loading as it did. `tests/api/public.txt`
 lists the public API, and `tests/docs.rs` fails when it drifts.
 
-Each entry after the first sorts its changes into **Breaking**,
-**Added**, **Fixed** and **Verdicts**. Verdicts are changes to what a run reports with the same
-code: findings, coverage, to-do items and the summary's lines. They can
-open an audit that was clean, or close one. `explore` is experimental
-and changes more often than the rest; its changes follow the same rules.
+release-plz writes each entry from the Conventional Commit titles merged
+since the last tag: **Breaking** for a `!` title, **Added** for `feat`,
+**Fixed** for `fix`. A change to what a run reports for the same code
+(findings, coverage, to-do items, the summary's lines) says so in its
+title. `explore` is experimental and changes more often than the rest;
+its changes follow the same rules.
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-10-28)
 
-The first release, not yet tagged. It runs NEAR contracts on nearcore
+The first release. It runs NEAR contracts on nearcore
 2.14.0's runtime (protocol 88) inside `cargo test`.
 
 ### Added
