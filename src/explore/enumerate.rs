@@ -171,13 +171,14 @@ impl<O: Op<W>, W: World> Harness<O, W> {
     /// - **Edges**, with [`Faults::edges`] (in [`Faults::default`]): each
     ///   new step placed at rest also runs at the scan's per-step edges
     ///   there: the caller's gas (the least that succeeds, and each gas
-    ///   constant exactly and 1 gas either side), each number and choice of its
-    ///   [`Op::axes`] (narrowed by [`Axes::only`](super::Axes::only)), and
-    ///   each stub giving back all it was sent. Each is a leaf: a case of
-    ///   its own (one at the least caller gas searches for it, as one
+    ///   constant exactly and 1 gas either side), each number and choice
+    ///   of its [`Op::axes`] (narrowed by [`Axes::only`](super::Axes::only)),
+    ///   and each stub giving back all it was sent. Each is a leaf: a case
+    ///   of its own (one at the least caller gas searches for it, as one
     ///   case), never extended and with no fault or epoch boundary of its
-    ///   own, so they add V cases per state at rest and op. A step placed inside a flight runs as the alphabet holds
-    ///   it, and no call is sent directly from `axis.near`.
+    ///   own, so they add V cases per state at rest and op. A step placed
+    ///   inside a flight runs as the alphabet holds it, and no call is sent
+    ///   directly from `axis.near`.
     /// - **Dedup**: after each depth, in a fixed order, each case's world
     ///   at rest is keyed: by default by every audited contract's state,
     ///   balance and locked balance, the epoch height and the chain
