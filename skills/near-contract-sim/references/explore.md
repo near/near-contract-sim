@@ -10,7 +10,7 @@ findings, curve rows, coverage and a to-do list of what is still open.
 | `harness.scan(&plans).run()` | each witness, then every fault at each receipt it fits and every edge | cover each flow's failure branches and boundaries |
 | `harness.curves(&plans).run()` | each axis of each witness up a ladder, measured | find where a budget or limit runs out as inputs grow |
 | `harness.search(plans(ops)).run()` | generated cases, each finding shrunk | find what you didn't think of |
-| `harness.enumerate(&ops).run()` | every sequence to depth 3, each next op at each block of the last's flight, epoch edges, `.faults(..)`; states deduped (`.key`: the default ignores height within an epoch); `.first(&xs)` draws step 1 from `xs` only (split processes by it, then `union`) | find the interleaving that breaks it; a bounded campaign finds bugs, proves nothing |
+| `harness.enumerate(&ops).run()` | every sequence to depth 3, each next op at each block of the last's flight, epoch edges, `.faults(..)` (with `Faults::edges()`, a step placed at rest also runs at the scan's per-step edges, each a leaf); states deduped (`.key`: the default ignores height within an epoch); `.first(&xs)` draws step 1 from `xs` only (split processes by it, then `union`) | find the interleaving that breaks it; a bounded campaign finds bugs, proves nothing |
 | `harness.regressions()` | every saved replay | keep findings as regression tests |
 | `a.diff(&b, &plans)` | the same plans on two harnesses | see what a fix changed, and only that |
 
@@ -286,7 +286,7 @@ message) for the `axis:` ones a copy stopped, with a glob closing them.
 | `unjudged:<check>` | no case judged this check (nothing ever owed; a book that never held anything) |
 | `stale:<path>` | a replay can't be judged now |
 | `replays:<dir>` | replays couldn't be written there |
-| `truncated:depth N`, `unexplored:depth N`, `unexplored:edges` | an enumeration's `.cases` ran out at depth N, or never reached it; or its `Faults` asked for edges, which only a scan tries (its notes say what it didn't vary) |
+| `truncated:depth N`, `unexplored:depth N` | an enumeration's `.cases` ran out at depth N, or never reached it (its notes say what it didn't vary) |
 | `incomplete:<op>, <axis>` | cases not tried to their end, one item an op and axis (an op skipped at its edges): count, first case and why; `incomplete:<op>*` closes an op's, but a blanket `incomplete:*` hides those skips. Where checks not judging were a case's only gap, the family is the check: `incomplete:<check> not judged (overlapped)` (read `effects()`, or judge in `at_rest_ops`), or `incomplete:<check> not judged` |
 | `errors` | harness errors, an op's `submit` panic among them (its message printed) |
 

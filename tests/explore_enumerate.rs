@@ -1,6 +1,6 @@
 //! `Harness::enumerate`, the `SERIALIZABLE` built-in and `Faults::reorder`,
-//! over generic demos: `tests/res/pool_sync.wat`, `staking_pool.wat` and
-//! `flight_lock.wat`.
+//! over generic demos: `tests/res/pool_sync.wat`, `staking_pool.wat`,
+//! `flight_lock.wat` and `purse.wat`.
 //!
 //! Verification boundary: what gets scheduled (each next op at each block
 //! offset inside the previous op's measured flight, an epoch boundary at
@@ -532,13 +532,15 @@ fn a_truncated_enumeration_is_not_done() {
 }
 
 /// An enumeration says what it didn't vary. Edges asked for
-/// (`Faults::default()` has them) are a scan's: an open `unexplored:edges`
-/// item, where they had been dropped silently, and the same cases run
-/// as without them. The boundary note names the holds its faults tried,
-/// none under `Faults::none()`, and no epoch boundary on long epochs.
+/// (`Faults::default()` has them) run on each step placed at rest, so no
+/// `unexplored:edges` item opens and more cases run than without them;
+/// the note says what still wasn't varied. Without edges, nothing asked
+/// for them: no item, and the note names everything not varied. The
+/// boundary note names the holds its faults tried, none under
+/// `Faults::none()`, and no epoch boundary on long epochs.
 ///
-/// Verification boundary: an enumeration's to-do items and notes only;
-/// the same plans run.
+/// Verification boundary: an enumeration's to-do items and notes, and
+/// its case count.
 #[test]
 fn an_enumeration_says_what_it_did_not_vary() {
     use near_contract_sim::explore::{Audit, Faults};
@@ -546,25 +548,31 @@ fn an_enumeration_says_what_it_did_not_vary() {
     let h = pool_harness();
     let alphabet = [deposit("alice.near"), deposit("bob.near")];
     let run = |faults: Faults| h.enumerate(&alphabet).depth(1).faults(faults).run();
+    let varied = |a: &Audit<PoolOp>| {
+        let notes = a.report().notes;
+        notes.into_iter().find(|n| n.starts_with("not varied: ")).expect("a not-varied note")
+    };
+    let no_item = |a: &Audit<PoolOp>| a.todo().iter().all(|t| t.id != "unexplored:edges");
     let edges = run(Faults::default());
-    let todo = edges.done().unwrap_err();
-    let item =
-        todo.iter().find(|t| t.id == "unexplored:edges").unwrap_or_else(|| panic!("{edges}"));
-    assert!(item.why.contains("none were tried"), "{}", item.why);
-    let notes = edges.report().notes;
-    let varied = notes.iter().find(|n| n.starts_with("not varied: ")).expect("a not-varied note");
-    for what in ["caller gas", "callers", "stub answers", "argument values"] {
-        assert!(varied.contains(what), "{varied}");
+    assert!(no_item(&edges), "{edges}");
+    let note = varied(&edges);
+    for what in ["callers", "inside a flight", "placed at rest", "not extended"] {
+        assert!(note.contains(what), "{note}");
     }
     let starve = Faults::new(Receipts::all(), [Fault::OutOfGas]);
     let unedged = run(Faults::tolerable().and(starve));
-    assert_eq!(edges.cases(), unedged.cases(), "the same plans run");
-    assert!(unedged.todo().iter().all(|t| t.id != "unexplored:edges"), "{unedged}");
+    assert!(edges.cases() > unedged.cases(), "{} against {}", edges.cases(), unedged.cases());
+    assert!(no_item(&unedged), "{unedged}");
+    let note = varied(&unedged);
+    for what in ["caller gas", "callers", "stub answers", "argument values"] {
+        assert!(note.contains(what), "{note}");
+    }
+    assert!(!note.contains("placed at rest"), "{note}");
     let boundary = |a: &Audit<PoolOp>| a.report().notes.last().cloned().unwrap_or_default();
     let held = "holds over 3 block(s) and two faults on one step were not tried";
     assert!(boundary(&unedged).contains(held), "{}", boundary(&unedged));
     let none = run(Faults::none());
-    assert!(none.todo().iter().all(|t| t.id != "unexplored:edges"), "{none}");
+    assert!(no_item(&none), "{none}");
     let nothing =
         "Offsets outside the flight and holds were not tried; no epoch boundary was tried";
     assert!(boundary(&none).contains(nothing), "{}", boundary(&none));
@@ -1237,4 +1245,157 @@ fn a_saves_file_resumes_into_a_deeper_enumeration() {
     assert_eq!(deeper.cases() + shallow.cases(), whole.cases(), "only the cases after: {deeper}");
     assert_eq!(same(&deeper.report()), same(&whole.report()));
     let _ = std::fs::remove_file(&path);
+}
+
+// ---- per-step edges ----
+
+use near_contract_sim::explore::{Audit, Axes, Faults};
+
+const PURSE: &str = "purse.near";
+const BACKED: &str = "the balance never exceeds what was deposited";
+
+/// tests/res/purse.wat, alice with 100 NEAR.
+fn purse() -> Sim {
+    let mut sim = Sim::new();
+    sim.create_account("alice.near", Balance::from_near(100));
+    sim.create_account(PURSE, Balance::from_near(10));
+    sim.deploy(PURSE, wat::parse_file(manifest_dir().join("tests/res/purse.wat")).unwrap());
+    sim
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+enum PurseOp {
+    /// alice deposits this amount.
+    Deposit(u64),
+    /// alice withdraws this amount.
+    Withdraw(u64),
+}
+
+impl Op for PurseOp {
+    fn submit(&self, sim: &mut Sim) -> Result<(), Skip> {
+        let (method, n) = match self {
+            PurseOp::Deposit(n) => ("deposit", n),
+            PurseOp::Withdraw(n) => ("withdraw", n),
+        };
+        sim.call("alice.near", PURSE, method).args(n.to_le_bytes().to_vec()).submit();
+        Ok(())
+    }
+}
+
+/// A `PurseOp` whose only argument axis is the amount withdrawn.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+struct OnlyWithdrawn(PurseOp);
+
+impl Op for OnlyWithdrawn {
+    fn submit(&self, sim: &mut Sim) -> Result<(), Skip> {
+        self.0.submit(sim)
+    }
+
+    fn name(&self) -> String {
+        self.0.name()
+    }
+
+    fn axes(&self) -> Axes {
+        Axes::only(["/Withdraw"])
+    }
+}
+
+/// The purse's stored u64 under `key`; 0 if unset.
+fn stored(sim: &Sim, key: &[u8]) -> u64 {
+    let v = sim.view_state(PURSE, key).into_iter().next().map(|(_, v)| v);
+    v.map_or(0, |v| u64::from_le_bytes(v[..8].try_into().unwrap()))
+}
+
+/// The purse's own check: its balance never exceeds what was deposited.
+fn purse_harness<O: Op>() -> Harness<O> {
+    Harness::new(purse()).at_rest(BACKED, |sim: &Sim| {
+        let (balance, deposited) = (stored(sim, b"b"), stored(sim, b"t"));
+        match balance <= deposited {
+            true => Ok(()),
+            false => Err(format!("the balance is {balance}, deposits {deposited}")),
+        }
+    })
+}
+
+fn backed<O>(audit: &Audit<O>) -> Option<&near_contract_sim::explore::Found<O>> {
+    audit
+        .found()
+        .iter()
+        .find(|f| f.finding.check == BACKED || f.folded.iter().any(|x| x.check == BACKED))
+}
+
+/// With `Faults::edges()`, each step placed at rest also runs at the
+/// edges a scan tries: a withdrawal of the type's max after a deposit
+/// wraps the balance above what was deposited. The plain enumeration
+/// never moves the amount, and the scan's one-step edges on a withdrawal
+/// alone only meet the empty purse's refusal: the bug needs the deposit
+/// before it.
+///
+/// Verification boundary: which cases an enumeration runs and what it
+/// finds there, over actual runs of the simulator.
+#[test]
+fn enumerate_edges_find_a_bug_only_after_an_earlier_step() {
+    let h = purse_harness::<PurseOp>();
+    let alphabet = [PurseOp::Deposit(5), PurseOp::Withdraw(5)];
+    let plain = h.enumerate(&alphabet).depth(2).run();
+    assert!(backed(&plain).is_none(), "{plain}");
+    let first = h.enumerate(&alphabet).depth(1).faults(Faults::edges()).run();
+    assert!(backed(&first).is_none(), "{first}");
+    let alone = Plan::new().op(PurseOp::Withdraw(5));
+    let scan = h.scan(&[alone]).faults(Faults::edges()).run();
+    assert!(backed(&scan).is_none(), "{scan}");
+    let audit = h.enumerate(&alphabet).depth(2).faults(Faults::edges()).run();
+    let found = backed(&audit).unwrap_or_else(|| panic!("{audit}"));
+    let at = found.label.to_string();
+    assert!(at.contains(&format!("step 1, /Withdraw = {}", u64::MAX)), "{at}");
+    let steps = &found.original.plan().steps;
+    assert_eq!(steps.len(), 2, "a leaf, not extended: {at}");
+}
+
+/// Edge cases are leaves: each (state at rest, op) adds the same V edge
+/// cases, and none is extended. Over one deposit op, one state at rest
+/// is extended per depth, so edges add exactly depth × V cases, and the
+/// states merged are the same as without them.
+///
+/// Verification boundary: an enumeration's case count and merged
+/// states.
+#[test]
+fn enumerate_edges_are_leaves() {
+    let h = purse_harness::<PurseOp>();
+    let run = |d: usize, faults: Faults| {
+        h.enumerate(&[PurseOp::Deposit(5)]).depth(d).faults(faults).run()
+    };
+    let merged = |a: &Audit<PurseOp>| {
+        let notes = a.report().notes;
+        notes.into_iter().find(|n| n.contains("state(s) merged")).expect("a merged note")
+    };
+    let v = run(1, Faults::edges()).cases() - run(1, Faults::none()).cases();
+    assert!(v > 3, "caller gas and the amount's edges: {v}");
+    for d in 2..=3 {
+        let (on, off) = (run(d, Faults::edges()), run(d, Faults::none()));
+        assert_eq!(on.cases() - off.cases(), d as u32 * v, "depth {d}: {on}");
+        assert_eq!(merged(&on), merged(&off), "depth {d}");
+    }
+}
+
+/// `Axes::only` narrows an enumeration's edges as a scan's: with only the
+/// amount withdrawn an axis, a deposit runs at its caller gas edges and
+/// not at its amount's three (0, 1 and the max), and the withdrawal's max
+/// still finds the wrap.
+///
+/// Verification boundary: an enumeration's case count and findings.
+#[test]
+fn axes_only_narrows_enumerate_edges() {
+    let edges = Faults::edges;
+    let wide = purse_harness::<PurseOp>();
+    let all = wide.enumerate(&[PurseOp::Deposit(5)]).depth(1).faults(edges()).run().cases();
+    let narrow = purse_harness::<OnlyWithdrawn>();
+    let only = narrow.enumerate(&[OnlyWithdrawn(PurseOp::Deposit(5))]).depth(1);
+    let only = only.faults(edges()).run().cases();
+    assert_eq!(all - only, 3, "the amount's edges: {all} against {only}");
+    assert!(only > 1, "caller gas stays an axis");
+    let alphabet = [PurseOp::Deposit(5), PurseOp::Withdraw(5)].map(OnlyWithdrawn);
+    let audit = narrow.enumerate(&alphabet).depth(2).faults(edges()).run();
+    assert!(backed(&audit).is_some(), "{audit}");
 }

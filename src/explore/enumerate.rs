@@ -6,7 +6,7 @@ use super::audit::Audit;
 use super::plan::{Gap, Plan, SHORT_EPOCH};
 use super::report::Todo;
 use super::run::{Run, Verdict};
-use super::scan::{Meant, fault_injects};
+use super::scan::{Meant, fault_injects, step_edges, take_in};
 use super::store::Saves;
 use super::{Faults, Harness, Op, World, gas, progress};
 use crate::{Fault, Sim};
@@ -14,10 +14,19 @@ use near_primitives::hash::CryptoHash;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
-/// What no enumeration varies, which its report states.
+/// What an enumeration without edges doesn't vary, which its report
+/// states.
 const NOT_VARIED: &str = "not varied: caller gas (as each op sets it), callers (as each op \
     signs; no direct call from axis.near), stub answers (the fixture's), argument values (as the \
     alphabet holds them)";
+
+/// What one with edges ([`Faults::edges`]) doesn't vary, which its report
+/// states.
+const NOT_VARIED_EDGES: &str = "not varied: callers (as each op signs; no direct call from \
+    axis.near), a stub answering more than it was sent, and on a step placed inside a flight \
+    caller gas, stub answers and argument values; a step placed at rest also ran at a scan's \
+    per-step edges (caller gas, a stub giving back all it was sent, the op's axes), each edge a \
+    case not extended";
 
 /// The verification boundary an enumeration under `faults` states, on a
 /// fixture whose epochs it places boundaries in or not (the dedup key's
@@ -112,6 +121,9 @@ enum Kind {
     Fault(Meant),
     /// An epoch boundary inside the flight of its last ops.
     Edge,
+    /// A per-step edge of its last step, placed at rest (where, and the
+    /// axis it moves): a leaf, never extended.
+    Leaf(String, String),
 }
 
 /// An enumeration, built by [`Harness::enumerate`]; [`run`](Self::run)
@@ -155,8 +167,16 @@ impl<O: Op<W>, W: World> Harness<O, W> {
     ///   their receipts meet the boundary elsewhere.
     /// - **Faults**: each fault at each receipt of the new step it fits,
     ///   as a scan tries them, [`Faults::reorder`] included. None by
-    ///   default. Edges are a scan's alone: faults that ask for them
-    ///   ([`Faults::default`]) leave an `unexplored:edges` item open.
+    ///   default.
+    /// - **Edges**, with [`Faults::edges`] (in [`Faults::default`]): each
+    ///   new step placed at rest also runs at the scan's per-step edges
+    ///   there: the caller's gas (the least that succeeds, and each gas
+    ///   constant 1 gas either side), each number and choice of its
+    ///   [`Op::axes`] (narrowed by [`Axes::only`](super::Axes::only)), and
+    ///   each stub giving back all it was sent. Each is a leaf: a case of
+    ///   its own, never extended, so they add V cases per state at rest
+    ///   and op. A step placed inside a flight runs as the alphabet holds
+    ///   it, and no call is sent directly from `axis.near`.
     /// - **Dedup**: after each depth, in a fixed order, each case's world
     ///   at rest is keyed: by default by every audited contract's state,
     ///   balance and locked balance, the epoch height and the chain
@@ -234,8 +254,8 @@ impl<O: Op<W>, W: World> Enumerate<'_, O, W> {
     }
 
     /// The faults to force on each new step, as [`Scan::faults`](super::Scan::faults)
-    /// takes them; [`Faults::none`] by default. Edges are left to a scan:
-    /// faults with them leave an `unexplored:edges` item open.
+    /// takes them, and whether to run each new step placed at rest at its
+    /// per-step edges ([`Faults::edges`]); [`Faults::none`] by default.
     /// [`Faults::default`]'s faults without its edges are
     /// `Faults::tolerable().and(Faults::new(Receipts::all(), [Fault::OutOfGas]))`.
     pub fn faults(mut self, faults: Faults) -> Self {
@@ -382,6 +402,15 @@ impl<O: Op<W>, W: World> Enumerate<'_, O, W> {
                 // Replaying what the saves hold adds and writes nothing:
                 // they already count past it.
                 let new = ran as usize > resumed;
+                let last = plan.steps.len() - 1;
+                // A leaf is taken in, and goes no further.
+                if let Kind::Leaf(at, axis) = &kind {
+                    if new {
+                        take_in(&mut audit, &run, Some((at, axis)), last, "the case");
+                        Saves::tick(&self.saves, h, &audit, ran as usize, false);
+                    }
+                    continue;
+                }
                 if new {
                     audit.add(&run, None);
                     if let Kind::Fault(m) = &kind
@@ -390,7 +419,6 @@ impl<O: Op<W>, W: World> Enumerate<'_, O, W> {
                         audit.r.errors.push(why);
                     }
                 }
-                let last = plan.steps.len() - 1;
                 let f = step_flight(&run, last);
                 if let Some(op) = run.ops.get(last).filter(|o| o.skipped.is_none()) {
                     flights.entry(op.name.clone()).or_default().insert(f);
@@ -416,6 +444,12 @@ impl<O: Op<W>, W: World> Enumerate<'_, O, W> {
                         let (plans, dropped) = epoch_variants(&plan, span, length);
                         unplaced += dropped;
                         queue.extend(plans.into_iter().map(|p| (p, Kind::Edge, base)));
+                    }
+                    // A step placed at rest, at each of its edges.
+                    if self.faults.tries_edges() && group_start(&plan) == last {
+                        for e in step_edges(h, &run, last) {
+                            queue.push((e.plan, Kind::Leaf(e.at, e.axis), base));
+                        }
                     }
                 }
                 if new {
@@ -490,16 +524,6 @@ impl<O: Op<W>, W: World> Enumerate<'_, O, W> {
                 "a plan with Gap::EpochEdge by hand after the ops before settle",
             ));
         }
-        if self.faults.tries_edges() {
-            audit.unmoved.push(Todo::new(
-                "unexplored:edges".to_owned(),
-                "edges (caller gas, numbers, stub answers, direct calls from axis.near) are a \
-                 scan's; none were tried"
-                    .to_owned(),
-                "Faults without edges (Faults::default()'s without them: Faults::tolerable() and \
-                 OutOfGas), or a scan of these plans and Harness::excuse",
-            ));
-        }
         let flights: Vec<String> = flights
             .iter()
             .map(|(op, f)| {
@@ -527,7 +551,7 @@ impl<O: Op<W>, W: World> Enumerate<'_, O, W> {
             .chain([
                 format!("flights (blocks), per op: {}", flights.join(", ")),
                 format!("{merged} state(s) merged {key_note}"),
-                NOT_VARIED.to_owned(),
+                if self.faults.tries_edges() { NOT_VARIED_EDGES } else { NOT_VARIED }.to_owned(),
                 boundary(&self.faults, epochs),
             ])
             .collect();

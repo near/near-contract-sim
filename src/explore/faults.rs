@@ -77,6 +77,9 @@ impl Faults {
     /// twice what it was sent, each number's edges, and the caller's gas.
     /// Findings there are shown, at the caller's gas. An op that pins every
     /// call's gas ([`Tx::gas`](crate::Tx::gas)) keeps it, as the scan says.
+    /// An [`enumerate`](super::Harness::enumerate) runs each new step placed
+    /// at rest at the per-step ones (caller gas, numbers and choices, a
+    /// stub giving back all it was sent), each a case not extended.
     /// A search ignores this: its plans draw the caller's gas
     /// ([`Plans::gas`](super::Plans::gas)).
     pub fn edges() -> Self {
