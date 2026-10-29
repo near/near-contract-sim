@@ -650,3 +650,94 @@ pub(crate) fn sizes<O: Op<W>, W: World>(
     let (ten, more) = (probe(10), probe(99));
     ten.is_some() && ten != more
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Balance, Sim};
+    use serde::{Deserialize, Serialize};
+
+    /// A purse deposit of an amount, its call's gas set by the caller or
+    /// pinned.
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    enum Pay {
+        Deposit(u64),
+        Pinned(u64),
+    }
+
+    impl Op for Pay {
+        fn submit(&self, sim: &mut Sim) -> Result<(), super::super::Skip> {
+            let (Pay::Deposit(n) | Pay::Pinned(n)) = self;
+            let call =
+                sim.call("alice.near", "purse.near", "deposit").args(n.to_le_bytes().to_vec());
+            let pin = matches!(self, Pay::Pinned(_)).then(|| Gas::from_teragas(50));
+            call.gas(pin).submit();
+            Ok(())
+        }
+    }
+
+    fn edges(op: Pay) -> (Vec<Edge<Pay>>, Gas) {
+        let mut sim = Sim::new();
+        sim.create_account("alice.near", Balance::from_near(100));
+        sim.create_account("purse.near", Balance::from_near(10));
+        let wasm = wat::parse_str(include_str!("../../tests/res/purse.wat")).unwrap();
+        sim.deploy("purse.near", wasm);
+        let h = Harness::<Pay>::new(sim);
+        super::super::big_stack(|| {
+            gas::with_fixture(h.fixture.as_ref(), || {
+                let run = h.run_case(&Plan::new().op(op));
+                (step_edges(&h, &run, 0), h.gas_ceiling())
+            })
+        })
+    }
+
+    /// The caller's gas edges: the least first and alone searched for,
+    /// then each constant exactly and 1 gas either side; none on a step
+    /// whose call pins its gas.
+    #[test]
+    fn caller_gas_edges_are_the_least_then_each_constant_either_side() {
+        let (all, _) = edges(Pay::Deposit(5));
+        let gas: Vec<&Edge<Pay>> = all.iter().filter(|e| e.axis == "caller gas").collect();
+        assert_eq!(gas[0].plan.steps[0].gas, Some(StepGas::LeastPlus(Gas::ZERO)));
+        assert!(gas[0].least && gas[0].plan.bands, "{}", gas[0].at);
+        assert!(gas[1..].iter().all(|e| !e.least && !e.plan.bands));
+        let thresholds = gas::thresholds();
+        assert_eq!(gas.len(), 1 + 3 * thresholds.len());
+        for (k, t) in thresholds.iter().enumerate() {
+            let at =
+                |d: i64| Some(StepGas::Exactly(Gas::from_gas(t.as_gas().wrapping_add_signed(d))));
+            let got: Vec<_> =
+                gas[1 + 3 * k..4 + 3 * k].iter().map(|e| e.plan.steps[0].gas).collect();
+            assert_eq!(got, [at(-1), at(0), at(1)], "around {t}");
+            assert!(gas[1 + 3 * k].at.ends_with(" - 1 gas"), "{}", gas[1 + 3 * k].at);
+        }
+        // An amount that is no gas runs as the witness ran: no least.
+        let amounts: Vec<&Edge<Pay>> = all.iter().filter(|e| e.axis == "/Deposit").collect();
+        assert_eq!(amounts.len(), 3, "0, 1 and the max");
+        assert!(amounts.iter().all(|e| !e.least && e.plan.steps[0].gas.is_none()));
+        let (pinned, _) = edges(Pay::Pinned(5));
+        assert!(pinned.iter().all(|e| e.axis != "caller gas"), "a pinned call keeps its gas");
+        assert_eq!(pinned.len(), 3);
+    }
+
+    /// An amount taken for gas (1 Tgas to 1 PGas) also runs at each gas
+    /// constant 1 gas either side, at the ceiling; at 0, 1 and its max,
+    /// at the least caller gas and the ceiling.
+    #[test]
+    fn a_gas_like_amount_runs_its_constants_at_the_ceiling() {
+        let (all, ceiling) = edges(Pay::Deposit(5_000_000_000_000));
+        let ceiling = Some(StepGas::Exactly(ceiling));
+        let amounts: Vec<&Edge<Pay>> = all.iter().filter(|e| e.axis == "/Deposit").collect();
+        let at = |n: u64| amounts.iter().filter(move |e| e.at.contains(&format!(" = {n},")));
+        let thirty = 30_000_000_000_000;
+        for n in [thirty - 1, thirty, thirty + 1] {
+            let got: Vec<_> = at(n).map(|e| e.plan.steps[0].gas).collect();
+            assert_eq!(got, [ceiling], "{n}");
+        }
+        for n in [0, 1, u64::MAX] {
+            let got: Vec<_> = at(n).map(|e| (e.plan.steps[0].gas, e.least)).collect();
+            let least = Some(StepGas::LeastPlus(Gas::ZERO));
+            assert_eq!(got, [(least, true), (ceiling, false)], "{n}");
+        }
+    }
+}
