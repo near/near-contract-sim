@@ -794,7 +794,6 @@ struct near_contract_sim::explore::Region structfield why = why: Why
 struct near_contract_sim::explore::Regression = pub struct Regression<O>
 struct near_contract_sim::explore::Regression impl = impl<O> Regression<O>
 struct near_contract_sim::explore::Regression method harness_changed = pub fn harness_changed(&self) -> bool
-struct near_contract_sim::explore::Regression structfield by_site = by_site: bool
 struct near_contract_sim::explore::Regression structfield check = check: String
 struct near_contract_sim::explore::Regression structfield fixture_changed = fixture_changed: bool
 struct near_contract_sim::explore::Regression structfield path = path: PathBuf

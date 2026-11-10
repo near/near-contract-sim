@@ -32,7 +32,6 @@
 //! as this harness's op, its check is gone, or a harness error), never a panic.
 
 use super::audit::{Audit, Found};
-use super::check::site_is;
 use super::run::{Id, Run, Verdict};
 use super::{Harness, Op, Plan, World};
 use crate::sim::Sim;
@@ -59,10 +58,6 @@ pub struct Regression<O> {
     pub site: String,
     /// Whether the fixture differs from the one it was saved on.
     pub fixture_changed: bool,
-    /// Saved before replays kept their finding's identity: matched on
-    /// check and site alone, so another cause there reads as this one
-    /// ([`Harness::regressions`] says so on stderr). Regenerate it.
-    pub by_site: bool,
     /// What reproducing it gave.
     pub status: Status<O>,
 }
@@ -112,9 +107,8 @@ struct Saved<P> {
     #[serde(default)]
     checks: Vec<String>,
     /// The finding's identity (its cause, breaking ops, failed receipt and
-    /// class, faults): none in an older file.
-    #[serde(default)]
-    id: Option<Id>,
+    /// class, faults).
+    id: Id,
     /// The identities of the findings folded into its row that its case
     /// shows.
     #[serde(default)]
@@ -178,8 +172,9 @@ impl<O: Op<W>, W: World> Harness<O, W> {
                 false
             }
         };
+        let replay = store.replayer(self);
         self.save_found(audit, phase.as_ref(), &mut |x| {
-            let (path, text) = store.replay(self, x);
+            let (path, text) = replay(x);
             put(&path, &text).then_some(path)
         });
         // In this store, wherever the saved part's was.
@@ -263,38 +258,42 @@ impl Store {
         Store::at(root.join(file_name(&test)))
     }
 
-    /// Row `x`'s replay: its file and what it holds.
-    pub(crate) fn replay<O: Op<W>, W: World>(
-        &self,
-        h: &Harness<O, W>,
-        x: &Found<O>,
-    ) -> (PathBuf, String) {
-        let Found { finding: f, label, id, run, shows, .. } = x;
-        let plan = &run.plan;
-        let saved = Saved {
-            format: super::FORMAT,
-            check: f.check.clone(),
-            site: f.site.to_string(),
-            label: label.to_string(),
-            fixture: fingerprint(h.fixture.as_ref()),
-            plan,
-            sites: sites(run, Some(f)),
-            checks: h.check_names(),
-            id: Some(id.clone()),
-            also: {
-                // In one order: the same replay is the same file.
-                let mut also = shows.clone();
-                also.sort_by_cached_key(|id| format!("{id:?}"));
-                also
-            },
-        };
-        let name = file_name(&format!("{}@{}", f.check, f.site));
-        let text = serde_json::to_string_pretty(&saved).expect("a replay serializes");
-        // Keyed by all it holds: a file a report cites keeps reproducing
-        // what it printed, whatever campaign or harness writes after it; a
-        // replay saved again writes the same file, the same bytes.
-        let path = self.dir.join(format!("{name}-{}.json", short_hash(text.as_bytes())));
-        (path, text)
+    /// Row `x`'s replay: its file and what it holds. The fixture's
+    /// fingerprint and the harness's checks, the same for every row, are
+    /// taken once.
+    pub(crate) fn replayer<'a, O: Op<W>, W: World>(
+        &'a self,
+        h: &'a Harness<O, W>,
+    ) -> impl Fn(&Found<O>) -> (PathBuf, String) + 'a {
+        let (fixture, checks) = (fingerprint(h.fixture.as_ref()), h.check_names());
+        move |x| {
+            let Found { finding: f, label, id, run, shows, .. } = x;
+            let plan = &run.plan;
+            let saved = Saved {
+                format: super::FORMAT,
+                check: f.check.clone(),
+                site: f.site.to_string(),
+                label: label.to_string(),
+                fixture: fixture.clone(),
+                plan,
+                sites: sites(run, Some(f)),
+                checks: checks.clone(),
+                id: id.clone(),
+                also: {
+                    // In one order: the same replay is the same file.
+                    let mut also = shows.clone();
+                    also.sort_by_cached_key(|id| format!("{id:?}"));
+                    also
+                },
+            };
+            let name = file_name(&format!("{}@{}", f.check, f.site));
+            let text = serde_json::to_string_pretty(&saved).expect("a replay serializes");
+            // Keyed by all it holds: a file a report cites keeps reproducing
+            // what it printed, whatever campaign or harness writes after it; a
+            // replay saved again writes the same file, the same bytes.
+            let path = self.dir.join(format!("{name}-{}.json", short_hash(text.as_bytes())));
+            (path, text)
+        }
     }
 
     /// Writes `text` at `path` in this store, whole: a reader sees the
@@ -318,17 +317,19 @@ impl Store {
         harness: &Harness<O, W>,
     ) -> Vec<Regression<O>> {
         let (mut skipped, mut unreadable, mut lacks) = (0, 0, BTreeSet::new());
-        let mine = |path: &PathBuf| {
-            let Some(head) = read_head(path) else {
+        // Each file is read once.
+        let mine = |path: PathBuf| {
+            let Some(head) = read_head(&path) else {
                 unreadable += 1;
-                return false;
+                return None;
             };
             let missing = foreign(harness, &head.checks);
             skipped += usize::from(!missing.is_empty());
             lacks.extend(missing.iter().cloned());
-            missing.is_empty()
+            missing.is_empty().then_some((path, head))
         };
-        let files: Vec<PathBuf> = self.files().into_iter().filter(mine).collect();
+        let files: Vec<(PathBuf, Saved<serde_json::Value>)> =
+            self.files().into_iter().filter_map(mine).collect();
         let lacks: Vec<String> = lacks.into_iter().map(|c| format!("{c:?}")).collect();
         let lacks =
             if lacks.is_empty() { String::new() } else { format!(" lacking {}", lacks.join(", ")) };
@@ -337,16 +338,9 @@ impl Store {
             "{n} replays of this harness in {dir} ({skipped} other harnesses'{lacks}, \
              {unreadable} unreadable)"
         );
-        let regressions = files.into_iter().filter_map(|path| regression(&path, harness));
+        let regressions = files.into_iter().map(|(path, head)| regression(&path, head, harness));
         regressions
             .inspect(|r| {
-                if r.by_site {
-                    eprintln!(
-                        "{}: saved before identities, matched on its check and site alone; \
-                         regenerate it",
-                        r.path.display()
-                    );
-                }
                 if r.harness_changed() {
                     eprintln!(
                         "{}: {} no longer shows on the fixture it was saved on: its op or check \
@@ -370,13 +364,17 @@ impl Store {
     }
 }
 
-/// The replay at `path`, reproduced on `harness`; `None` if not a replay.
-/// It is gone only where its saved path ran again: every site of its
-/// breaking receipts ran (it saved some), no op skipped, and every fault
-/// it forced landed.
-fn regression<O: Op<W>, W: World>(path: &Path, harness: &Harness<O, W>) -> Option<Regression<O>> {
+/// The replay `head` (the file at `path`), reproduced on `harness`. It is
+/// gone only where its saved path ran again: every site of its breaking
+/// receipts ran (it saved some), no op skipped, and every fault it forced
+/// landed.
+fn regression<O: Op<W>, W: World>(
+    path: &Path,
+    head: Saved<serde_json::Value>,
+    harness: &Harness<O, W>,
+) -> Regression<O> {
     let fixture = fingerprint(harness.fixture.as_ref());
-    let (head, plan) = read::<O, W>(path, harness)?;
+    let (head, plan) = judge::<O, W>(head, harness);
     let status = match plan {
         Err(why) => Status::Stale(why),
         Ok(plan) => {
@@ -384,12 +382,9 @@ fn regression<O: Op<W>, W: World>(path: &Path, harness: &Harness<O, W>) -> Optio
             // Its identities, where it was saved: one of two causes at its
             // check and site fixed reads fixed; a finding folded into its
             // row that its case showed, not fixed, still shows.
-            let matches = |f: &crate::findings::Finding| match &head.id {
-                Some(id) => {
-                    let found = super::run::id(&run, f);
-                    found == *id || head.also.contains(&found)
-                }
-                None => f.check == head.check && site_is(&f.site, &head.site),
+            let matches = |f: &crate::findings::Finding| {
+                let found = super::run::id(&run, f);
+                found == head.id || head.also.contains(&found)
             };
             // Its path ran again: its sites, every op, and every fault it
             // forced, on a receipt (one that fits none forced nothing).
@@ -410,8 +405,7 @@ fn regression<O: Op<W>, W: World>(path: &Path, harness: &Harness<O, W>) -> Optio
         }
     };
     let (check, site, fixture_changed) = (head.check, head.site, head.fixture != fixture);
-    let by_site = head.id.is_none();
-    Some(Regression { path: path.to_owned(), check, site, fixture_changed, by_site, status })
+    Regression { path: path.to_owned(), check, site, fixture_changed, status }
 }
 
 /// A replay file's contents, its plan unread; `None` if not a replay.
@@ -425,8 +419,16 @@ fn read<O: Op<W>, W: World>(
     path: &Path,
     harness: &Harness<O, W>,
 ) -> Option<(Saved<serde_json::Value>, Result<Plan<O>, String>)> {
-    let head = read_head(path)?;
-    let plan = Plan::<O>::from_json(&head.plan.to_string());
+    Some(judge(read_head(path)?, harness))
+}
+
+/// `head`'s plan, read as `harness`'s ops, or why the replay can't be
+/// judged. The plan is taken out of `head`.
+fn judge<O: Op<W>, W: World>(
+    mut head: Saved<serde_json::Value>,
+    harness: &Harness<O, W>,
+) -> (Saved<serde_json::Value>, Result<Plan<O>, String>) {
+    let plan = Plan::<O>::from_value(std::mem::take(&mut head.plan));
     let plan = match plan.map_err(|why| format!("its plan no longer reads: {why}")) {
         _ if head.format > super::FORMAT => Err(format!(
             "written in format {}, newer than this build's {}",
@@ -445,7 +447,7 @@ fn read<O: Op<W>, W: World>(
         }
         plan => plan,
     };
-    Some((head, plan))
+    (head, plan)
 }
 
 impl Store {
@@ -576,8 +578,9 @@ impl Saves {
     fn write<O: Op<W>, W: World>(&self, h: &Harness<O, W>, audit: &Audit<O>, done: usize) {
         let mut snap = audit.clone();
         let (store, mut replays) = (h.replays(), std::collections::HashMap::new());
+        let replay = store.replayer(h);
         h.save_found(&mut snap, None, &mut |x| {
-            let (path, text) = store.replay(h, x);
+            let (path, text) = replay(x);
             replays.insert(path.clone(), text);
             Some(path)
         });

@@ -91,7 +91,7 @@ fn a_trap_finding_s_replay_shows_again() {
     assert!(!all.is_empty());
     for r in &all {
         let shows = matches!(r.status, near_contract_sim::explore::Status::Shows(_));
-        assert!(shows && !r.by_site, "{r:?}");
+        assert!(shows, "{r:?}");
     }
     let _ = std::fs::remove_dir_all(&dir);
 }

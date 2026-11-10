@@ -188,6 +188,11 @@ fn open_gaps_print_first() {
     assert!(text.find(item.as_str()) < text.find("Only what was tried"), "{text}");
 }
 
+/// The identity a hand-written replay of the check "gone" holds.
+fn gone_id() -> serde_json::Value {
+    json!({ "check": "gone", "site": { "Op": "x" }, "cause": null, "ops": [], "receipt": null, "class": null, "faults": [] })
+}
+
 /// A replay whose check the harness no longer has is a to-do item, found
 /// when the audit saves, without running it. The store reads each file
 /// once per process; a file deleted or added later is seen at the next
@@ -199,7 +204,7 @@ fn a_stale_replay_is_open() {
     let h = harness("custody.wasm").store(&dir);
     // Of this build's format: an older one is stale for that.
     let format = h.union(&[]).format;
-    let old = json!({ "format": format, "check": "gone", "site": "x", "label": "shown", "fixture": "", "plan": {} });
+    let old = json!({ "format": format, "check": "gone", "site": "x", "label": "shown", "fixture": "", "plan": {}, "id": gone_id() });
     std::fs::write(dir.join("gone@x-0.json"), old.to_string()).unwrap();
     let stale = |a: &Audit<Deposit>| {
         a.todo().into_iter().filter(|t| t.id.starts_with("stale:")).collect::<Vec<_>>()
@@ -384,8 +389,7 @@ fn union_counts_each_run_once_and_keeps_every_excuse() {
     // Excused in its own report, unreached in the union, closed by its
     // report's excuse though this harness has none.
     let excused = harness("custody.wasm").excuse(withdraw, "a later pass").store(&dir);
-    let stale =
-        json!({ "check": "gone", "site": "x", "label": "shown", "fixture": "", "plan": {} });
+    let stale = json!({ "check": "gone", "site": "x", "label": "shown", "fixture": "", "plan": {}, "id": gone_id() });
     std::fs::write(dir.join("gone@x-0.json"), stale.to_string()).unwrap();
     let curves = excused.curves(&[witness()]).run().report();
     let stale = format!("stale:{}", dir.join("gone@x-0.json").display());
