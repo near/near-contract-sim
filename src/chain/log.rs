@@ -174,18 +174,14 @@ impl Log {
                     TrieKey::ContractData { account_id, key },
                 ) = (&ch.cause, &c.trie_key)
                 {
-                    let list = self.written.entry(*receipt_hash).or_default();
-                    let len = ch.data.as_ref().map(Vec::len);
-                    let account = account_id.clone();
-                    match list.iter_mut().find(|w| (&w.account, &w.key[..]) == (&account, &key[..]))
-                    {
-                        Some(w) => w.len = len,
-                        None => list.push(crate::outcome::WrittenKey {
-                            account,
+                    // nearcore commits once per receipt: one change per key.
+                    self.written.entry(*receipt_hash).or_default().push(
+                        crate::outcome::WrittenKey {
+                            account: account_id.clone(),
                             key: key.to_vec(),
-                            len,
-                        }),
-                    }
+                            len: ch.data.as_ref().map(Vec::len),
+                        },
+                    );
                 }
                 if let StateChangeCause::ReceiptProcessing { receipt_hash } = ch.cause {
                     let what = changed(&c.trie_key, prev.as_deref(), ch.data.as_deref());

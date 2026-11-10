@@ -180,8 +180,8 @@ impl<O: Op<W>, W: World> Harness<O, W> {
     ///   inside a flight runs as the alphabet holds it, and no call is sent
     ///   directly from `axis.near`.
     /// - **Dedup**: after each depth, in a fixed order, each case's world
-    ///   at rest is keyed: by default by every audited contract's state,
-    ///   balance and locked balance, the epoch height and the chain
+    ///   at rest is keyed: by default by every audited contract's code,
+    ///   state, balance and locked balance, the epoch height and the chain
     ///   config ([`key`](Enumerate::key) overrides it). A state already
     ///   seen is extended only inside the flight of its last ops, and
     ///   only if those ops, from a state before them with their key, are
@@ -475,7 +475,7 @@ impl<O: Op<W>, W: World> Enumerate<'_, O, W> {
                 let Some(world) = run.world::<W>().filter(|_| whole) else { continue };
                 let lead = group_lead(&plan, plan.steps.len() - 1);
                 let remaining = span.saturating_sub(lead);
-                let rest = key(world);
+                let rest = run.rest_key.unwrap_or_else(|| key(world));
                 let fresh = seen.insert(rest);
                 // The ops in flight together, from the state before them:
                 // what an op placed inside their flight meets.
@@ -677,19 +677,17 @@ fn epoch_variants<O: Clone>(plan: &Plan<O>, span: u64, length: u64) -> (Vec<Plan
     (plans, (0..=span).filter(|&k| !fits(k)).count())
 }
 
-/// The default dedup key of `sim` at rest: each audited contract's state,
-/// balance and locked balance, the epoch height and the config.
+/// The default dedup key of `sim` at rest: each audited contract's code
+/// hash, state, balance and locked balance, the epoch height and the
+/// config.
 pub(crate) fn default_key(sim: &Sim, audits: Option<&[String]>) -> u64 {
     let mut bytes: Vec<u8> = vec![];
-    for (account, _) in sim.contracts() {
-        if audits.is_some_and(|a| !a.contains(&account)) {
-            continue;
-        }
-        let Some(a) = sim.account(account.as_str()) else { continue };
+    for (account, a) in sim.coded(audits) {
         bytes.extend(account.as_bytes());
-        bytes.extend(a.amount.as_yoctonear().to_le_bytes());
-        bytes.extend(a.locked.as_yoctonear().to_le_bytes());
-        for (k, v) in sim.view_state(account.as_str(), b"") {
+        bytes.extend(a.amount().as_yoctonear().to_le_bytes());
+        bytes.extend(a.locked().as_yoctonear().to_le_bytes());
+        bytes.extend(a.local_contract_hash().unwrap_or_default().as_ref());
+        for (k, v) in sim.view_state(&account, b"") {
             bytes.extend((k.len() as u64).to_le_bytes());
             bytes.extend(k);
             bytes.extend((v.len() as u64).to_le_bytes());
@@ -802,6 +800,50 @@ mod tests {
         assert_eq!(default_key(&before, Some(&a)), default_key(&sim, Some(&a)));
         assert_ne!(default_key(&before, None), default_key(&sim, None));
         sim.call("alice.near", "a.near", "work").args(vec![0]).transact().assert_failure();
+        assert_ne!(default_key(&before, Some(&a)), default_key(&sim, Some(&a)));
+    }
+
+    /// An account without code is not in the default key, audited or not.
+    #[test]
+    fn the_default_key_leaves_out_accounts_without_code() {
+        let mut sim = Sim::new();
+        sim.create_account("alice.near", Balance::from_near(100));
+        sim.create_account("bob.near", Balance::from_near(100));
+        let before = sim.clone();
+        let one = Balance::from_near(1);
+        sim.tx("alice.near", "bob.near").transfer(one).transact().assert_success();
+        let alice = ["alice.near".to_owned()];
+        assert_eq!(default_key(&before, None), default_key(&sim, None));
+        assert_eq!(default_key(&before, Some(&alice)), default_key(&sim, Some(&alice)));
+    }
+
+    /// Two states that differ only in a contract's code are two keys:
+    /// their end checks may judge them differently.
+    #[test]
+    fn the_default_key_reads_the_code_deployed() {
+        use near_primitives::account::AccountContract;
+        use near_primitives::state_record::StateRecord;
+        // a.near's code set in place: no transaction, no gas.
+        let with = |wat: &str| {
+            let mut sim = Sim::new();
+            sim.create_account("a.near", Balance::from_near(10));
+            let code = wat::parse_str(wat).unwrap();
+            let hash = CryptoHash::hash_bytes(&code);
+            let mut records = sim.state_records(["a.near"]);
+            for r in &mut records {
+                if let StateRecord::Account { account, .. } = r {
+                    account.set_contract(AccountContract::Local(hash)).unwrap();
+                }
+            }
+            let account_id = "a.near".parse().unwrap();
+            records.push(StateRecord::Contract { account_id, code });
+            sim.apply_state_records(records);
+            sim
+        };
+        let before = with(include_str!("../../tests/res/flight_lock.wat"));
+        let sim = with("(module)");
+        let a = ["a.near".to_owned()];
+        assert_ne!(default_key(&before, None), default_key(&sim, None));
         assert_ne!(default_key(&before, Some(&a)), default_key(&sim, Some(&a)));
     }
 }

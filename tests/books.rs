@@ -1391,3 +1391,154 @@ fn two_assets_of_one_name_panic_naming_both() {
     let books = Books::<Pay>::new().watch_near("alice.near").keeps_no_near("alice.near");
     let _ = Harness::new(pot()).books(books);
 }
+
+// ---- serial orders across an epoch; claims judged one by one ----
+
+/// Two calls that fail and move nothing, in flight together across an
+/// epoch boundary: their serial orders give what the case did, so
+/// `SERIALIZABLE` judges the overlap. Each failed op may also be left
+/// out, and leaving both out plays nothing, which never reaches the
+/// case's epoch: that empty order made a matching overlap "not judged".
+///
+/// Verification boundary: the books' judgment of an actual run: which
+/// serial orders it plays, not the schedule.
+#[test]
+fn a_matching_overlap_across_an_epoch_is_judged() {
+    use near_contract_sim::explore::builtin::SERIALIZABLE;
+    let mut world = pool(false);
+    let next = world.epoch_start(world.epoch_height() + 1);
+    world.advance_to(next - 1);
+    let h = Harness::new(world).books(Books::new().watch_near(POOL));
+    let nope = || Call::new("alice.near", POOL, "no_such_method");
+    let run = h.run(&Plan::new().op(nope()).blocks(0).op(nope()).refused());
+    let j = run.judged().iter().find(|j| j.check == SERIALIZABLE).unwrap();
+    assert_eq!((j.ok, j.unjudged), (1, 0), "{run}");
+    run.assert_clean();
+}
+
+/// A claim liveness can't reach (it matures too late) is not judged, and
+/// the claims after it still are: a stuck one among them is a finding,
+/// not hidden behind the first.
+#[test]
+fn a_claim_past_reach_leaves_the_next_judged() {
+    const LIVE: &str = "unstaked NEAR is redeemable";
+    let alice = unstaked(0);
+    let open = move |sim: &Sim| {
+        let matures = Some(sim.epoch_height() + LIVENESS_EPOCHS + 1);
+        let far = Claim { holder: "bob.near".into(), amount: 1, matures };
+        [vec![far], alice(sim)].concat()
+    };
+    let books =
+        Books::new()
+            .near("pool NEAR", POOL)
+            .claim("unstaked NEAR", "pool NEAR", open, |_| Plan::new().op(PoolOp::Withdraw));
+    let run = Harness::new(pool(true)).books(books).run(&Plan::new().op(PoolOp::Unstake));
+    let f = run.assert_found(LIVE, "alice.near");
+    assert!(f.message.contains("alice.near's claim of"), "{run}");
+}
+
+/// A claim maturing exactly `LIVENESS_EPOCHS` epochs from now is within
+/// reach: liveness advances to it and judges it, so a stuck one is a
+/// finding, not "not judged". One epoch later is past reach.
+#[test]
+fn a_claim_maturing_at_the_last_reachable_epoch_is_judged() {
+    const LIVE: &str = "unstaked NEAR is redeemable";
+    let at = |later: u64| {
+        let alice = unstaked(0);
+        let open = move |sim: &Sim| {
+            let matures = Some(sim.epoch_height() + LIVENESS_EPOCHS + later);
+            alice(sim).into_iter().map(|c| Claim { matures, ..c }).collect()
+        };
+        let redeem = |_: &Claim| Plan::new().op(PoolOp::Withdraw);
+        let books =
+            Books::new().near("pool NEAR", POOL).claim("unstaked NEAR", "pool NEAR", open, redeem);
+        Harness::new(pool(true)).books(books).run(&Plan::new().op(PoolOp::Unstake))
+    };
+    let last = at(0);
+    let f = last.assert_found(LIVE, "alice.near");
+    assert!(f.message.contains("alice.near's claim of"), "{last}");
+    let past = at(1);
+    assert_eq!(past.verdict(), Verdict::Incomplete, "{past}");
+    assert!(past.findings().is_empty(), "{past}");
+}
+
+const BANK: &str = "bank.near";
+
+/// alice's claims on the bank: one per entry `c1` to `c3`, each its amount.
+fn bank_claims(sim: &Sim) -> Vec<Claim> {
+    let entries = ["c1", "c2", "c3"].map(|k| sim.state(BANK, k.as_bytes()));
+    let claim =
+        |v: Vec<u8>| Claim { holder: "alice.near".into(), amount: number(v), matures: None };
+    entries.into_iter().flatten().map(claim).collect()
+}
+
+/// alice pings bob; the bank pays a claim's entry and clears it
+/// (`Redeem`), pays it and keeps it (`Pay`), or pays it, keeps it and
+/// copies it to `c3` (`Dup`).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+enum BankOp {
+    Ping,
+    Redeem(String),
+    Pay(String),
+    Dup(String),
+}
+
+impl Op for BankOp {
+    fn submit(&self, sim: &mut Sim) -> Result<(), Skip> {
+        let (key, clear) = match self {
+            BankOp::Ping => {
+                sim.tx("alice.near", "bob.near").transfer(Balance::from_yoctonear(1)).submit();
+                return Ok(());
+            }
+            BankOp::Redeem(k) => (k, true),
+            BankOp::Pay(k) | BankOp::Dup(k) => (k, false),
+        };
+        let entry = sim.state(BANK, key.as_bytes()).unwrap_or_default();
+        if clear {
+            sim.set_state(BANK, key.as_bytes(), None);
+        }
+        if let BankOp::Dup(_) = self {
+            sim.set_state(BANK, b"c3", Some(&entry));
+        }
+        let amount = number(entry);
+        sim.tx(BANK, "alice.near").transfer(Balance::from_yoctonear(amount)).submit();
+        Ok(())
+    }
+}
+
+/// The bank holding alice's two claims, of 5 and 7 yocto.
+fn bank(redeem: fn(String) -> BankOp) -> Harness<BankOp> {
+    let mut sim = Fixture::new()
+        .account("alice.near", Balance::from_near(10))
+        .account("bob.near", Balance::from_near(10))
+        .account(BANK, Balance::from_near(10))
+        .build();
+    sim.set_state(BANK, b"c1", Some(&5u128.to_le_bytes()));
+    sim.set_state(BANK, b"c2", Some(&7u128.to_le_bytes()));
+    let books = Books::new().near("bank NEAR", BANK).claim(
+        "bank claims",
+        "bank NEAR",
+        bank_claims,
+        move |c: &Claim| {
+            let key = if c.amount == 5 { "c1" } else { "c2" };
+            Plan::new().op(redeem(key.into()))
+        },
+    );
+    Harness::new(sim).books(books)
+}
+
+/// A holder with two claims redeems one: it is closed, though she still
+/// holds the other. One her redeem pays but keeps open, or lists twice
+/// after, is still a finding.
+#[test]
+fn a_redeemed_claim_is_closed_while_its_holder_holds_another() {
+    const LIVE: &str = "bank claims is redeemable";
+    let run = bank(BankOp::Redeem).run(&Plan::new().op(BankOp::Ping));
+    run.assert_clean();
+    assert!(run.judged().iter().any(|j| j.check == LIVE && j.ok == 1), "{run}");
+    for redeem in [BankOp::Pay, BankOp::Dup] {
+        let run = bank(redeem).run(&Plan::new().op(BankOp::Ping));
+        let f = run.assert_found(LIVE, "alice.near");
+        assert!(f.message.contains("and it is still open"), "{run}");
+    }
+}
