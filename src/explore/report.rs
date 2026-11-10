@@ -597,18 +597,17 @@ impl<O: Op<W>, W: World> Harness<O, W> {
     /// Fills `audit`'s coverage and excuses.
     pub(crate) fn cover(&self, audit: &mut Audit<O>) {
         let sim = self.fixture.as_ref();
-        let audited = |a: &String| self.audits.as_ref().is_none_or(|x| x.contains(a));
         let fixture_reached: std::collections::BTreeSet<String> =
             (sim.txs().iter()).flat_map(|tx| sim.outcome(tx).receipts).map(|r| r.site()).collect();
         let viewed = |site: &String| sim.viewed.lock().is_ok_and(|v| v.contains(site));
         let mut paths = Paths::default();
-        for (account, code) in &sim.contracts() {
-            if !audited(account) {
+        for (account, methods) in super::run::fixture_exports(self) {
+            if !self.audited(account) {
                 paths.left_out.push(account.clone());
                 continue;
             }
             paths.audited.push(account.clone());
-            for method in exports(code) {
+            for method in methods {
                 let site = format!("{account}::{method}");
                 paths.total += 1;
                 let ran = audit.reached(&site) > 0 || fixture_reached.contains(&site);
