@@ -480,12 +480,15 @@ pub(crate) fn fault_injects<O>(
     let mut out = vec![];
     let Some(txs) = witness.spawned.get(i) else { return out };
     let outcomes: Vec<&crate::TxOutcome> = witness.step_txs(i).collect();
-    for (tx, (spawned, buffered)) in txs.iter().enumerate() {
+    // A plan's injection names its transaction by a `u8`: those past the
+    // 256th get none, rather than one meant for another.
+    for (tx, (spawned, buffered)) in txs.iter().enumerate().take(usize::from(u8::MAX) + 1) {
         let mut tried = vec![];
         let mut push = |n: usize, fault: Fault| {
             let (at, site) = (address(spawned, n, &fault), spawned[n].site());
             let meant = Meant { step: i, tx, n, site };
-            out.push((Inject { tx: tx as u8, at, fault }, meant));
+            let tx = u8::try_from(tx).expect("at most 256 transactions");
+            out.push((Inject { tx, at, fault }, meant));
         };
         for arm in faults.arms() {
             for fault in &arm.faults {
@@ -648,7 +651,7 @@ pub(crate) fn sizes<O: Op<W>, W: World>(
         w.as_mut().explore = Some(Box::new(super::Hook::new(None, vec![], vec![])));
         let ran = guarded(|| op.submit(&mut w).is_ok());
         let hook = w.as_mut().explore.take()?;
-        let bytes = hook.signed.iter().map(|s| s.to_string().len()).sum();
+        let bytes = hook.signed;
         (ran == Ok(true)).then(|| (w.as_ref().txs().len() - from, hook.calls, bytes))
     };
     let (ten, more) = (probe(10), probe(99));
@@ -680,13 +683,108 @@ mod tests {
         }
     }
 
-    fn edges(op: Pay) -> (Vec<Edge<Pay>>, Gas) {
+    /// alice, and the purse on purse.near.
+    fn purse() -> Sim {
         let mut sim = Sim::new();
         sim.create_account("alice.near", Balance::from_near(100));
         sim.create_account("purse.near", Balance::from_near(10));
         let wasm = wat::parse_str(include_str!("../../tests/res/purse.wat")).unwrap();
         sim.deploy("purse.near", wasm);
-        let h = Harness::<Pay>::new(sim);
+        sim
+    }
+
+    /// Deposits whose args are `Bytes(n)` raw bytes, `Txs(n)`
+    /// transactions of 8, or `Calls(n)` calls in one, with no args.
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    enum Raw {
+        Bytes(u64),
+        Txs(u64),
+        Calls(u64),
+    }
+
+    impl Op for Raw {
+        fn submit(&self, sim: &mut Sim) -> Result<(), super::super::Skip> {
+            let (len, txs, calls) = match *self {
+                Raw::Bytes(n) => (n as usize, 1, 1),
+                Raw::Txs(n) => (8, n, 1),
+                Raw::Calls(n) => (0, 1, n),
+            };
+            for _ in 0..txs {
+                let mut tx = sim.call("alice.near", "purse.near", "deposit").args(vec![1; len]);
+                for _ in 1..calls {
+                    tx = tx.call("deposit");
+                }
+                tx.submit();
+            }
+            Ok(())
+        }
+    }
+
+    /// A number the op turns into the length of raw, non-JSON args is a
+    /// size, as a JSON list's length is: its edges stop short of the
+    /// type's max, which would ask for that many bytes. So is one it turns
+    /// into a count of transactions, or of calls in one.
+    #[test]
+    fn a_number_that_sizes_raw_args_is_a_size() {
+        let h = Harness::<Raw>::new(purse());
+        for (op, name) in
+            [(Raw::Bytes(5), "/Bytes"), (Raw::Txs(1), "/Txs"), (Raw::Calls(1), "/Calls")]
+        {
+            let plan = Plan::new().op(op);
+            let axes = super::super::axes::arg_axes::<Raw, Sim>(&plan.steps[0].act);
+            let axis = axes.iter().find(|a| a.name == name).expect("an axis");
+            let size = super::super::big_stack(|| {
+                gas::with_fixture(h.fixture.as_ref(), || sizes(&h, &plan, 0, axis, &mut None))
+            });
+            assert!(size, "{name}: 10 and 99 are two sizes");
+        }
+        // An amount signs 8 bytes whatever it is: no size.
+        let h = Harness::<Pay>::new(purse());
+        let plan = Plan::new().op(Pay::Deposit(5));
+        let axes = super::super::axes::arg_axes::<Pay, Sim>(&plan.steps[0].act);
+        let axis = axes.iter().find(|a| a.name == "/Deposit").expect("an axis");
+        let size = super::super::big_stack(|| {
+            gas::with_fixture(h.fixture.as_ref(), || sizes(&h, &plan, 0, axis, &mut None))
+        });
+        assert!(!size, "an amount is no size");
+    }
+
+    /// Each injection names the transaction its receipt is in, past the
+    /// 256th too: those get none, since a step's injection names its
+    /// transaction by a `u8`, and none lands on another transaction.
+    #[test]
+    fn a_fault_is_meant_for_the_transaction_it_names() {
+        let h = Harness::<Raw>::new(purse());
+        let faults = Faults::new(crate::Receipts::all(), [Fault::Hold(1)]);
+        let injects = super::super::big_stack(|| {
+            gas::with_fixture(h.fixture.as_ref(), || {
+                let mut run = h.run_case(&Plan::new().op(Raw::Txs(258)));
+                assert_eq!(run.spawned[0].len(), 258);
+                // The purse spawns nothing: each transaction a receipt.
+                let receipt = crate::fault::Spawned {
+                    id: Default::default(),
+                    receiver: "purse.near".parse().unwrap(),
+                    methods: vec!["deposit".into()],
+                    actions: vec!["FunctionCall".into()],
+                    attached: Gas::from_teragas(1),
+                    awaits: 0,
+                    failable: false,
+                    awaits_no_call: false,
+                    sends: false,
+                    awaits_from: vec![],
+                };
+                run.spawned[0].iter_mut().for_each(|(s, _)| s.push(receipt.clone()));
+                fault_injects(&faults, &run, 0)
+            })
+        });
+        assert_eq!(injects.len(), 256);
+        for (inject, meant) in &injects {
+            assert_eq!(usize::from(inject.tx), meant.tx, "{inject}");
+        }
+    }
+
+    fn edges(op: Pay) -> (Vec<Edge<Pay>>, Gas) {
+        let h = Harness::<Pay>::new(purse());
         super::super::big_stack(|| {
             gas::with_fixture(h.fixture.as_ref(), || {
                 let run = h.run_case(&Plan::new().op(op));

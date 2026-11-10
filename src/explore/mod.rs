@@ -501,10 +501,13 @@ impl Call {
         }
     }
 
-    /// The args as JSON, as [`Tx::args_json`](crate::Tx::args_json) does.
+    /// The args as JSON, as [`Tx::args_json`](crate::Tx::args_json) does
+    /// but written as a plan file writes them (an object's keys sorted),
+    /// so a saved plan sends the same bytes and a scan edits its fields.
     #[track_caller]
     pub fn args_json(mut self, args: impl Serialize) -> Self {
-        let json = serde_json::to_vec(&args).expect("JSON args");
+        let json = serde_json::to_value(&args).and_then(|v| serde_json::to_vec(&v));
+        let json = json.expect("JSON args");
         self.args = if json == b"null" { vec![] } else { json };
         self
     }
@@ -586,6 +589,24 @@ mod tests {
         let raw = Call::new("a.near", "b.near", "m").args(vec![0, 159]);
         let back: Call = serde_json::from_str(&serde_json::to_string(&raw).unwrap()).unwrap();
         assert_eq!(back, raw);
+    }
+
+    /// `args_json` writes a struct's fields as a plan file does, so the
+    /// call comes back from one byte for byte, its fields JSON a scan
+    /// edits.
+    #[test]
+    fn a_calls_args_round_trip_byte_for_byte() {
+        let round = |c: &Call| serde_json::from_str::<Call>(&serde_json::to_string(c).unwrap());
+        #[derive(Serialize)]
+        struct Out {
+            b: u8,
+            a: u8,
+        }
+        let derived = Call::new("a.near", "b.near", "m").args_json(Out { b: 1, a: 2 });
+        assert_eq!(round(&derived).unwrap(), derived);
+        let axes = axes::arg_axes::<Call, crate::Sim>(&Act::Call(derived));
+        let names: Vec<&str> = axes.iter().map(|a| a.name.as_str()).collect();
+        assert!(names.contains(&"/args/json/b") && names.contains(&"/args/json/a"), "{names:?}");
     }
 
     /// `Fail::all` flattens the failures of a nested one, passes over what

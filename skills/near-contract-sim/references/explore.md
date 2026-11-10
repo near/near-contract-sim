@@ -172,8 +172,8 @@ search, and `NEAR_SIM_CASES` lengthens it. A list field an op sent at
 one length in every case is a `length:` to-do item.
 
 Each new finding, shown ones first, is shrunk for at most 15 minutes (a
-cut shrink says so). One cause is one row: its other cases and checks
-are in its `also`, where `assert_found` finds them.
+cut shrink says so; `.shrink_untimed()` drops the clock). One cause is
+one row: its other cases and checks are in its `also`, for `assert_found`.
 
 Two ops that must meet (a request and its redeem, a sign and its
 respond) pair in one of two ways. The second draws a `Pick`

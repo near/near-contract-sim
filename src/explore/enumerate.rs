@@ -331,8 +331,7 @@ impl<O: Op<W>, W: World> Enumerate<'_, O, W> {
         h.memo = Some(Rc::new(super::check::Memo::new(key.clone())));
         let h = &h;
         let resumed = Saves::resume(&self.saves, h, &mut audit);
-        let _guard =
-            progress::start(what.clone(), "case", self.cases.min(1), " for the depth under way");
+        let _guard = progress::start(what.clone(), "case", self.cases, " for the depth under way");
         let epochs = (1..=SHORT_EPOCH).contains(&h.fixture.as_ref().config.epoch_length);
         let fixture_key = key(&h.fixture);
         let mut seen: BTreeSet<u64> = BTreeSet::from([fixture_key]);
@@ -366,6 +365,9 @@ impl<O: Op<W>, W: World> Enumerate<'_, O, W> {
                     }
                 }
             }
+            // The known cases are this depth's, within the cap.
+            let known = u32::try_from(queue.len()).unwrap_or(u32::MAX);
+            progress::total(self.cases.min(ran.saturating_add(known)));
             let mut done: Vec<Done<O>> = vec![];
             let mut k = 0;
             while k < queue.len() {

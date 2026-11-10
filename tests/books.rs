@@ -958,12 +958,12 @@ fn a_killed_scan_resumes_to_the_same_report() {
 
 /// Six sends a case, settled apart, the receiver asking back up to twice
 /// what it got. Nothing is in flight together, so no case runs serial
-/// orders: each is cheap, and the shrink, whose budget is wall-clock,
-/// finishes on a slow runner too.
+/// orders: each is cheap. The shrink is untimed, so it finishes on a
+/// slow or loaded runner too.
 fn ledger_search(h: &Harness<Send>) -> near_contract_sim::explore::Search<'_, Send, Sim> {
     let send = (1u64..20, 0u64..40).prop_map(|(amount, refund)| Send { amount, refund });
     let plans = plans(send).len(6..=6).faults(Faults::none());
-    h.search(plans.gaps(Just(Gap::Settle)).repeats(false)).seed(7).cases(24)
+    h.search(plans.gaps(Just(Gap::Settle)).repeats(false)).seed(7).cases(24).shrink_untimed()
 }
 
 /// The rows a search's cases showed, as check, site and label: a saved
@@ -991,8 +991,7 @@ fn a_killed_search_resumes_to_the_same_report_and_its_findings_shrink() {
     let h = ledger_books();
     let whole = ledger_search(&h).run();
     let owned = whole.assert_found("credit falls only for its holder", "receiver.near");
-    let budget = "the shrink ran out of its wall-clock budget (a minute a shown row at least)";
-    assert!(matches!(owned.shrink, Shrink::Done(_)), "{budget}: {:?}", owned.shrink);
+    assert!(matches!(owned.shrink, Shrink::Done(_)), "{:?}", owned.shrink);
     let steps = &owned.run.plan().steps;
     assert!(steps.len() <= 2, "shrunk to its cause: {steps:?}");
     let path = std::env::temp_dir().join(format!("search-resume-{}.json", std::process::id()));

@@ -105,7 +105,7 @@ fn noisy_plans() -> impl Strategy<Value = Plan<Prog>> {
 /// its own minimal case.
 #[test]
 fn a_harmless_failure_on_every_case_does_not_hide_a_business_finding() {
-    let audit = noisy().search(noisy_plans()).seed(11).cases(16).run();
+    let audit = noisy().search(noisy_plans()).seed(11).cases(16).shrink_untimed().run();
     let business = audit.assert_found("value below 200", "world");
     assert_eq!(values(business.run.plan()), [200], "its own minimal case: {audit}");
     assert_eq!(business.run.plan().steps[0].gas, None, "gas didn't matter: {audit}");
@@ -186,10 +186,81 @@ fn a_wide_number_shrinks_all_the_way() {
         .repeats(false)
         .gas(gas::off())
         .faults(Faults::none());
-    let audit = Harness::new(fixture()).search(strategy).seed(5).cases(1).run();
+    let audit = Harness::new(fixture()).search(strategy).seed(5).cases(1).shrink_untimed().run();
     let f = audit.assert_found(builtin::UNHANDLED_FAILURE, "missing-a.near::run");
     assert!(matches!(f.shrink, Shrink::Done(_)), "{audit}");
     assert_eq!(f.run.plan().steps[0].act.op(), Some(&Prog::Wide(1)), "{audit}");
+}
+
+/// Writes `k{i}` on contract.near.
+fn write_key(i: u8) -> Prog {
+    Prog::Run(vec![Fz::Write { key: format!("k{i}").into_bytes(), value: vec![1] }])
+}
+
+/// A finding keyed by how many of four keys a case wrote: one row per
+/// step count. The four-step case shrinks by dropping steps, which shows
+/// the two- and three-step rows; shrinking the two-step row shows the
+/// one-step row, which is shrunk in its turn, not left as a scan's case.
+#[test]
+fn a_finding_first_shown_while_a_shown_one_shrinks_is_shrunk_too() {
+    let harness = Harness::new(fixture()).at_end("keys written", |sim: &Sim| {
+        let set = |i: &u8| sim.state("contract.near", format!("k{i}").as_bytes()).is_some();
+        match (0..4u8).filter(set).count() {
+            0 => Ok(()),
+            n => Err(Fail::new(format!("{n} key(s) written")).key(n.to_string())),
+        }
+    });
+    let plan = (0..4).fold(Plan::new(), |p, i| p.op(write_key(i)));
+    let audit = harness.search(Just(plan)).cases(1).shrink_untimed().run();
+    let steps = |f: &near_contract_sim::explore::Found<Prog>| f.run.plan().steps.len();
+    let mut counts: Vec<usize> = audit.found().iter().map(steps).collect();
+    counts.sort_unstable();
+    assert_eq!(counts, [1, 2, 3, 4], "{audit}");
+    for f in audit.found() {
+        assert!(matches!(f.shrink, Shrink::Done(_)), "{} steps: {:?}: {audit}", steps(f), f.shrink);
+    }
+}
+
+/// An untimed search's shrinking prints no time left, having no budget;
+/// a timed one's prints its budget.
+#[test]
+fn an_untimed_shrink_prints_no_budget() {
+    for untimed in ["1", "0"] {
+        let out = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "untimed_child", "--include-ignored", "--nocapture"])
+            .env("NCS_UNTIMED", untimed)
+            .env_remove("NEAR_SIM_PROGRESS")
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "child failed:\n{stderr}");
+        let shrinking = |l: &&str| l.contains("shrinking the findings of seed 1 of 1");
+        let line = stderr.lines().find(shrinking).unwrap_or_else(|| panic!("{stderr}"));
+        assert_eq!(line.contains("at most"), untimed == "0", "{line}");
+    }
+}
+
+/// Runs only from `an_untimed_shrink_prints_no_budget`.
+#[test]
+#[ignore = "child process of an_untimed_shrink_prints_no_budget"]
+fn untimed_child() {
+    let Ok(untimed) = std::env::var("NCS_UNTIMED") else { return };
+    let strategy = plans(Just(Prog::Run(vec![detached_call("missing-a.near")])))
+        .len(1..=1)
+        .gas(gas::off())
+        .faults(Faults::none());
+    let harness = Harness::new(fixture());
+    let search = harness.search(strategy).cases(1);
+    let audit = if untimed == "1" { search.shrink_untimed().run() } else { search.run() };
+    audit.assert_found(builtin::UNHANDLED_FAILURE, "missing-a.near::run");
+}
+
+/// Cases per seed times seeds past a `u32` is an error, not an overflow.
+#[test]
+fn a_search_of_more_cases_than_it_can_count_is_an_error() {
+    let audit = noisy().search(noisy_plans()).cases(u32::MAX).seeds(2).run();
+    assert_eq!(audit.cases(), 0, "{audit}");
+    assert!(audit.errors().iter().any(|e| e.contains("2 seeds")), "{:?}", audit.errors());
 }
 
 // ---- the injection while shrinking ----
@@ -300,7 +371,7 @@ fn gas_in_a_window_shrinks_to_its_top_edge_and_never_below() {
         .gas(gas::wide())
         .faults(Faults::none())
         .repeats(false);
-    let audit = harness.search(strategy).seed(1).cases(48).run();
+    let audit = harness.search(strategy).seed(1).cases(48).shrink_untimed().run();
     let found = audit.assert_found("no pending", "world");
     assert!(matches!(found.shrink, Shrink::Done(_)), "{audit}");
     let (Some(StepGas::Exactly(from)), Some(StepGas::Exactly(to))) =
