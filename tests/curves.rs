@@ -904,7 +904,7 @@ mod fresh_signer_by_index {
     }
 }
 
-/// Copies the contract refuses at its guards. `vault.wat`
+/// Copies the contract refuses at its guards. The `WAT` below
 /// is laid out as a Rust contract built with panic = "abort": every
 /// refusal traps with the same `unreachable`. `credit(n)`, n one byte,
 /// refuses any caller but `alice.near` and `router.near`

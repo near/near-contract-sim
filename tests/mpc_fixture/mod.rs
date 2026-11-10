@@ -3,8 +3,9 @@
 //! one secp256k1 signing domain whose root key the test knows, so `respond`
 //! can produce the signature the contract checks with `ecrecover`.
 //!
-//! A recipe, not API: `mod mpc_fixture;` from a test file. Provenance and the
-//! build command are in `tests/res/mpc/README.md`.
+//! A recipe, not API: `mod mpc_fixture;` from a test file that also has
+//! `mod common;`. Provenance and the build command are in
+//! `tests/res/mpc/README.md`.
 //!
 //! What `world()` builds, as near/mpc's sandbox `SandboxTestSetupBuilder::build`
 //! does (`crates/contract/tests/sandbox/common.rs`):
@@ -16,11 +17,14 @@
 //!   account key is the TLS key (near/mpc TODO #1087), so `respond` would
 //!   fail with `AttestationKeyMismatch` without this step.
 //! - `user.near` with 100 NEAR.
+//!
+//! [`dcap_world`] is the other world: the 1d514bc4 build with its real TEE
+//! verifier and the DCAP quote fixture (`tests/mpc_tee.rs`).
 #![allow(dead_code)]
 
-use near_contract_sim::{Balance, Gas, KeyType, PendingYield, SecretKey, Sim, TxOutcome};
+use crate::common::{hex, res, unhex};
+use near_contract_sim::{Balance, Gas, KeyType, PendingYield, SecretKey, Sim, Tx, TxOutcome};
 use serde_json::{Value, json};
-use std::path::PathBuf;
 
 /// The MPC contract account.
 pub const MPC: &str = "mpc.near";
@@ -32,8 +36,6 @@ pub const VERIFIER: &str = "tee-verifier.near";
 pub const USER: &str = "user.near";
 /// The participants, in participant-id order.
 pub const PARTICIPANTS: [&str; 3] = ["node0.near", "node1.near", "node2.near"];
-/// One attestation-storage grant (`attestation_storage_fee_millinear`, 20 mNEAR).
-pub const ATTESTATION_FEE: Balance = Balance::from_millinear(20);
 /// `SIGN_DEPOSIT_YOCTONEAR`: what `sign` requires; any excess is refunded
 /// by a detached transfer in the same receipt.
 pub const SIGN_DEPOSIT: Balance = Balance::from_yoctonear(1);
@@ -54,16 +56,14 @@ const N: [u8; 32] = [
     0xba, 0xae, 0xdc, 0xe6, 0xaf, 0x48, 0xa0, 0x3b, 0xbf, 0xd2, 0x5e, 0x8c, 0xd0, 0x36, 0x41, 0x41,
 ];
 
-pub fn res(name: &str) -> Vec<u8> {
-    let dir =
-        std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR unset: run under cargo");
-    let p = PathBuf::from(dir).join("tests/res/mpc").join(name);
-    std::fs::read(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))
+/// A fixture of `tests/res/mpc/`.
+pub fn mpc_res(name: &str) -> Vec<u8> {
+    res(&format!("mpc/{name}"))
 }
 
 /// near/mpc @ 8397c0ae, `mpc-contract` with default features (block clock).
 pub fn mpc_wasm() -> Vec<u8> {
-    res("mpc_contract_8397c0ae.wasm")
+    mpc_res("mpc_contract_8397c0ae.wasm")
 }
 
 /// The domain's root secret key.
@@ -134,6 +134,43 @@ pub fn submit_mock_attestation(sim: &mut Sim, node: &str, mock: Value) -> TxOutc
             "tls_public_key": tls_public_key(node),
         }))
         .transact()
+}
+
+/// The DCAP world's clock: inside the quote's collateral window.
+pub const PINNED_NOW_NS: u64 = 1_786_622_400_000_000_000;
+/// The node whose key the DCAP quote binds.
+pub const NODE: &str = "fixture-node-a.near";
+
+/// mpc @ 1d514bc4 with its real verifier, the fixture's image hashes
+/// allowed, and one attestation grant prepaid for [`NODE`], whose key the
+/// quote binds. `alice.near` has 1000 NEAR.
+pub fn dcap_world() -> Sim {
+    let mut sim = Sim::new();
+    sim.set_timestamp_ns(PINNED_NOW_NS);
+    sim.create_account("alice.near", Balance::from_near(1_000));
+    sim.deploy(VERIFIER, mpc_res("tee_verifier.wasm"));
+    sim.deploy(MPC, mpc_res("mpc_contract.wasm"));
+    sim.call("alice.near", MPC, "init")
+        .args(mpc_res("mpc_init_args.json"))
+        .transact()
+        .assert_success();
+    sim.set_state(MPC, b"STATE", Some(&mpc_res("mpc_state_patched.borsh")));
+    let key: SecretKey =
+        String::from_utf8(mpc_res("near_account_secret_key")).unwrap().trim().parse().unwrap();
+    sim.create_account_with_key(NODE, Balance::from_near(10), &key);
+    sim.call("alice.near", MPC, "prepay_attestation_storage")
+        .args(mpc_res("mpc_prepay_attestation_storage_args.json"))
+        .deposit(Balance::from_millinear(20))
+        .transact()
+        .assert_success();
+    sim
+}
+
+/// [`NODE`] submits the DCAP quote to `submit_participant_info`.
+pub fn submit_quote(sim: &mut Sim) -> Tx<'_> {
+    sim.call(NODE, MPC, "submit_participant_info")
+        .args(mpc_res("mpc_submit_participant_info_args.json"))
+        .gas(Gas::from_teragas(300))
 }
 
 /// `available_attestation_grants` for `account`.
@@ -241,12 +278,4 @@ fn bs58(bytes: &[u8]) -> String {
     let zeros = bytes.iter().take_while(|&&b| b == 0).count();
     let ones = std::iter::repeat_n('1', zeros);
     ones.chain(digits.iter().rev().map(|&d| ALPHABET[d as usize] as char)).collect()
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
-
-fn unhex(s: &str) -> Vec<u8> {
-    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
 }

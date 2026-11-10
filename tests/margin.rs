@@ -11,7 +11,7 @@
 
 mod common;
 
-use common::manifest_dir;
+use common::{manifest_dir, wat};
 use near_contract_sim::explore::{Audit, Harness, Op, Plan, Resource, Skip, Status};
 use near_contract_sim::{Balance, Fault, Fixture, Receipts, Sim, StateRecord};
 use serde::{Deserialize, Serialize};
@@ -293,8 +293,7 @@ mod registry {
     }
 
     fn auditing(audited: &str) -> Harness<Put> {
-        let path = manifest_dir().join("tests/res/margin_registry.wat");
-        let wasm = wat::parse_str(std::fs::read_to_string(path).unwrap()).unwrap();
+        let wasm = wat("margin_registry.wat");
         let world = Fixture::new()
             .account("alice.near", Balance::from_near(100))
             .contract("front.near", wasm.clone())
@@ -433,8 +432,7 @@ mod book {
     }
 
     fn harness() -> Harness<Deposit> {
-        let path = manifest_dir().join("tests/res/refund_book.wat");
-        let wasm = wat::parse_str(std::fs::read_to_string(path).unwrap()).unwrap();
+        let wasm = wat("refund_book.wat");
         let mut world = Fixture::new()
             .account("alice.near", Balance::from_near(100))
             .contract(BOOK, wasm)

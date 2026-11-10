@@ -5,9 +5,10 @@
 //! - `mpc_fixture::world()`: mpc @ 8397c0ae in Running state with one
 //!   secp256k1 domain whose key the test knows, so `respond` can sign
 //!   (`tests/mpc_fixture/mod.rs`, a recipe to copy, not crate API).
-//! - `dcap_world()`: mpc @ 1d514bc4 and its real TEE verifier, with the
-//!   DCAP quote fixture of `tests/mpc_tee.rs`, the clock inside the quote's
-//!   collateral window, and one attestation grant prepaid.
+//! - `mpc_fixture::dcap_world()`: mpc @ 1d514bc4 and its real TEE
+//!   verifier, with the DCAP quote fixture of `tests/mpc_tee.rs`, the clock
+//!   inside the quote's collateral window, and one attestation grant
+//!   prepaid.
 //!
 //! Measured: a sign parks one yield that times out 200 blocks after the
 //! sign ran; the timeout fails the sign with "Request has timed out."; the
@@ -16,10 +17,9 @@
 mod common;
 mod mpc_fixture;
 
-use common::near;
-use mpc_fixture::{MPC, SIGN_DEPOSIT, USER, VERIFIER};
+use mpc_fixture::{MPC, NODE, SIGN_DEPOSIT, USER, VERIFIER, dcap_world, grants, submit_quote};
 use near_contract_sim::explore::{Fail, Harness, Label, Op, OpDone, Plan, Skip, plans};
-use near_contract_sim::{Balance, Failure, Fault, Gas, Receipts, Reply, SecretKey, Sim, Stub};
+use near_contract_sim::{Failure, Fault, Gas, Receipts, Reply, Sim, Stub};
 use proptest::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -132,48 +132,6 @@ fn a_tampered_signature_is_rejected() {
 
 // ---- the DCAP world: a real verifier, or a stub in its place ----
 
-const PINNED_NOW_NS: u64 = 1_786_622_400_000_000_000; // inside the quote's collateral window
-const NODE: &str = "fixture-node-a.near";
-
-fn dcap(name: &str) -> Vec<u8> {
-    common::res(&format!("mpc/{name}"))
-}
-
-/// mpc @ 1d514bc4 with its real verifier, the fixture's image hashes
-/// allowed, and one attestation grant prepaid for `NODE`, whose key the
-/// quote binds.
-fn dcap_world() -> Sim {
-    let mut sim = Sim::new();
-    sim.set_timestamp_ns(PINNED_NOW_NS);
-    sim.create_account("alice.near", near(1_000));
-    sim.deploy(VERIFIER, dcap("tee_verifier.wasm"));
-    sim.deploy(MPC, dcap("mpc_contract.wasm"));
-    sim.call("alice.near", MPC, "init")
-        .args(dcap("mpc_init_args.json"))
-        .transact()
-        .assert_success();
-    sim.set_state(MPC, b"STATE", Some(&dcap("mpc_state_patched.borsh")));
-    let key: SecretKey =
-        String::from_utf8(dcap("near_account_secret_key")).unwrap().trim().parse().unwrap();
-    sim.create_account_with_key(NODE, near(10), &key);
-    sim.call("alice.near", MPC, "prepay_attestation_storage")
-        .args(dcap("mpc_prepay_attestation_storage_args.json"))
-        .deposit(Balance::from_millinear(20))
-        .transact()
-        .assert_success();
-    sim
-}
-
-fn grants(sim: &Sim) -> u64 {
-    sim.view(MPC, "available_attestation_grants", json!({ "account_id": NODE })).json()
-}
-
-fn submit_quote(sim: &mut Sim) -> near_contract_sim::Tx<'_> {
-    sim.call(NODE, MPC, "submit_participant_info")
-        .args(dcap("mpc_submit_participant_info_args.json"))
-        .gas(Gas::from_teragas(300))
-}
-
 /// A stub in the verifier's place rejects the quote: the grant isn't
 /// consumed, and the verifier saw exactly one call.
 #[test]
@@ -183,7 +141,7 @@ fn a_rejected_quote_consumes_no_grant() {
         VERIFIER,
         Stub::new().on("verify_quote", Reply::panic("TCB collateral expired")),
     );
-    assert_eq!(grants(&sim), 1);
+    assert_eq!(grants(&sim, NODE), 1);
     let out = submit_quote(&mut sim).transact();
     let failure = Failure::Panic("The TEE verifier did not answer the verify_quote call.".into());
     assert_eq!(out.assert_failure(), failure);
@@ -193,7 +151,7 @@ fn a_rejected_quote_consumes_no_grant() {
         (1, "verify_quote", false)
     );
     assert_eq!(calls[0].gas, Gas::from_teragas(200));
-    assert_eq!(grants(&sim), 1);
+    assert_eq!(grants(&sim, NODE), 1);
 }
 
 /// The same question against the real verifier: fail its receipt instead.
@@ -205,7 +163,7 @@ fn an_unreachable_verifier_consumes_no_grant() {
         .transact();
     assert!(out.is_failure());
     assert_eq!(out.expect_receipt("verify_quote").fault, Some(Fault::OutOfGas));
-    assert_eq!(grants(&sim), 1);
+    assert_eq!(grants(&sim, NODE), 1);
 }
 
 /// And the real verifier accepts the quote, consuming the grant, with
@@ -218,7 +176,7 @@ fn a_verified_quote_consumes_the_grant() {
     assert!(out.receipts.iter().all(|r| r.is_success()), "{out}");
     out.expect_receipt("verify_quote");
     out.assert_headroom("resolve_verification", Gas::from_teragas(10));
-    assert_eq!(grants(&sim), 0);
+    assert_eq!(grants(&sim, NODE), 0);
     let tls_public_key = "ed25519:3FwWphCj47PA3D8ErKeVNzqn2ckAKrfuixrvvfGrDxUx";
     let att: serde_json::Value =
         sim.view(MPC, "get_attestation", json!({ "tls_public_key": tls_public_key })).json();

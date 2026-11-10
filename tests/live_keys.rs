@@ -8,7 +8,7 @@
 //! world at submit, over actual runs of the specimen.
 
 mod common;
-use common::manifest_dir;
+use common::wat;
 use near_contract_sim::explore::input::{self, Pick};
 use near_contract_sim::explore::{Harness, Op, OpDone, Skip, plans};
 use near_contract_sim::{Balance, Fixture, Sim};
@@ -19,10 +19,9 @@ const QUEUE: &str = "queue.near";
 const REDEEMED: &str = "no claim is ever redeemed";
 
 fn world() -> Sim {
-    let wat = std::fs::read_to_string(manifest_dir().join("tests/res/claim_queue.wat")).unwrap();
     Fixture::new()
         .account("alice.near", Balance::from_near(10))
-        .contract(QUEUE, wat::parse_str(&wat).unwrap())
+        .contract(QUEUE, wat("claim_queue.wat"))
         .build()
 }
 

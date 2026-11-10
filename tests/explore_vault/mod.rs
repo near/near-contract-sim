@@ -4,7 +4,7 @@
 #![allow(dead_code)]
 
 use crate::common::res;
-use near_contract_sim::explore::{Amount, Fail, Harness, Op, OpDone, Skip, amount};
+use near_contract_sim::explore::{Amount, Fail, Harness, Op, OpDone, Plan, Skip, amount};
 use near_contract_sim::{Balance, Fixture, Sim, Token};
 use proptest::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -193,6 +193,13 @@ pub fn harness(world: Sim) -> Harness<VaultOp> {
         .at_rest("the vault holds what it owes", vault_holds_what_it_owes)
         .per_op_for(is_withdraw, "withdraw delivers what it debits", withdraw_delivers)
         .per_op_for(is_deposit, "deposit credits what it takes", deposit_credits)
+}
+
+/// alice deposits 100, then withdraws 40.
+pub fn deposit_then_withdraw() -> Plan<VaultOp> {
+    Plan::new()
+        .op(VaultOp::Deposit { who: User::Alice, amount: Amount::Exact(100) })
+        .op(VaultOp::Withdraw { who: User::Alice, amount: Amount::Exact(40) })
 }
 
 /// The vault harness on the build `wasm` (in tests/res).

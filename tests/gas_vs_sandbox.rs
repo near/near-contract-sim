@@ -208,6 +208,10 @@ fn gas_matches_real_sandbox() {
 /// `NCS_SANDBOX_RPC`, into `tests/res/` under `FIXTURE`'s name. The
 /// accounts are the simulator's, patched in; the sandbox runs the calls.
 ///
+/// A manual recorder: CI never runs it (`#[ignore]`d, and only `transport`
+/// and `differential` run `--ignored`), so nothing re-checks the numbers it
+/// recorded; run it by hand to refresh them.
+///
 /// ```sh
 /// docker run -d --rm -p 127.0.0.1:3030:3030 nearprotocol/sandbox:<tag>
 /// NCS_SANDBOX_RPC=http://127.0.0.1:3030 cargo test --test gas_vs_sandbox -- --ignored

@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 fn vault_pair_wasm() -> Vec<u8> {
-    wat::parse_file(manifest_dir().join("tests/res/vault_pair.wat")).unwrap()
+    wat("vault_pair.wat")
 }
 
 /// alice.near with 100 tokens on token.near, and the vault at vault.near.

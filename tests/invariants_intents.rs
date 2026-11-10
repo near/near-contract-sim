@@ -10,7 +10,9 @@
 //! `do_native_withdraw_headroom` shows the bug in `headroom()`.
 //! Fixtures: `tests/res/intents/README.md`.
 
+mod common;
 use base64::Engine;
+use common::{hex, res};
 use near_contract_sim::explore::{
     Amount, Faults, Gap, Harness, Op, Plan, Skip, Status, amount, plans,
 };
@@ -350,14 +352,11 @@ impl Intents {
     /// wrap.near + intents.near; three NEAR-implicit users with 1000 wNEAR
     /// each, deposited into intents by a relayer.
     fn setup(version: &str) -> Intents {
-        let dir =
-            std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR unset: run under cargo");
-        let res = format!("{dir}/tests/res/intents");
         let mut sim = Sim::new();
         sim.create_account(RELAYER, Balance::from_near(1_000_000));
-        sim.deploy(WNEAR, std::fs::read(format!("{res}/wnear.wasm")).unwrap());
+        sim.deploy(WNEAR, res("intents/wnear.wasm"));
         sim.call(WNEAR, WNEAR, "new").args_json(json!({})).transact().assert_success();
-        sim.deploy(INTENTS, std::fs::read(format!("{res}/defuse-{version}.wasm")).unwrap());
+        sim.deploy(INTENTS, res(&format!("intents/defuse-{version}.wasm")));
         sim.call(INTENTS, INTENTS, "new")
             .args_json(json!({"config": {
                 "wnear_id": WNEAR,
@@ -426,8 +425,4 @@ impl Intents {
     fn execute(&mut self, i: usize, intent: Value, gas: Gas) -> TxOutcome {
         self.transaction(i, intent).gas(gas).transact()
     }
-}
-
-fn hex(b: &[u8]) -> String {
-    b.iter().map(|x| format!("{x:02x}")).collect()
 }

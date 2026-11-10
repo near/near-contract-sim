@@ -630,14 +630,17 @@ fn clone_is_a_snapshot() {
     assert_eq!(b.balance("jar.near"), jar0);
     assert!(a.balance("jar.near") < jar0);
     let before = b.balance("jar.near");
+    let (a_jar, a_root) = (a.balance("jar.near"), a.state_root());
     b.call("alice.near", "jar.near", "tip")
         .args(b"alice.near".to_vec())
         .transact()
         .assert_success();
     assert_eq!(b.balance("jar.near"), a.balance("jar.near"));
     assert!(b.balance("jar.near") < before);
-    // The original still reads its own state after the clone moved on.
-    assert_eq!(a.view_state("jar.near", b""), vec![]);
+    // The original is untouched by the clone's second tip (the jar keeps
+    // no storage, so the balance and the state root are what would leak).
+    assert_eq!(a.balance("jar.near"), a_jar);
+    assert_eq!(a.state_root(), a_root);
     a.findings().assert_none();
     b.findings().assert_none();
 }

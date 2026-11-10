@@ -742,7 +742,7 @@ fn a_per_op_check_for_one_variant_counts_only_that_variant() {
 
 /// `tests/res/flight_lock.wat` at lock.near, and alice.
 fn flight_lock() -> Sim {
-    let wasm = wat::parse_file(common::manifest_dir().join("tests/res/flight_lock.wat")).unwrap();
+    let wasm = common::wat("flight_lock.wat");
     let mut sim = Sim::new();
     sim.create_account("alice.near", Balance::from_near(10));
     sim.deploy("lock.near", wasm);

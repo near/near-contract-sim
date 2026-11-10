@@ -203,10 +203,7 @@ fn populated_trie_costs_more_trie_node_gas() {
 /// storage). So a read-only receipt's gas never depends on the trie.
 #[test]
 fn a_polluted_path_costs_writes_trie_nodes_and_reads_none() {
-    let wasm = wat::parse_str(
-        std::fs::read_to_string(common::manifest_dir().join("tests/res/nonce_box.wat")).unwrap(),
-    )
-    .unwrap();
+    let wasm = common::wat("nonce_box.wat");
     let boxed: near_contract_sim::AccountId = "nonces.near".parse().unwrap();
     let key = |n: u64| [&b"n"[..], &n.to_le_bytes()].concat();
     let make = |polluted: bool| {

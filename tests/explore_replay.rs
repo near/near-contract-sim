@@ -9,9 +9,9 @@ mod common;
 mod explore_vault;
 mod fuzz_common;
 
-use explore_vault::{User, VaultOp, fails_after_ops, vault_on};
+use explore_vault::{VaultOp, deposit_then_withdraw, fails_after_ops, vault_on};
 use near_contract_sim::Receipts;
-use near_contract_sim::explore::{Amount, Faults, Harness, Plan, Regression, Status, gas, plans};
+use near_contract_sim::explore::{Faults, Harness, Plan, Regression, Status, gas, plans};
 use near_contract_sim::{Fault, Fixture, Sim, builtin};
 use proptest::prelude::*;
 use std::path::PathBuf;
@@ -22,12 +22,6 @@ fn temp_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("ncs-replay-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     dir
-}
-
-fn deposit_then_withdraw() -> Plan<VaultOp> {
-    Plan::new()
-        .op(VaultOp::Deposit { who: User::Alice, amount: Amount::Exact(100) })
-        .op(VaultOp::Withdraw { who: User::Alice, amount: Amount::Exact(40) })
 }
 
 /// The forgetful payout, found by a scan with the payout failed, saved in

@@ -11,7 +11,7 @@
 
 mod common;
 
-use common::manifest_dir;
+use common::wat;
 use near_contract_sim::explore::{
     Audit, Call, Faults, Harness, Label, Op, Plan, Report, Skip, builtin,
 };
@@ -23,10 +23,6 @@ const DESK: &str = "desk.near";
 const ALICE: &str = "alice.near";
 const BOB: &str = "bob.near";
 const NEAR: u128 = 10u128.pow(24);
-
-fn wat(name: &str) -> Vec<u8> {
-    wat::parse_file(manifest_dir().join("tests/res").join(name)).unwrap()
-}
 
 fn world(id: &str, file: &str) -> Sim {
     Fixture::new()
