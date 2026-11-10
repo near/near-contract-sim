@@ -303,9 +303,10 @@ pub fn trie_siblings(account: &AccountId, key: &[u8]) -> Vec<(AccountId, Vec<u8>
 /// shaper forks a key along all of its bytes, up to this many.
 const KEY_MAX: usize = 2048;
 
-/// `v` doubled, at most to `top`; `None` once it is there or past it.
+/// `v` doubled (zero to one), at most to `top`; `None` once it is there or
+/// past it.
 fn doubled(v: u128, top: u128) -> Option<u128> {
-    (v < top).then(|| v.saturating_mul(2).min(top))
+    (v < top).then(|| v.saturating_mul(2).max(v + 1).min(top))
 }
 
 /// A combined point: its margin and attached gas, each leg's value, and
@@ -317,10 +318,11 @@ mod tests {
     use super::{doubled, left};
 
     /// The ascent doubles a leg up to its top, never past it, nor again
-    /// once there.
+    /// once there; a leg at zero moves on to one.
     #[test]
     fn a_leg_doubles_to_its_top_and_no_further() {
         assert_eq!(doubled(3, 64), Some(6));
+        assert_eq!(doubled(0, 64), Some(1));
         assert_eq!(doubled(40, 64), Some(64));
         assert_eq!(doubled(64, 64), None);
         assert_eq!(doubled(2_048_000, 1 << 16), None);
