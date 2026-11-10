@@ -316,20 +316,7 @@ impl Store {
         &self,
         harness: &Harness<O, W>,
     ) -> Vec<Regression<O>> {
-        let (mut skipped, mut unreadable, mut lacks) = (0, 0, BTreeSet::new());
-        // Each file is read once.
-        let mine = |path: PathBuf| {
-            let Some(head) = read_head(&path) else {
-                unreadable += 1;
-                return None;
-            };
-            let missing = foreign(harness, &head.checks);
-            skipped += usize::from(!missing.is_empty());
-            lacks.extend(missing.iter().cloned());
-            missing.is_empty().then_some((path, head))
-        };
-        let files: Vec<(PathBuf, Saved<serde_json::Value>)> =
-            self.files().into_iter().filter_map(mine).collect();
+        let Sorted { files, skipped, lacks, unreadable } = self.sorted(harness);
         let lacks: Vec<String> = lacks.into_iter().map(|c| format!("{c:?}")).collect();
         let lacks =
             if lacks.is_empty() { String::new() } else { format!(" lacking {}", lacks.join(", ")) };
@@ -353,6 +340,25 @@ impl Store {
             .collect()
     }
 
+    /// The store's files sorted for `harness`: the replays that are its
+    /// (each read once), and the tallies of the others.
+    fn sorted<O: Op<W>, W: World>(&self, harness: &Harness<O, W>) -> Sorted {
+        let mut sorted = Sorted::default();
+        for path in self.files() {
+            let Some(head) = read_head(&path) else {
+                sorted.unreadable += 1;
+                continue;
+            };
+            let missing = foreign(harness, &head.checks);
+            sorted.skipped += usize::from(!missing.is_empty());
+            sorted.lacks.extend(missing.iter().cloned());
+            if missing.is_empty() {
+                sorted.files.push((path, head));
+            }
+        }
+        sorted
+    }
+
     /// Why the replay at `path` can't be judged on `harness` now (its plan
     /// no longer reads as the op type's, or its check is gone), unrun;
     /// `None` if it can, or isn't a replay.
@@ -362,6 +368,19 @@ impl Store {
     ) -> Option<String> {
         read::<O, W>(path, harness)?.1.err()
     }
+}
+
+/// A store's files sorted for a harness by [`Store::sorted`].
+#[derive(Default)]
+struct Sorted {
+    /// The replays that are the harness's, with their heads.
+    files: Vec<(PathBuf, Saved<serde_json::Value>)>,
+    /// How many are another harness's.
+    skipped: usize,
+    /// The checks those lack from the harness.
+    lacks: BTreeSet<String>,
+    /// How many files aren't readable as a replay.
+    unreadable: usize,
 }
 
 /// The replay `head` (the file at `path`), reproduced on `harness`. It is
@@ -685,6 +704,51 @@ fn file_name(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A store's files are the harness's replays, other harnesses' (with
+    /// the checks they lack) and unreadable ones, each counted.
+    #[test]
+    fn a_store_sorts_its_files_by_harness_and_readability() {
+        #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+        struct Nop;
+        impl Op for Nop {
+            fn submit(&self, _: &mut Sim) -> Result<(), super::super::Skip> {
+                Ok(())
+            }
+        }
+        let h = Harness::<Nop>::new(crate::Fixture::new().build())
+            .at_rest("mine", |_: &Sim| Ok::<(), String>(()));
+        let id = serde_json::json!({
+            "check": "c", "site": { "Op": "x" }, "cause": null, "ops": [],
+            "receipt": null, "class": null, "faults": []
+        });
+        let replay = |checks: Vec<String>| {
+            serde_json::json!({
+                "format": super::super::FORMAT, "check": "c", "site": "x", "label": "l",
+                "fixture": "", "plan": {}, "checks": checks, "id": id
+            })
+        };
+        let dir = std::env::temp_dir().join(format!("ncs-store-sorted-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let write = |name: &str, json: serde_json::Value| {
+            std::fs::write(dir.join(name), json.to_string()).unwrap()
+        };
+        write("a.json", replay(h.check_names()));
+        write("b.json", replay(vec!["theirs".to_owned()]));
+        write("e.json", replay(vec!["theirs".to_owned(), "more".to_owned()]));
+        let mut no_id = replay(h.check_names());
+        no_id.as_object_mut().unwrap().remove("id");
+        write("c.json", no_id);
+        write("d.json", serde_json::json!(["not", "a", "replay"]));
+        let sorted = Store::at(&dir).sorted(&h);
+        let files: Vec<_> = sorted.files.iter().map(|(p, _)| p.file_name().unwrap()).collect();
+        assert_eq!(files, ["a.json"]);
+        assert_eq!(sorted.skipped, 2);
+        assert_eq!(sorted.lacks, BTreeSet::from(["more".to_owned(), "theirs".to_owned()]));
+        assert_eq!(sorted.unreadable, 2);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     /// `NEAR_SIM_FOUND_DIR` wins; else `CARGO_TARGET_DIR` (absolute, or
     /// relative to the manifest); else the manifest's `target`.
