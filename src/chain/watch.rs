@@ -392,6 +392,14 @@ fn standard_event(log: &str) -> Option<StandardEvent> {
 type Measured = Result<u128, String>;
 
 impl Log {
+    /// What [`token_verdicts`](Self::token_verdicts) reads of the watch as
+    /// it stands: each watched token, the block it is watched from, and
+    /// whether it has a supply view. A watch or a discovered id changes it.
+    pub(crate) fn watch_stamp(&self) -> Vec<(TokenKey, usize, bool)> {
+        let w = &self.watch;
+        w.tokens.iter().map(|(t, since)| (t.key(), *since, t.supply.is_some())).collect()
+    }
+
     /// The views the watch has run: its cost. Each receipt that writes a
     /// watched token's storage costs (holders + 1 with a supply view) views
     /// after it, and as many before it unless reused.

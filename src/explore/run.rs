@@ -170,12 +170,15 @@ pub struct Run<O> {
     /// Incomplete only because per-op checks read the shared world while
     /// their ops overlapped: every other part of the case judged.
     pub(crate) overlapped_only: bool,
+    /// The memo's dedup key of `world`, if its end checks read it: an
+    /// enumeration keys the state with it.
+    pub(crate) rest_key: Option<u64>,
 }
 
 impl<O> Run<O> {
     /// The outcomes of step `i`'s transactions.
     pub(crate) fn step_txs(&self, i: usize) -> impl Iterator<Item = &TxOutcome> {
-        let hashes = self.ops.get(i).map(|r| r.txs.clone()).unwrap_or_default();
+        let hashes = self.ops.get(i).map_or(&[][..], |r| &r.txs);
         self.outcomes.iter().filter(move |o| hashes.contains(&o.hash))
     }
 
@@ -437,6 +440,9 @@ impl<O: Op<W>, W: World> Harness<O, W> {
         let receipts = run.outcomes.iter().flat_map(|o| &o.receipts);
         let accounts: BTreeSet<AccountId> =
             receipts.filter(|r| traps(r)).map(|r| r.receiver_id.clone()).collect();
+        if accounts.is_empty() {
+            return HashMap::new();
+        }
         let mut copy = self.clone();
         // Its fixture differs, so an enumeration's memo is the other
         // fixture's: both its end checks' verdicts and its serial orders.
@@ -809,6 +815,23 @@ struct Case<'h, O, W> {
     on_fixture: bool,
     /// Per-op judgments not judged because their ops overlapped.
     overlapped: u32,
+    /// The memo's dedup key of the world the case ended in, if its end
+    /// checks read it.
+    rest_key: Option<u64>,
+    /// Each op whose transactions are all complete, by index: their
+    /// outcomes and effects, and what of the world they read ([`Live`]);
+    /// the log they read otherwise only grows.
+    finished: HashMap<usize, (Live, (Vec<TxOutcome>, Effects))>,
+}
+
+/// What a complete transaction's outcome reads of the world as it stands,
+/// not of the log: the watched tokens (`Log::watch_stamp`), which a watch
+/// or a discovered id changes, and the chain id a missing method's exports
+/// are read under.
+type Live = (Vec<(crate::effects::TokenKey, usize, bool)>, String);
+
+fn live(sim: &Sim) -> Live {
+    (sim.chain.log().watch_stamp(), sim.config.chain_id.clone())
 }
 
 impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
@@ -837,6 +860,32 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
             until: None,
             on_fixture: false,
             overlapped: 0,
+            rest_key: None,
+            finished: HashMap::new(),
+        }
+    }
+
+    /// Op `i`'s outcomes and effects: those it finished with, or as they
+    /// stand.
+    fn outcomes(&self, i: usize) -> std::borrow::Cow<'_, (Vec<TxOutcome>, Effects)> {
+        if let Some((_, f)) = self.finished.get(&i) {
+            return std::borrow::Cow::Borrowed(f);
+        }
+        let outcomes: Vec<TxOutcome> =
+            self.ops[i].record.txs.iter().map(|t| self.sim().outcome(t)).collect();
+        let effects = merge(&outcomes);
+        std::borrow::Cow::Owned((outcomes, effects))
+    }
+
+    /// Rebuilds each finished op's outcomes that read the world as it no
+    /// longer is: what a rebuild would give, before anything reuses them.
+    fn refresh(&mut self) {
+        let now = live(self.sim());
+        let stale = self.finished.iter().filter(|(_, (was, _))| *was != now);
+        for i in stale.map(|(&i, _)| i).collect::<Vec<_>>() {
+            self.finished.remove(&i);
+            let fresh = self.outcomes(i).into_owned();
+            self.finished.insert(i, (now.clone(), fresh));
         }
     }
 
@@ -1178,6 +1227,7 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
     /// `always`, `at_rest` if nothing is in flight, and the per-op checks
     /// of each op that just completed.
     fn checkpoint(&mut self) {
+        self.refresh();
         let height = self.sim().height();
         for o in self.ops.iter_mut().filter(|o| o.record.skipped.is_none()) {
             o.record.at.get_or_insert(height);
@@ -1207,6 +1257,7 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
     /// Judges the `at_rest` checks: those judged at every rest point, or,
     /// with `end`, those judged once at the end.
     fn rest_checks(&mut self, end: bool) {
+        self.refresh();
         let results = self.judge_at_rest(end);
         self.record_world(self.harness.always.len(), results);
     }
@@ -1221,21 +1272,21 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
 
     fn judge_at_rest(&self, end: bool) -> Vec<(usize, Result<(), Fail>)> {
         let rest = &self.harness.at_rest;
-        let wants_ops = rest.iter().any(|c| matches!(c.check, RestFn::Ops(_)));
-        let ran: Vec<&OpState<O, W>> =
-            self.ops.iter().filter(|o| wants_ops && o.before.is_some()).collect();
-        let outcomes: Vec<Vec<TxOutcome>> = (ran.iter())
-            .map(|o| o.record.txs.iter().map(|t| self.sim().outcome(t)).collect())
-            .collect();
-        let effects: Vec<Effects> = outcomes.iter().map(|o| merge(o)).collect();
+        let checks: Vec<_> = rest.iter().enumerate().filter(|(_, c)| c.at_end == end).collect();
+        let wants_ops = checks.iter().any(|(_, c)| matches!(c.check, RestFn::Ops(_)));
+        let ran: Vec<usize> = if wants_ops {
+            (0..self.ops.len()).filter(|&i| self.ops[i].before.is_some()).collect()
+        } else {
+            vec![]
+        };
+        let outcomes: Vec<_> = ran.iter().map(|&i| self.outcomes(i)).collect();
         // Whole-case checks: the overlap rule reads no flag of theirs.
         let shared = Default::default();
-        let dones: Vec<OpDone<'_, O, W>> = (ran.iter().zip(&outcomes).zip(&effects))
-            .filter_map(|((o, outcomes), effects)| o.done(outcomes, effects, &self.world, &shared))
+        let dones: Vec<OpDone<'_, O, W>> = (ran.iter().zip(&outcomes))
+            .filter_map(|(&i, f)| self.ops[i].done(&f.0, &f.1, &self.world, &shared))
             .collect();
         let ops: Vec<OpDone<'_, O, W>> = dones.iter().filter(|d| d.op.is_some()).cloned().collect();
-        (rest.iter().enumerate())
-            .filter(|(_, c)| c.at_end == end)
+        (checks.into_iter())
             .map(|(k, c)| match &c.check {
                 RestFn::World(check) => (k, judge(|| check(&self.world))),
                 RestFn::Ops(check) => {
@@ -1280,20 +1331,33 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
         let harness = self.harness;
         let base = harness.always.len() + harness.at_rest.len();
         let height = self.sim().height();
+        // The transactions with a receipt pending, read once if needed.
+        let pending = std::cell::OnceCell::new();
         for i in 0..self.ops.len() {
             if self.ops[i].done {
                 continue;
             }
-            let txs = self.ops[i].record.txs.clone();
-            let outcomes: Vec<TxOutcome> = txs.iter().map(|t| self.sim().outcome(t)).collect();
-            if !outcomes.iter().all(TxOutcome::is_complete) {
+            let sim = self.world.as_ref();
+            let pending = || -> &HashSet<CryptoHash> {
+                pending.get_or_init(|| sim.pending_receipts().into_iter().map(|p| p.tx).collect())
+            };
+            // What `TxOutcome::is_complete` reads, without building outcomes:
+            // converted, and no receipt of its own pending.
+            let complete =
+                |t: &CryptoHash| sim.chain.log().position(t).is_some() && !pending().contains(t);
+            if !self.ops[i].record.txs.iter().all(complete) {
                 continue;
             }
+            let txs = &self.ops[i].record.txs;
+            let outcomes: Vec<TxOutcome> = txs.iter().map(|t| self.sim().outcome(t)).collect();
+            debug_assert!(outcomes.iter().all(TxOutcome::is_complete));
             self.ops[i].done = true;
             let effects = merge(&outcomes);
+            let stored = (live(self.sim()), (outcomes, effects));
+            let (_, (outcomes, effects)) = self.finished.entry(i).or_insert(stored);
             let shared = Default::default();
             let Some(done @ OpDone { op: Some(op), .. }) =
-                self.ops[i].done(&outcomes, &effects, &self.world, &shared)
+                self.ops[i].done(outcomes, effects, &self.world, &shared)
             else {
                 continue;
             };
@@ -1327,7 +1391,7 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
                     }
                 })
                 .collect();
-            let tx = txs.first().copied();
+            let tx = self.ops[i].record.txs.first().copied();
             for (k, r) in results.into_iter().enumerate() {
                 if let Some(r) = r {
                     self.record(base + k, r, Site::Op(name.clone()), height, tx);
@@ -1342,6 +1406,7 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
         let base = h.always.len() + h.at_rest.len() + h.per_op.len();
         let player = |w: &mut W, plan: &Plan<O>| play_plain(w, plan);
         let key = h.memo.as_ref().filter(|_| !h.end.is_empty()).map(|m| (m.key)(&self.world));
+        self.rest_key = key;
         let results = h.end.iter().enumerate().map(|(k, c)| {
             let memo = h.memo.as_ref().zip(key);
             let known = memo.and_then(|(m, key)| m.verdicts.borrow().get(&(key, k)).cloned());
@@ -1372,7 +1437,7 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
             let ran = super::books::Ran {
                 step: &self.plan.steps[i],
                 name: &o.record.name,
-                outcomes: o.record.txs.iter().map(|t| self.sim().outcome(t)).collect(),
+                outcomes: self.outcomes(i).into_owned().0,
             };
             match (o.rest, overlaps.last_mut(), o.before.as_ref()) {
                 (false, Some(last), _) => last.ops.push(ran),
@@ -1566,8 +1631,14 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
 
     /// Labels what was forced, and gives the verdict.
     fn finish(mut self) -> Run<O> {
-        let txs: Vec<CryptoHash> = self.ops.iter().flat_map(|o| o.record.txs.clone()).collect();
-        let outcomes: Vec<TxOutcome> = txs.iter().map(|t| self.sim().outcome(t)).collect();
+        self.refresh();
+        let mut outcomes: Vec<TxOutcome> = vec![];
+        for i in 0..self.ops.len() {
+            outcomes.extend(match self.finished.remove(&i) {
+                Some((_, (done, _))) => done,
+                None => self.outcomes(i).into_owned().0,
+            });
+        }
         for f in self.must_not_fail(&outcomes) {
             self.add(f);
         }
@@ -1590,11 +1661,13 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
         let (landed, not_applied) = self.landed(&outcomes);
         let findings = std::mem::take(&mut self.findings);
         let receipts = || outcomes.iter().flat_map(|o| &o.receipts);
+        // Named as the findings are: by the fixture, not the world left.
+        let fixture = self.harness.fixture.as_ref();
         let reached = receipts()
             .flat_map(|r| {
                 r.method_names
                     .iter()
-                    .map(|m| self.names.site(&r.receiver_id, Some(m.as_str()), sim))
+                    .map(|m| self.names.site(&r.receiver_id, Some(m.as_str()), fixture))
             })
             .collect();
         let failed = (receipts().filter(|r| r.failure().is_some()))
@@ -1604,7 +1677,7 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
                     self.names.site(
                         &r.receiver_id,
                         r.method_names.first().map(String::as_str),
-                        sim,
+                        fixture,
                     ),
                 )
             })
@@ -1650,6 +1723,7 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
             world: Ended(std::rc::Rc::new(self.world), sim_height),
             unjudged_only,
             overlapped_only,
+            rest_key: self.rest_key,
         }
     }
 
@@ -1972,14 +2046,20 @@ pub(crate) fn misnamed<O, W: World>(h: &Harness<O, W>, plan: &Plan<O>) -> Vec<St
     out
 }
 
+/// Each fixture contract and the methods it exports, in trie order, read
+/// once.
+pub(crate) fn fixture_exports<O, W: World>(h: &Harness<O, W>) -> &[(String, Vec<String>)] {
+    h.exports.get_or_init(|| {
+        let code = h.fixture.as_ref().contracts().into_iter();
+        code.map(|(account, code)| (account, super::report::exports(&code))).collect()
+    })
+}
+
 /// The method `at` names, if no fixture contract it may address exports
 /// it ([`misnamed`]).
 fn unexported<'a, O, W: World>(h: &Harness<O, W>, at: &'a Receipts) -> Option<&'a str> {
     let (receiver, method) = at.method_named()?;
-    let exports = h.exports.get_or_init(|| {
-        let code = h.fixture.as_ref().contracts().into_iter();
-        code.map(|(account, code)| (account, super::report::exports(&code))).collect()
-    });
+    let exports = fixture_exports(h);
     let mine = |a: &String| receiver.is_none_or(|r| r.as_str() == a);
     let known = receiver.is_none_or(|r| exports.iter().any(|(a, _)| a == r.as_str()));
     let exported = exports.iter().any(|(a, ms)| mine(a) && ms.iter().any(|m| m == method));
@@ -2256,6 +2336,82 @@ mod tests {
         });
         let run = h.run(&Plan::new().op(Y::Park).op(Y::Pay));
         assert_eq!(*seen.borrow(), [(false, true), (true, false)], "{run}");
+    }
+
+    /// An account the plan drew and the case created reads `<new
+    /// account>` in the run's coverage and failures, as in its findings:
+    /// by the fixture, not the world the case left.
+    #[test]
+    fn a_created_drawn_account_is_a_new_account_in_coverage_and_failures() {
+        let sim = crate::Fixture::new().account("alice.near", Balance::from_near(10)).build();
+        #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+        struct Make(String);
+        impl super::super::Op for Make {
+            fn submit(&self, sim: &mut Sim) -> Result<(), super::super::Skip> {
+                let id = format!("{}.alice.near", self.0);
+                let one = Balance::from_near(1);
+                sim.tx("alice.near", &id).create_account().transfer(one).submit();
+                // No code there: the call fails.
+                sim.call("alice.near", &id, "run").submit();
+                Ok(())
+            }
+        }
+        let run = super::super::Harness::new(sim).run(&Plan::new().op(Make("x".into())));
+        let site = format!("{}::run", crate::findings::NEW_ACCOUNT);
+        let failed: Vec<&String> = run.failed.values().collect();
+        assert_eq!(failed, [&site], "{run}");
+        assert!(run.reached.contains(&site), "{:?}", run.reached);
+        assert!(!run.reached.iter().any(|s| s.starts_with("x.alice.near")), "{:?}", run.reached);
+    }
+
+    /// An op's effects read the watch as it stands, not as it was when
+    /// the op completed: an id a later op mints, discovered from its
+    /// event, is watched in the earlier op's effects too (nothing moved
+    /// there), as rebuilding them would say.
+    #[test]
+    fn an_id_discovered_after_an_op_completed_is_watched_in_its_effects() {
+        const MT: &str = "mt.near";
+        let wasm = include_bytes!("../../tests/res/mtoken_events.wasm").to_vec();
+        let sim = crate::Fixture::new()
+            .account("issuer.near", Balance::from_near(100))
+            .account("alice.near", Balance::from_near(100))
+            .contract(MT, wasm)
+            .init("new")
+            .args_json(serde_json::json!({ "owner": "issuer.near", "ids": [] }))
+            .token(crate::Token::nep245_ids(MT, Vec::<String>::new()).discover())
+            .build();
+        #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+        enum M {
+            /// alice pays issuer: nothing of the token moves.
+            Pay,
+            /// issuer mints a new id, with an `mt_mint` event.
+            Create(String),
+        }
+        impl super::super::Op for M {
+            fn submit(&self, sim: &mut Sim) -> Result<(), super::super::Skip> {
+                match self {
+                    M::Pay => {
+                        sim.tx("alice.near", "issuer.near").transfer(Balance::from_near(1)).submit()
+                    }
+                    M::Create(id) => sim
+                        .call("issuer.near", MT, "create")
+                        .args_json(serde_json::json!({ "id": id }))
+                        .submit(),
+                };
+                Ok(())
+            }
+        }
+        let seen = std::rc::Rc::new(std::cell::RefCell::new(vec![]));
+        let into = seen.clone();
+        let h = super::super::Harness::<M>::new(sim).at_rest_ops("reads X", move |_, ops| {
+            *into.borrow_mut() =
+                ops.iter().map(|d| d.effects().token_net((MT, "X"), "alice.near")).collect();
+            Ok::<(), String>(())
+        });
+        let run = h.run(&Plan::new().op(M::Pay).op(M::Create("X".into())));
+        assert_eq!(run.verdict, Verdict::Clean, "{run}");
+        let zero = Ok(crate::Delta::ZERO);
+        assert_eq!(*seen.borrow(), [zero.clone(), zero], "{run}");
     }
 
     #[test]

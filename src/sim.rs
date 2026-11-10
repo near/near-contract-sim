@@ -6,6 +6,7 @@ use near_primitives::account::{AccessKey, Account as NearAccount, AccountContrac
 use near_primitives::action::{Action, GlobalContractIdentifier};
 use near_primitives::hash::CryptoHash;
 use near_primitives::state_record::{StateRecord, state_record_to_account_id};
+use near_primitives::trie_key::trie_key_parsers::parse_account_id_from_account_key;
 use near_primitives::trie_key::{TrieKey, col};
 use near_primitives::types::{
     AccountId, Balance, BlockHeight, Gas, Nonce, NonceIndex, PromiseYieldStatus,
@@ -840,6 +841,29 @@ impl Sim {
         let entries = self.chain.entries().into_iter();
         let code = entries.filter(|(k, _)| k[0] == col::CONTRACT_CODE);
         code.map(|(k, v)| (String::from_utf8_lossy(&k[1..]).into_owned(), v)).collect()
+    }
+
+    /// Every account with a contract of its own (not a global one), in
+    /// trie order: as [`contracts`](Self::contracts) lists them, without
+    /// their code. `only`, just those of these accounts.
+    pub(crate) fn coded(&self, only: Option<&[String]>) -> Vec<(AccountId, NearAccount)> {
+        let own = |(_, a): &(AccountId, NearAccount)| a.local_contract_hash().is_some();
+        if let Some(only) = only {
+            let mut ids: Vec<AccountId> = only.iter().filter_map(|a| a.parse().ok()).collect();
+            ids.sort();
+            ids.dedup();
+            let accounts = ids.into_iter().filter_map(|id| Some((id.clone(), self.stored(&id)?)));
+            return accounts.filter(own).collect();
+        }
+        let trie = self.chain.trie();
+        let mut it = trie.disk_iter().expect("storage");
+        it.seek_prefix([col::ACCOUNT]).expect("storage");
+        let accounts = it.map(|e| {
+            let (k, v) = e.expect("storage");
+            let id = parse_account_id_from_account_key(&k).expect("an account key");
+            (id, borsh::from_slice(&v).expect("an account record"))
+        });
+        accounts.filter(own).collect()
     }
 
     /// Swaps `id`'s code for one that logs the function a trap is in
