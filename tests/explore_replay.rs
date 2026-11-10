@@ -399,8 +399,7 @@ const ONLY_B: &str = r#"(module
 /// One plan, two causes at one check and site: `a` breaks
 /// it, and with `a` fixed, `b` does. The replay saved for `a`'s cause
 /// reads `Gone` on the build that fixed `a`, though `b`'s finding shows
-/// at the same check and site. A file saved before replays kept the
-/// identity matches on check and site alone, and says so.
+/// at the same check and site. A file without an identity is not read.
 ///
 /// Verification boundary: replay judgment by finding identity, over an
 /// actual run on each build.
@@ -429,16 +428,16 @@ fn a_replay_matches_its_own_cause_not_another_at_its_site() {
     let all = fixed.clone().store(&dir).regressions();
     assert_eq!(all.len(), 1, "{all:#?}");
     assert_eq!(status(&all[0]), "gone", "{:?}", all[0]);
-    assert!(!all[0].by_site);
 
-    // The same file saved before identities: matched by site, and says so.
+    // The same file without its identity is no replay of this build's:
+    // unread, not matched on its check and site alone.
     let path = all[0].path.clone();
     let mut json: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     assert!(json.as_object_mut().unwrap().remove("id").is_some(), "{json}");
     std::fs::write(&path, json.to_string()).unwrap();
     let old = fixed.clone().store(&dir).regressions();
-    assert_eq!((status(&old[0]), old[0].by_site), ("shows", true), "{:?}", old[0]);
+    assert!(old.is_empty(), "{old:#?}");
     let _ = std::fs::remove_dir_all(dir);
 }
 

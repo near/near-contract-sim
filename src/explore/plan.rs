@@ -276,7 +276,6 @@ pub enum Gap {
     /// Blocks until the next step converts `k` blocks from the next epoch
     /// start still ahead. The default gaps draw it (`k` in -2..=2) on
     /// epochs of 100 blocks or fewer.
-    #[serde(alias = "Epoch")]
     EpochEdge(i8),
     /// Blocks until the next step converts at the `n`-th epoch start
     /// ahead: `Epochs(4)` waits out a four-epoch cooldown.
@@ -539,8 +538,12 @@ impl<O: DeserializeOwned> Plan<O> {
     /// A plan from JSON text, as [`load`](Self::load) reads it, or why not
     /// (where `load` panics).
     pub fn from_json(text: &str) -> Result<Self, String> {
-        let mut value: serde_json::Value =
-            serde_json::from_str(text).map_err(|e| format!("not JSON: {e}"))?;
+        let value = serde_json::from_str(text).map_err(|e| format!("not JSON: {e}"))?;
+        Self::from_value(value)
+    }
+
+    /// [`from_json`](Self::from_json) of text already parsed.
+    pub(crate) fn from_value(mut value: serde_json::Value) -> Result<Self, String> {
         if let Some(plan) = value.get_mut("plan") {
             value = plan.take();
         }
@@ -552,9 +555,16 @@ impl<O: DeserializeOwned> Plan<O> {
 /// `value` as a `T` whose type has since gained fields, each filled with
 /// a plain value.
 fn with_zeros<T: DeserializeOwned>(value: serde_json::Value) -> serde_json::Result<T> {
+    // Copied only when a field is missing.
+    let e = match T::deserialize(&value) {
+        Ok(t) => return Ok(t),
+        Err(e) => e,
+    };
     let ok = |v: &serde_json::Value| T::deserialize(v).map(drop).map_err(|e| e.to_string());
-    let filled = super::axes::fill(&ok, &[], value.clone());
-    T::deserialize(&filled.unwrap_or(value))
+    match super::axes::fill(&ok, &[], value) {
+        Some(filled) => T::deserialize(&filled),
+        None => Err(e),
+    }
 }
 
 /// Plans of the ops `ops` generates, for
