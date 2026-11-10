@@ -122,7 +122,7 @@ out.assert_headroom("factorial_mult", Gas::from_teragas(1));
 
 near-contract-sim isn't on crates.io yet: it builds on nearcore's
 runtime crates, which aren't published there, so it is a git
-dependency. Pin it to a commit with `rev`; releases will be git tags.
+dependency. Releases are git tags (`v0.1.0`); pin a tag's commit with `rev`.
 It pins nearcore 2.14.0 (protocol 88) and re-exports nearcore's types,
 in `near_contract_sim::nearcore`: a nearcore dependency of your own
 would be a second copy of every type. A test crate that also depends on
@@ -166,7 +166,7 @@ edition = "2024"
 publish = false
 
 [dev-dependencies]
-near-contract-sim = { git = "https://github.com/near/near-contract-sim", rev = "c40ce151f8b00dcc114bcd34bf58534593fef24a" }
+near-contract-sim = { git = "https://github.com/near/near-contract-sim", rev = "96bc8fb6a390c22d93cfd3ac30dcc0337a98e1d2" }
 cargo-near-build = "0.11"
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
@@ -304,7 +304,7 @@ every difference.
 
 ## Versions
 
-Releases will be git tags; until the first, pin a `rev`. While the
+Releases are git tags, `vX.Y.Z`; pin a tag's commit as `rev`. While the
 version is 0.x, a breaking change or a new nearcore pin moves the minor
 version; additions and fixes move the patch. nearcore's types are re-exported as they are: a nearcore bump that
 changes one changes this crate's API with it.

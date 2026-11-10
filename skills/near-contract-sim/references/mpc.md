@@ -24,11 +24,11 @@ image hashes.
 
 Submit the request and settle: the yield stays parked. Race the answer
 and the timeout from clones; the clock moves only when you say, so there
-are no sleeps and no polling. The whole test is in
+are no sleeps and no polling. The race is in
 [blocks-and-clock.md](blocks-and-clock.md), "Yields": one yield parked
 with the callback you expect, the request incomplete while parked, an
-answer winning one block before `expires_at` and the timeout at it, and
-the bill, `effects().near_net(USER)` and `gas_paid()`.
+answer winning one block before `expires_at` and the timeout at it. The
+bill, `effects().near_net(USER)` and `gas_paid()`, follows in `tests/mpc.rs`.
 
 ## 3. A verifier that says no, or never answers
 

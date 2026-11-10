@@ -3,8 +3,9 @@
 ## Setup
 
 - **Rust 1.95.0 with the wasm32 target.** `rust-toolchain.toml` selects
-  1.95.0; the fixture contracts under `tests/contracts/` pin it too and
-  build to wasm32:
+  1.95.0, and the fixture contracts under `tests/contracts/` inherit it
+  (only `fuzz-contract` has a file of its own, which CI and
+  `tests/fixture_build.rs` read). They build to wasm32:
 
   ```sh
   rustup toolchain install 1.95.0 --target wasm32-unknown-unknown
