@@ -297,7 +297,8 @@ fn run_and_snapshots_wait_for_held_receipts() {
     sim.findings().assert_none();
     let held = sim.clone();
     let err = catch_unwind(AssertUnwindSafe(|| {
-        Sim::cached(std::time::SystemTime::now(), || held.clone());
+        // Refused before anything is saved: the key can be the same each run.
+        Sim::cached("held", || held.clone());
     }))
     .unwrap_err();
     let msg = err.downcast_ref::<&str>().copied().unwrap_or_default();

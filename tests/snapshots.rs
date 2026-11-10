@@ -1,4 +1,9 @@
 //! `Sim::cached`: setup once per test binary, loaded from disk after that.
+//!
+//! The keys are constant, so a run leaves no new files: a test compares a
+//! setup built afresh with the second of two calls, which loads, whether the
+//! first one ran the setup or loaded too. Concurrent misses are a unit test
+//! of `src/cache.rs`, over a file of its own.
 
 mod common;
 use common::*;
@@ -7,8 +12,7 @@ use near_contract_sim::{
     SecretKey, Sim, builtin,
 };
 use serde_json::json;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 /// An unhandled failure, an invalid transaction, a parked yield and a
 /// returned one, which keeps its transaction pending.
@@ -58,19 +62,17 @@ fn tail(mut sim: Sim) -> String {
 
 #[test]
 fn a_loaded_snapshot_continues_like_the_original() {
-    // A key no earlier run used: the first call is a miss.
-    let key = SystemTime::now();
     let mut runs = 0;
-    let mut sims: Vec<Sim> = (0..2)
-        .map(|_| {
-            Sim::cached(key, || {
-                runs += 1;
-                setup()
-            })
+    let mut cached = || {
+        Sim::cached("continues", || {
+            runs += 1;
+            setup()
         })
-        .collect();
-    assert_eq!(runs, 1);
-    let (loaded, original) = (sims.pop().unwrap(), sims.pop().unwrap());
+    };
+    cached();
+    let loaded = cached();
+    assert!(runs <= 1, "saved, then loaded");
+    let original = setup();
     assert_eq!(loaded.state_root(), original.state_root());
     assert_eq!(tail(loaded), tail(original));
 }
@@ -89,38 +91,23 @@ fn call_sites_never_share_a_snapshot() {
     assert!(bob.account("bob.near").is_some() && bob.account("alice.near").is_none());
 }
 
-#[test]
-fn concurrent_misses_run_setup_once() {
-    let key = SystemTime::now();
-    let runs = AtomicUsize::new(0);
-    std::thread::scope(|s| {
-        for _ in 0..4 {
-            s.spawn(|| {
-                Sim::cached(key, || {
-                    runs.fetch_add(1, Ordering::SeqCst);
-                    std::thread::sleep(Duration::from_millis(300));
-                    user("alice.near")
-                })
-            });
-        }
-    });
-    assert_eq!(runs.into_inner(), 1);
-}
-
+/// Alternating keys load each its own snapshot: one slot per call site
+/// would run the setup on every call.
 #[test]
 fn one_call_site_keeps_a_snapshot_per_key() {
-    let t = SystemTime::now();
     let runs = std::cell::Cell::new(0);
     let fixture = |n: u8| {
-        Sim::cached((t, n), || {
+        Sim::cached(n, || {
             runs.set(runs.get() + 1);
-            user("alice.near")
+            user(&format!("u{n}.near"))
         })
     };
     for n in [1, 2, 1, 2] {
-        fixture(n);
+        let sim = fixture(n);
+        assert!(sim.account(format!("u{n}.near")).is_some(), "key {n}");
+        assert!(sim.account(format!("u{}.near", 3 - n)).is_none(), "key {n}");
     }
-    assert_eq!(runs.get(), 2);
+    assert!(runs.get() <= 2, "{} setups", runs.get());
 }
 
 fn gas_key() -> SecretKey {
@@ -195,17 +182,15 @@ fn wide_tail(mut sim: Sim) -> String {
 
 #[test]
 fn a_loaded_snapshot_keeps_signers_gas_keys_globals_delegates_and_settings() {
-    let key = SystemTime::now();
     let mut runs = 0;
-    let mut sims: Vec<Sim> = (0..2)
-        .map(|_| {
-            Sim::cached(key, || {
-                runs += 1;
-                wide_setup()
-            })
+    let mut cached = || {
+        Sim::cached("wide", || {
+            runs += 1;
+            wide_setup()
         })
-        .collect();
-    assert_eq!(runs, 1);
-    let (loaded, original) = (sims.pop().unwrap(), sims.pop().unwrap());
-    assert_eq!(wide_tail(loaded), wide_tail(original));
+    };
+    cached();
+    let loaded = cached();
+    assert!(runs <= 1, "saved, then loaded");
+    assert_eq!(wide_tail(loaded), wide_tail(wide_setup()));
 }

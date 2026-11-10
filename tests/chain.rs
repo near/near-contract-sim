@@ -324,7 +324,9 @@ fn submitted_calls_land_in_one_block() {
     assert_eq!(sim.height(), h);
 }
 
-/// Compiled contracts outlive the process, in `<target dir>/near-contract-sim`.
+/// Compiled contracts outlive the process, in `<target dir>/near-contract-sim`
+/// (or `NCS_CACHE_DIR`), where the target directory is the one cargo built
+/// this test in, even one with no `CACHEDIR.TAG`.
 #[test]
 fn compiled_contracts_are_cached_in_the_target_dir() {
     let mut sim = sim_with_users();
@@ -333,10 +335,13 @@ fn compiled_contracts_are_cached_in_the_target_dir() {
         .args_json(json!({"message": "hi"}))
         .transact()
         .assert_success();
-    let exe = std::env::current_exe().unwrap();
-    let target = exe.ancestors().find(|d| d.join("CACHEDIR.TAG").is_file()).unwrap();
-    let dir = target.join("near-contract-sim");
-    assert!(std::fs::read_dir(&dir).unwrap().next().is_some(), "{dir:?}");
+    let target = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).parent().unwrap();
+    let dir = std::env::var_os("NCS_CACHE_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| target.join("near-contract-sim"))
+        .join("contracts");
+    let found = std::fs::read_dir(&dir).map(|mut d| d.next().is_some());
+    assert!(found.unwrap_or(false), "no compiled contract in {dir:?}");
 }
 
 static BASE: LazyLock<Sim> = LazyLock::new(|| {

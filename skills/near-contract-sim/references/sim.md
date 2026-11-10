@@ -105,8 +105,8 @@ setup. Across test processes (nextest runs each test in its own),
 
 Compiled wasm and snapshots go in the first of `NCS_CACHE_DIR`,
 `near-contract-sim/` in cargo's target directory, or
-`~/.cache/near-contract-sim`. The cache holds native code: point
-`NCS_CACHE_DIR` only at a private directory.
+`~/.cache/near-contract-sim`; a miss deletes week-old snapshots. The
+cache holds native code: point `NCS_CACHE_DIR` only at a private directory.
 
 ## Contract state
 
