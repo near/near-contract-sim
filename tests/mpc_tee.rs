@@ -96,33 +96,34 @@ fn tee_verifier_rejects_outside_validity_window() {
     assert!(msg.to_lowercase().contains("expired"), "{msg}");
 }
 
-/// This binary's `Sim::cached` snapshot directory in each place
+/// The `Sim::cached` snapshot directory in each place
 /// skills/near-contract-sim/references/sim.md lists for the cache, once each; the one in use is among
 /// them.
 fn snapshot_dirs() -> Vec<PathBuf> {
-    let exe = std::env::current_exe().unwrap();
     let target = std::env::var_os("CARGO_TARGET_DIR").map(PathBuf::from);
-    let tagged = exe.ancestors().find(|d| d.join("CACHEDIR.TAG").is_file()).map(Path::to_path_buf);
+    let built = Path::new(env!("CARGO_TARGET_TMPDIR")).parent().map(Path::to_path_buf);
     let roots = std::env::var_os("NCS_CACHE_DIR").map(PathBuf::from).into_iter().chain(
         target
             .filter(|d| d.is_absolute())
             .into_iter()
-            .chain(tagged)
+            .chain(built)
             .map(|d| d.join("near-contract-sim")),
     );
     let roots = roots.chain(std::env::home_dir().map(|h| h.join(".cache/near-contract-sim")));
-    let mut dirs: Vec<_> =
-        roots.map(|r| r.join("snapshots").join(exe.file_name().unwrap())).collect();
-    // CARGO_TARGET_DIR is often the tagged ancestor too.
+    let mut dirs: Vec<_> = roots.map(|r| r.join("snapshots")).collect();
+    // CARGO_TARGET_DIR is often the one cargo built in too.
     dirs.sort();
     dirs.dedup();
     dirs
 }
 
-/// The snapshot files (not locks) in this binary's snapshot directories.
+/// This binary's snapshot files (not locks) in the snapshot directories.
 fn snapshot_files() -> Vec<PathBuf> {
+    let exe = std::env::current_exe().unwrap();
+    let ours = format!("{}-", exe.file_stem().unwrap().to_string_lossy());
     let entries = snapshot_dirs().into_iter().filter_map(|d| std::fs::read_dir(d).ok()).flatten();
-    entries.map(|e| e.unwrap().path()).filter(|p| p.extension().is_none()).collect()
+    let files = entries.map(|e| e.unwrap().path()).filter(|p| p.extension().is_none());
+    files.filter(|p| p.file_name().unwrap().to_string_lossy().starts_with(&ours)).collect()
 }
 
 /// An MPC world (the tee verifier and MPC contracts deployed, one node

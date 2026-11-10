@@ -10,40 +10,67 @@ use near_primitives::types::{AccountId, BlockHeight, Gas, Nonce};
 use near_vm_runner::{
     ContractRuntimeCache, FilesystemContractRuntimeCache, noop_background_spawner,
 };
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
+use std::ffi::OsString;
 use std::fs::File;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io;
 use std::panic::Location;
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
-use std::time::Duration;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, SystemTime};
 
 /// Where compiled contracts and snapshots persist across
 /// processes and runs: the first of `NCS_CACHE_DIR`, `near-contract-sim` in
-/// cargo's target directory (`CARGO_TARGET_DIR` if it's absolute, or else the
-/// nearest ancestor of the running executable with a `CACHEDIR.TAG`) and
-/// `~/.cache/near-contract-sim` that exists or can be created. An explicit
-/// `NCS_CACHE_DIR` must be private: the cache holds native code, which other
-/// users must not be able to plant.
+/// cargo's target directory (`CARGO_TARGET_DIR` if it's absolute, or else
+/// the one the running executable was built in, [`target_dir`]) and
+/// `~/.cache/near-contract-sim`, for a binary run outside cargo, that exists
+/// or can be created. An explicit `NCS_CACHE_DIR` must be private: the cache
+/// holds native code, which other users must not be able to plant.
 pub(crate) fn cache_dir() -> &'static Path {
     static DIR: LazyLock<PathBuf> = LazyLock::new(|| {
-        let target = std::env::var_os("CARGO_TARGET_DIR").map(PathBuf::from);
-        // A relative one is from where cargo ran, which the test doesn't know.
-        let target = target.filter(|dir| dir.is_absolute()).or_else(|| {
-            let exe = std::env::current_exe().ok()?;
-            Some(exe.ancestors().find(|d| d.join("CACHEDIR.TAG").is_file())?.to_path_buf())
-        });
-        let home = std::env::home_dir().map(|h| h.join(".cache/near-contract-sim"));
-        std::env::var_os("NCS_CACHE_DIR")
-            .map(PathBuf::from)
-            .into_iter()
-            .chain(target.map(|dir| dir.join("near-contract-sim")))
-            .chain(home)
-            .find(|dir| std::fs::create_dir_all(dir).is_ok())
+        let var = std::env::var_os;
+        let exe = std::env::current_exe().ok();
+        let home = std::env::home_dir();
+        choose_cache_dir(var("NCS_CACHE_DIR"), var("CARGO_TARGET_DIR"), exe.as_deref(), home)
             .expect("a cache directory (set NCS_CACHE_DIR)")
     });
     &DIR
+}
+
+/// `cache_dir` from `NCS_CACHE_DIR`, `CARGO_TARGET_DIR`, the running
+/// executable and the home directory.
+fn choose_cache_dir(
+    explicit: Option<OsString>,
+    target: Option<OsString>,
+    exe: Option<&Path>,
+    home: Option<PathBuf>,
+) -> Option<PathBuf> {
+    // A relative one is from where cargo ran, which the test doesn't know.
+    let target = target.map(PathBuf::from).filter(|dir| dir.is_absolute());
+    let target = target.or_else(|| target_dir(exe?));
+    explicit
+        .map(PathBuf::from)
+        .into_iter()
+        .chain(target.map(|dir| dir.join("near-contract-sim")))
+        .chain(home.map(|h| h.join(".cache/near-contract-sim")))
+        .find(|dir| std::fs::create_dir_all(dir).is_ok())
+}
+
+/// The cargo target directory `exe` was built in, from cargo's layout,
+/// `<target>/[<triple>/]<profile>/[deps/|examples/]<exe>`: the profile
+/// directory is the nearest ancestor with a `.fingerprint`, and the target
+/// directory the nearest one above it with a `CACHEDIR.TAG` or a
+/// `.rustc_info.json`, or else the profile directory's parent. A build
+/// wrapper that places the target directory itself may write no
+/// `CACHEDIR.TAG`. `None` outside a target directory.
+fn target_dir(exe: &Path) -> Option<PathBuf> {
+    let profile = exe.ancestors().skip(1).find(|d| d.join(".fingerprint").is_dir())?;
+    let marked =
+        |d: &&Path| d.join("CACHEDIR.TAG").is_file() || d.join(".rustc_info.json").is_file();
+    let root = profile.ancestors().skip(1).take(2).find(marked).or(profile.parent())?;
+    Some(root.to_path_buf())
 }
 
 /// Compiled contracts in `cache_dir()`, plus nearcore's in-memory cache of
@@ -173,6 +200,12 @@ impl Sim {
     /// id and keys with `secret_key(id)`. Panics if `setup` leaves anything
     /// queued or in flight (`settle()` settles it); parked yields are fine.
     ///
+    /// Snapshots, like compiled contracts, go in the first of
+    /// `NCS_CACHE_DIR`, `near-contract-sim/` in cargo's target directory and
+    /// `~/.cache/near-contract-sim`. A miss also deletes the snapshots written
+    /// more than a week ago, so the directory needs no cleaning, and one
+    /// still in use is rebuilt once a week.
+    ///
     /// ```no_run
     /// # use near_contract_sim::{Balance, Sim};
     /// let wasm = std::fs::read("tests/res/auction.wasm").expect("build tests/res/auction.wasm first");
@@ -190,12 +223,12 @@ impl Sim {
         // The default limits come from the environment
         // (`NEAR_SIM_GAS_LIMITS`): a setup run under one keeps them.
         let site = hash_of((key, Location::caller(), Config::default().gas_limits));
-        let dir = cache_dir().join("snapshots").join(exe.file_name().expect("executable name"));
-        cached_at(
-            &dir.join(format!("{site:016x}")),
-            hash_of((site, meta.len(), meta.modified().ok())),
-            setup,
-        )
+        // One flat directory, so a sweep never removes one another process
+        // is about to write in; no dots, so the lock and temporary files'
+        // extensions are the only ones.
+        let stem = exe.file_stem().expect("executable name").to_string_lossy().replace('.', "_");
+        let key = hash_of((site, meta.len(), meta.modified().ok()));
+        cached_in(&cache_dir().join("snapshots"), &format!("{stem}-{site:016x}"), key, setup)
     }
 
     /// An overdue yield timeout is no obstacle: it is trie state, and the
@@ -252,8 +285,9 @@ impl Sim {
 /// Loads the snapshot at `path` if it was
 /// saved under `key`. Otherwise (no file, another key, a corrupt file) runs
 /// `setup` and saves its result there. Concurrent misses wait for one
-/// `setup` under a file lock, and the file is replaced by a rename, so a
-/// reader never sees a partial one.
+/// `setup` under a file lock, and the file is replaced by a rename from a
+/// file only this writer wrote, so a reader never sees a partial one, even
+/// if a sweep deleted the lock file and two setups ran.
 #[track_caller]
 fn cached_at(path: &Path, key: u64, setup: impl FnOnce() -> Sim) -> Sim {
     let load = || {
@@ -268,16 +302,61 @@ fn cached_at(path: &Path, key: u64, setup: impl FnOnce() -> Sim) -> Sim {
         .expect("snapshot directory");
     let lock = File::create(path.with_extension("lock")).expect("snapshot lock file");
     lock.lock().expect("snapshot lock");
+    // Fresh, so a sweep leaves it alone while it's held.
+    let _ = lock.set_modified(SystemTime::now());
     if let Some(hit) = load() {
         return hit;
     }
     let sim = setup();
-    let tmp = path.with_extension("tmp");
+    static WRITES: AtomicU64 = AtomicU64::new(0);
+    let n = WRITES.fetch_add(1, Ordering::Relaxed);
+    let tmp = path.with_extension(format!("tmp-{}-{n}", std::process::id()));
     let bytes = borsh::to_vec(&(key, sim.snapshot())).expect("snapshot");
     if let Err(e) = std::fs::write(&tmp, bytes).and_then(|()| std::fs::rename(&tmp, path)) {
+        let _ = std::fs::remove_file(&tmp);
         panic!("writing snapshot {}: {e}", path.display());
     }
     sim
+}
+
+/// `cached_at` on `name` in `dir`; the first miss in `dir` in this process
+/// sweeps it too. A hit touches nothing else.
+#[track_caller]
+fn cached_in(dir: &Path, name: &str, key: u64, setup: impl FnOnce() -> Sim) -> Sim {
+    let mut miss = false;
+    let sim = cached_at(&dir.join(name), key, || {
+        miss = true;
+        setup()
+    });
+    static SWEPT: Mutex<BTreeSet<PathBuf>> = Mutex::new(BTreeSet::new());
+    let first = || SWEPT.lock().is_ok_and(|mut swept| swept.insert(dir.to_path_buf()));
+    if miss && first() {
+        SystemTime::now().checked_sub(SNAPSHOT_LIFETIME).into_iter().for_each(|c| sweep(dir, c));
+    }
+    sim
+}
+
+/// How long a snapshot is kept after it is written.
+const SNAPSHOT_LIFETIME: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+
+/// Deletes what in `dir` was last modified before `cutoff`: snapshots, their
+/// lock files and the temporary files of writers that died, and the
+/// per-executable directories of earlier versions of this crate. A reader
+/// that loses a snapshot to it misses and runs its setup again; errors (a
+/// file another process deleted first, or has open on Windows) are ignored.
+fn sweep(dir: &Path, cutoff: SystemTime) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let Ok(meta) = entry.metadata() else { continue };
+        if !meta.modified().is_ok_and(|t| t < cutoff) {
+            continue;
+        }
+        let _ = if meta.is_dir() {
+            std::fs::remove_dir_all(entry.path())
+        } else {
+            std::fs::remove_file(entry.path())
+        };
+    }
 }
 
 /// The same in every process (`DefaultHasher::new`, not `RandomState`).
@@ -379,5 +458,216 @@ mod tests {
         let mut sim = with_users(["alice.near"]);
         sim.call("alice.near", "alice.near", "m").submit();
         sim.snapshot();
+    }
+
+    /// An empty directory of its own under the system's temporary one.
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("ncs-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn touch(path: &Path) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        File::create(path).unwrap();
+    }
+
+    /// Plain cargo, `--target`, a build wrapper's target directory with no
+    /// `CACHEDIR.TAG` (and one with no `.rustc_info.json` either), and a
+    /// binary outside any target directory.
+    #[test]
+    fn the_target_dir_is_found_from_cargos_layout() {
+        let root = scratch("layout");
+        let fingerprint = |profile: &Path| std::fs::create_dir_all(profile.join(".fingerprint"));
+        let plain = root.join("plain");
+        touch(&plain.join("CACHEDIR.TAG"));
+        fingerprint(&plain.join("debug")).unwrap();
+        let triple = root.join("triple");
+        touch(&triple.join("CACHEDIR.TAG"));
+        fingerprint(&triple.join("x86_64-unknown-linux-gnu/release")).unwrap();
+        let wrapped = root.join("wrapped");
+        touch(&wrapped.join(".rustc_info.json"));
+        fingerprint(&wrapped.join("debug")).unwrap();
+        let wrapped_triple = root.join("wrapped-triple");
+        touch(&wrapped_triple.join(".rustc_info.json"));
+        fingerprint(&wrapped_triple.join("aarch64-apple-darwin/debug")).unwrap();
+        // A tag further up than a `<triple>/` is someone else's.
+        touch(&root.join("CACHEDIR.TAG"));
+        let bare = root.join("in/bare");
+        fingerprint(&bare.join("debug")).unwrap();
+        let cases = [
+            (plain.join("debug/deps/chain-0123"), Some(&plain)),
+            (plain.join("debug/examples/tour"), Some(&plain)),
+            (plain.join("debug/tour"), Some(&plain)),
+            (triple.join("x86_64-unknown-linux-gnu/release/deps/chain-0123"), Some(&triple)),
+            (wrapped.join("debug/deps/chain-0123"), Some(&wrapped)),
+            (wrapped_triple.join("aarch64-apple-darwin/debug/deps/x"), Some(&wrapped_triple)),
+            (bare.join("debug/deps/chain-0123"), Some(&bare)),
+            (root.join("bin/chain"), None),
+        ];
+        for (exe, want) in cases {
+            assert_eq!(target_dir(&exe).as_ref(), want, "{exe:?}");
+        }
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// `NCS_CACHE_DIR`, then an absolute `CARGO_TARGET_DIR`, then the
+    /// executable's target directory, then the home directory: the first
+    /// that can be created.
+    #[test]
+    fn the_cache_dir_is_the_first_candidate_that_can_be_created() {
+        let root = scratch("choose");
+        let (explicit, target, home) =
+            (root.join("explicit"), root.join("target"), root.join("home"));
+        let built = root.join("built");
+        touch(&built.join("CACHEDIR.TAG"));
+        std::fs::create_dir_all(built.join("debug/.fingerprint")).unwrap();
+        let exe = built.join("debug/deps/chain-0123");
+        let outside = root.join("bin/chain");
+        let ours = |dir: &Path| Some(dir.join("near-contract-sim"));
+        let home_cache = Some(home.join(".cache/near-contract-sim"));
+        let os = |p: &Path| Some(p.as_os_str().to_owned());
+        let choose = |e: Option<OsString>, t: Option<OsString>, x: &Path| {
+            choose_cache_dir(e, t, Some(x), Some(home.clone()))
+        };
+        assert_eq!(choose(os(&explicit), os(&target), &exe), Some(explicit.clone()));
+        assert_eq!(choose(None, os(&target), &exe), ours(&target));
+        assert_eq!(choose(None, Some("target".into()), &exe), ours(&built));
+        assert_eq!(choose(None, None, &exe), ours(&built));
+        assert_eq!(choose(None, None, &outside), home_cache);
+        assert_eq!(choose_cache_dir(None, None, None, Some(home.clone())), home_cache);
+        assert_eq!(choose_cache_dir(None, None, None, None), None);
+        // Under a file: it can't be created.
+        let blocked = root.join("file/dir");
+        touch(&root.join("file"));
+        assert_eq!(choose(os(&blocked), os(&target), &exe), ours(&target));
+        assert_eq!(choose(os(&blocked), Some("t".into()), &outside), home_cache);
+        assert!(explicit.is_dir() && target.join("near-contract-sim").is_dir());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// What `cache_dir` chose for this test binary, which cargo built.
+    #[test]
+    fn the_cache_is_in_the_target_dir_this_binary_was_built_in() {
+        let explicit = ["NCS_CACHE_DIR", "CARGO_TARGET_DIR"].map(std::env::var_os);
+        if explicit.iter().any(Option::is_some) {
+            return;
+        }
+        let exe = std::env::current_exe().unwrap();
+        let target = target_dir(&exe).expect("cargo's layout around the test binary");
+        assert!(exe.starts_with(&target), "{target:?}");
+        assert_eq!(cache_dir(), target.join("near-contract-sim"));
+    }
+
+    const HOUR: Duration = Duration::from_secs(60 * 60);
+
+    /// Creates `path` (a directory if it ends in `/`) last modified at `t`.
+    fn aged(path: &Path, t: SystemTime) {
+        let dir = path.to_string_lossy().ends_with('/');
+        if dir {
+            std::fs::create_dir_all(path).unwrap()
+        } else {
+            touch(path)
+        }
+        File::open(path).unwrap().set_modified(t).unwrap();
+    }
+
+    fn names(dir: &Path) -> Vec<String> {
+        let names = std::fs::read_dir(dir).unwrap();
+        let mut names: Vec<_> =
+            names.map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        names.sort();
+        names
+    }
+
+    /// Entries older than the cutoff go, from either layout, files and
+    /// directories; one modified at the cutoff or later stays.
+    #[test]
+    fn a_sweep_deletes_what_is_older_than_the_cutoff() {
+        let dir = scratch("sweep");
+        // Whole seconds, so every file system keeps the time exactly.
+        let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
+        let cutoff =
+            SystemTime::UNIX_EPOCH + Duration::from_secs(now.as_secs()) - SNAPSHOT_LIFETIME;
+        let old = cutoff - HOUR;
+        for name in ["chain-01-aa", "chain-01-aa.lock", "chain-01-aa.tmp-9-0", "chain-01/"] {
+            aged(&dir.join(name), old);
+        }
+        aged(&dir.join("chain-02-bb"), cutoff);
+        aged(&dir.join("chain-03-cc"), cutoff + HOUR);
+        aged(&dir.join("chain-03/"), cutoff + HOUR);
+        sweep(&dir, cutoff);
+        assert_eq!(names(&dir), ["chain-02-bb", "chain-03", "chain-03-cc"]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A snapshot is kept for a week: one written six days and 23 hours ago
+    /// stays, one written a week and an hour ago goes.
+    #[test]
+    fn snapshots_are_kept_for_a_week() {
+        let dir = scratch("week");
+        let now = SystemTime::now();
+        let week = Duration::from_secs(7 * 24 * 60 * 60);
+        aged(&dir.join("kept"), now - week + HOUR);
+        aged(&dir.join("gone"), now - week - HOUR);
+        sweep(&dir, now - SNAPSHOT_LIFETIME);
+        assert_eq!(names(&dir), ["kept"]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The first miss in a directory sweeps it, and leaves its own lock
+    /// file fresh; a hit, or a later miss in the same process, doesn't.
+    #[test]
+    fn the_first_miss_sweeps_and_a_hit_does_not() {
+        let old = SystemTime::now() - SNAPSHOT_LIFETIME - HOUR;
+        let alice = || with_users(["alice.near"]);
+        let hits = scratch("sweep-hit");
+        cached_at(&hits.join("a"), 1, alice);
+        aged(&hits.join("stale"), old);
+        cached_in(&hits, "a", 1, || panic!("a hit"));
+        assert_eq!(names(&hits), ["a", "a.lock", "stale"]);
+
+        let misses = scratch("sweep-miss");
+        aged(&misses.join("stale"), old);
+        aged(&misses.join("a.lock"), old);
+        cached_in(&misses, "a", 1, alice);
+        assert_eq!(names(&misses), ["a", "a.lock"]);
+        aged(&misses.join("stale"), old);
+        cached_in(&misses, "b", 1, alice);
+        assert_eq!(names(&misses), ["a", "a.lock", "b", "b.lock", "stale"]);
+        for dir in [hits, misses] {
+            std::fs::remove_dir_all(&dir).unwrap();
+        }
+    }
+
+    /// Four threads miss at once: the setup that runs first waits until all
+    /// of them have called, and the rest wait for it and load its result.
+    #[test]
+    fn concurrent_misses_run_setup_once() {
+        let dir = scratch("concurrent");
+        let path = dir.join("snapshot");
+        let (started, runs) = (AtomicU64::new(0), AtomicU64::new(0));
+        let roots: Vec<_> = std::thread::scope(|s| {
+            let threads: Vec<_> = (0..4)
+                .map(|_| {
+                    s.spawn(|| {
+                        started.fetch_add(1, Ordering::SeqCst);
+                        let sim = cached_at(&path, 1, || {
+                            runs.fetch_add(1, Ordering::SeqCst);
+                            while started.load(Ordering::SeqCst) < 4 {
+                                std::thread::yield_now();
+                            }
+                            with_users(["alice.near"])
+                        });
+                        sim.state_root()
+                    })
+                })
+                .collect();
+            threads.into_iter().map(|t| t.join().unwrap()).collect()
+        });
+        assert_eq!(runs.into_inner(), 1);
+        assert!(roots.iter().all(|r| *r == roots[0]));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

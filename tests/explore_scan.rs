@@ -104,22 +104,24 @@ fn a_label_copied_from_the_tree_names_the_receipt_everywhere() {
 /// `Sim::cached`, cold and warm.
 #[test]
 fn coverage_is_the_same_from_a_built_and_a_cached_fixture() {
+    let build = || {
+        let mut sim = Sim::new();
+        sim.create_account("alice.near", Balance::from_near(100));
+        sim.deploy("status.near", res("status_message.wasm"));
+        let set = json!({ "message": "hi" });
+        sim.call("alice.near", "status.near", "set_status")
+            .args_json(set)
+            .transact()
+            .assert_success();
+        sim.view("status.near", "get_status", json!({ "account_id": "alice.near" }))
+            .assert_success();
+        sim
+    };
     let runs = std::cell::Cell::new(0);
-    let key = format!("viewed {} {:?}", std::process::id(), std::time::SystemTime::now());
     let fixture = || {
-        Sim::cached(&key, || {
+        Sim::cached("viewed", || {
             runs.set(runs.get() + 1);
-            let mut sim = Sim::new();
-            sim.create_account("alice.near", Balance::from_near(100));
-            sim.deploy("status.near", res("status_message.wasm"));
-            let set = json!({ "message": "hi" });
-            sim.call("alice.near", "status.near", "set_status")
-                .args_json(set)
-                .transact()
-                .assert_success();
-            sim.view("status.near", "get_status", json!({ "account_id": "alice.near" }))
-                .assert_success();
-            sim
+            build()
         })
     };
     let unreached = |sim: Sim| {
@@ -128,9 +130,11 @@ fn coverage_is_the_same_from_a_built_and_a_cached_fixture() {
         let audit = Harness::<Call>::new(sim).scan(&[witness]).faults(Faults::none()).run();
         audit.report().paths.unreached
     };
-    let cold = unreached(fixture());
+    let cold = unreached(build());
+    fixture();
+    // The second call loads, whether the first ran the setup or loaded.
     let warm = unreached(fixture());
-    assert_eq!(runs.get(), 1, "the second fixture is loaded from the cache");
+    assert!(runs.get() <= 1, "the second fixture is loaded from the cache");
     assert!(!cold.contains(&"status.near::get_status".to_owned()), "{cold:?}");
     assert_eq!(cold, warm);
 }

@@ -378,9 +378,9 @@ fn a_rewind_repeats_no_boundary() {
 /// A snapshot keeps the epoch config and the stake still to come back.
 #[test]
 fn a_snapshot_keeps_the_stake_to_come_back() {
-    let (key, setups) = (std::time::SystemTime::now(), std::cell::Cell::new(0));
+    let setups = std::cell::Cell::new(0);
     let cached = || {
-        Sim::cached(key, || {
+        Sim::cached("stake to come back", || {
             setups.set(setups.get() + 1);
             let mut sim = sim();
             sim.config.epoch_reward = near(1);
@@ -392,8 +392,9 @@ fn a_snapshot_keeps_the_stake_to_come_back() {
         })
     };
     cached();
+    // The second call loads, whether the first ran the setup or loaded.
     let mut sim = cached();
-    assert_eq!(setups.get(), 1, "saved, then loaded");
+    assert!(setups.get() <= 1, "saved, then loaded");
     let c = &sim.config;
     assert_eq!((c.epoch_length, c.epoch_reward, c.minimum_stake), (10, near(1), near(50)));
     sim.advance_to(sim.epoch_start(6) - 1);
@@ -492,9 +493,9 @@ fn a_stake_imported_after_a_rewind_counts_from_the_furthest_epoch() {
 /// A snapshot, and a clone of it, keep an imported stake.
 #[test]
 fn a_snapshot_and_a_clone_keep_an_imported_stake() {
-    let (key, setups) = (std::time::SystemTime::now(), std::cell::Cell::new(0));
+    let setups = std::cell::Cell::new(0);
     let cached = || {
-        Sim::cached(key, || {
+        Sim::cached("imported stake", || {
             setups.set(setups.get() + 1);
             let mut sim = sim();
             sim.config.epoch_reward = near(1);
@@ -504,7 +505,7 @@ fn a_snapshot_and_a_clone_keep_an_imported_stake() {
     };
     cached();
     let loaded = cached();
-    assert_eq!(setups.get(), 1, "saved, then loaded");
+    assert!(setups.get() <= 1, "saved, then loaded");
     for mut sim in [loaded.clone(), loaded] {
         let at = sim.epoch_start(2) + 2;
         stake_at(&mut sim, "alice.near", at, Balance::ZERO);
