@@ -477,3 +477,50 @@ fn a_check_not_judged_in_some_cases_is_counted() {
     };
     assert!(first(&once) > 0 && first(&twice) == 2 * first(&once), "{one}\n{u}");
 }
+
+const REGISTRY: &str = "registry.near";
+
+/// alice and bob, and the open registry.
+fn registry() -> Sim {
+    let text = std::fs::read_to_string(common::manifest_dir().join("tests/res/open_registry.wat"));
+    Fixture::new()
+        .account("alice.near", Balance::from_near(100))
+        .account("bob.near", Balance::from_near(100))
+        .contract(REGISTRY, ::wat::parse_str(text.unwrap()).unwrap())
+        .build()
+}
+
+/// Whether an op's entries came from bob.
+fn by_bob<O>(d: &near_contract_sim::explore::OpDone<O>) -> bool {
+    d.entries().iter().any(|r| r.predecessor_id.as_str() == "bob.near")
+}
+
+/// One case several checks didn't judge is one incomplete case: an audit
+/// with another case complete and nothing found is clean, though that
+/// case lists one `incomplete:` entry per check. With every case
+/// incomplete, or a finding, it is not.
+///
+/// Verification boundary: the audit's reading of its cases' verdicts.
+#[test]
+fn one_case_unjudged_by_several_checks_is_one_incomplete_case() {
+    use near_contract_sim::explore::{Fail, OpDone};
+    // Three checks that can't judge bob's register.
+    let mut h = Harness::new(registry());
+    for k in 0..3 {
+        h = h.per_op(&format!("judges alice only {k}"), |d: &OpDone<Call>| {
+            if by_bob(d) { Err(Fail::not_judged("bob's")) } else { Ok(()) }
+        });
+    }
+    let register = |who: &str| Call::new(who, REGISTRY, "register");
+    let audit = h.enumerate(&[register("alice.near"), register("bob.near")]).depth(1).run();
+    assert_eq!(audit.incomplete().len(), 3, "{audit}");
+    assert!(audit.cases() <= 3 && audit.found().is_empty() && audit.errors().is_empty(), "{audit}");
+    assert!(audit.is_clean(), "{audit}");
+    let bob = h.enumerate(&[register("bob.near")]).depth(1).run();
+    assert!(bob.cases() == 1 && !bob.is_clean(), "{bob}");
+    let refusing = Harness::new(registry()).per_op("never bob", |d: &OpDone<Call>| {
+        if by_bob(d) { Err(Fail::new("bob registered")) } else { Ok(()) }
+    });
+    let found = refusing.enumerate(&[register("alice.near"), register("bob.near")]).depth(1).run();
+    assert!(!found.found().is_empty() && !found.is_clean(), "{found}");
+}

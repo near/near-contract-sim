@@ -249,7 +249,9 @@ impl<O: Op<W>, W: World> Books<O, W> {
     }
 
     /// Claims on `asset` that `open` lists, each redeemed by the plan
-    /// `redeem` gives: liveness ([`LIVENESS_EPOCHS`]).
+    /// `redeem` gives: liveness ([`LIVENESS_EPOCHS`]). A holder may hold
+    /// several: a claim is redeemed when it paid its amount and `open`
+    /// lists fewer claims equal to it.
     pub fn claim(
         mut self,
         name: &str,
@@ -746,19 +748,19 @@ impl<W: World> Serial<W> {
     /// liability per holder, and each asset's change: for NEAR, what moved
     /// in and out (gas left out) and the stake's rewards; for any other,
     /// its reading's change.
-    fn read(&self, start: &W, end: &W, outcomes: &[TxOutcome]) -> Readings {
+    fn read(&self, start: &W, end: &W, outcomes: &[&TxOutcome]) -> Readings {
         let mut out = Readings::new();
         for (name, read, tol) in &self.liabilities {
             for (holder, v) in read(end) {
                 out.insert(format!("{name}: {holder}"), (Delta::gain(v), *tol));
             }
         }
-        let moved = merge(outcomes);
         for (name, held, near, tol) in &self.assets {
             let change = match near {
                 Some(id) => {
                     let reward = |w: &W| w.as_ref().rewarded(id).as_yoctonear();
-                    moved.near_net(id) + Delta::between(reward(start), reward(end))
+                    let moved: Delta = outcomes.iter().map(|o| o.effects().near_net(id)).sum();
+                    moved + Delta::between(reward(start), reward(end))
                 }
                 None => Delta::between(held(start), held(end)),
             };
@@ -804,7 +806,7 @@ impl<W: World> Serial<W> {
                 names.join(", ")
             )));
         }
-        let all: Vec<TxOutcome> = o.ops.iter().flat_map(|r| r.outcomes.clone()).collect();
+        let all: Vec<&TxOutcome> = o.ops.iter().flat_map(|r| &r.outcomes).collect();
         let mine = self.read(o.start, o.end, &all);
         let order_name = |order: &[usize]| {
             let ops: Vec<&str> = order.iter().map(|&i| names[i]).collect();
@@ -822,7 +824,7 @@ impl<W: World> Serial<W> {
             let sent_by: Vec<Sent> = per.iter().map(|p| sent(p)).collect();
             let judged = other(order, &sent_by).is_none().then(|| {
                 let failed_by = steps.iter().zip(&per).map(|(s, p)| failed(s, p)).collect();
-                let flat: Vec<TxOutcome> = per.iter().flatten().cloned().collect();
+                let flat: Vec<&TxOutcome> = per.iter().flatten().collect();
                 (failed_by, self.read(o.start, &end, &flat))
             });
             Ok((sent_by, judged))
@@ -894,6 +896,9 @@ impl<W: World> Serial<W> {
                 return Err(Fail::new(why).cause("refused only under interleaving"));
             }
         }
+        if closest(&mine, &full).is_none() {
+            return Ok(());
+        }
         // A failed op that moved nothing, and fails in some serial order,
         // may be left out.
         let droppable: Vec<usize> = (0..n)
@@ -903,7 +908,7 @@ impl<W: World> Serial<W> {
             })
             .filter(|&i| full.iter().any(|(_, _, f)| f[i]))
             .collect();
-        // Each set of them: the empty one first.
+        // Each set of them left out, one at a time, until one matches.
         let mut sets: Vec<Vec<usize>> = vec![vec![]];
         for &i in &droppable {
             let with: Vec<Vec<usize>> = sets.iter().map(|s| [&s[..], &[i]].concat()).collect();
@@ -912,7 +917,11 @@ impl<W: World> Serial<W> {
         let mut orders = full;
         for gone in &sets[1..] {
             let kept: Vec<usize> = every.iter().copied().filter(|i| !gone.contains(i)).collect();
-            orders.extend(run(&kept)?);
+            let more = run(&kept)?;
+            if closest(&mine, &more).is_none() {
+                return Ok(());
+            }
+            orders.extend(more);
         }
         let Some((order, off)) = closest(&mine, &orders) else { return Ok(()) };
         let left =
@@ -982,9 +991,9 @@ fn permutations(items: &[usize]) -> Vec<Vec<usize>> {
 /// `Gap::Settle` settles (a parked yield stays parked); after the last,
 /// parked yields time out, as in `end`, the case's world after the
 /// overlap, and the clock skips to `end`'s epoch, so the epoch rewards
-/// match: the world left, and each step's transactions' outcomes.
-/// `Err` if a step skips or panics, the chain doesn't settle, or the
-/// order ran past `end`'s epoch.
+/// match (with no steps, the clock alone): the world left, and each
+/// step's transactions' outcomes. `Err` if a step skips or panics, the
+/// chain doesn't settle, or the order ran past `end`'s epoch.
 fn play_serial<O: Op<W>, W: World>(
     start: &W,
     steps: &[&super::Step<O>],
@@ -997,6 +1006,12 @@ fn play_serial<O: Op<W>, W: World>(
     // leaves: a parked yield's callback runs in a later step's settle.
     let mut hashes = vec![];
     let epoch = end.as_ref().epoch_height();
+    // No step (every op left out): only the clock moves.
+    if steps.is_empty() && w.as_ref().epoch_height() < epoch {
+        let length = w.as_ref().config.epoch_length;
+        guarded(|| w.as_mut().advance_to((epoch - 1) * length + 1))
+            .map_err(|p| format!("skipping to epoch {epoch}: {p}"))?;
+    }
     for (k, step) in steps.iter().enumerate() {
         let last = k + 1 == steps.len();
         let from = w.as_ref().txs().len();
@@ -1065,7 +1080,10 @@ fn wide(a: u128, b: u128) -> (u128, u128) {
     ((a1 * b1) + (lh >> 64) + (hl >> 64) + (mid >> 64), (ll & M) | (mid << 64))
 }
 
-/// Each claim `c` lists in `w`, redeemed on a clone at its maturity.
+/// Each claim `c` lists in `w`, redeemed on a clone at its maturity: a
+/// claim stuck is a finding; one it can't reach is not judged, and the
+/// claims after it still are. A redeemed claim is closed once its holder
+/// holds fewer claims equal to it: she may hold others.
 fn liveness<O: Op<W>, W: World>(
     c: &ClaimDecl<O, W>,
     held: &Held<W>,
@@ -1078,38 +1096,43 @@ fn liveness<O: Op<W>, W: World>(
     if claims.is_empty() {
         return Err(Fail::idle(format!("no {} open", c.name)));
     }
-    for claim in claims {
+    let mut unjudged = None;
+    for claim in &claims {
         let now = w.as_ref().epoch_height();
         let holder = &claim.holder;
         if let Some(m) = claim.matures.filter(|&m| m > now + LIVENESS_EPOCHS) {
-            return Err(Fail::not_judged(format!(
+            unjudged = unjudged.or(Some(Fail::not_judged(format!(
                 "{holder}'s claim matures at epoch {m}, past the {LIVENESS_EPOCHS} epochs liveness \
                  advances (now {now})"
-            )));
+            ))));
+            continue;
         }
         let mut w = w.clone();
         while w.as_ref().epoch_height() < claim.matures.unwrap_or(0) {
             w.as_mut().step();
         }
-        let mut redeem = (c.redeem)(&claim);
+        let mut redeem = (c.redeem)(claim);
         redeem.steps.iter_mut().for_each(|s| s.gas = Some(s.gas.unwrap_or(ceiling)));
         let before = held(&w);
         let outcomes = play(&mut w, &redeem);
         if outcomes.is_empty() {
-            return Err(Fail::not_judged(format!("{holder}'s redeem submitted nothing")));
+            let why = format!("{holder}'s redeem submitted nothing");
+            unjudged = unjudged.or(Some(Fail::not_judged(why)));
+            continue;
         }
         let paid = match near {
             Some(id) => (-merge(&outcomes).near_net(id)).max(Delta::ZERO).magnitude(),
             None => before.saturating_sub(held(&w)),
         };
-        let open = (c.open)(&w).iter().any(|x| x.holder == *holder);
+        let alike = |all: &[Claim]| all.iter().filter(|x| *x == claim).count();
+        let open = alike(&(c.open)(&w)) >= alike(&claims);
         if paid < claim.amount || open {
             let left = if open { ", and it is still open" } else { "" };
             let why = format!("{holder}'s claim of {} redeemed {paid}{left}", claim.amount);
             return Err(Fail::new(why).key(holder.clone()));
         }
     }
-    Ok(())
+    unjudged.map_or(Ok(()), Err)
 }
 
 #[cfg(test)]
@@ -1138,6 +1161,33 @@ mod tests {
         assert!(off[0].starts_with("x "), "{off:?}");
         let orders = [orders[0].clone(), order(4, Delta::ZERO, Delta::ZERO)];
         assert!(closest(&mine, &orders).is_none());
+    }
+
+    /// An order plays its steps from the overlap's start, then the clock
+    /// skips to the first block of the case's epoch; every op left out
+    /// plays no step, and the clock still skips there, so the order's
+    /// rewards are the case's. In the case's own epoch it stays put.
+    #[test]
+    fn an_order_skips_to_the_case_s_epoch_after_its_steps() {
+        use crate::explore::{Call, Plan};
+        let mut start = Sim::new();
+        start.config.epoch_length = 10;
+        start.create_account("alice.near", Balance::from_near(10));
+        start.create_account("bob.near", Balance::from_near(10));
+        start.advance_to(5);
+        let (from, epoch) = (start.epoch_height(), start.epoch_height() + 2);
+        let mut end = start.clone();
+        end.advance_to(end.epoch_start(epoch) + 3);
+        let first = |w: &Sim| (w.epoch_height(), w.height() == w.epoch_start(epoch));
+        let (w, per) = play_serial::<Call, Sim>(&start, &[], &end).unwrap();
+        assert_eq!((first(&w), per.len()), ((epoch, true), 0));
+        let plan = Plan::<Call>::new().call(Call::new("alice.near", "bob.near", "none"));
+        let (w, per) = play_serial(&start, &[&plan.steps[0]], &end).unwrap();
+        let ran = per[0][0].receipts.iter().map(|r| r.block_height).max().unwrap();
+        assert!(ran < start.epoch_start(from + 1), "played at {ran}");
+        assert_eq!(first(&w), (epoch, true));
+        let (w, _) = play_serial::<Call, Sim>(&start, &[], &start).unwrap();
+        assert_eq!(w.height(), start.height());
     }
 
     /// A holder one side leaves out reads zero there, at the other side's

@@ -774,12 +774,91 @@ impl<O: fmt::Debug> Audit<O> {
     }
 }
 
-/// The report in 60 lines at most: what was found and what is open, the
-/// coverage, the findings ranked (the first three with their steps), the
-/// curve rows that crossed or stopped, and the to-do list. Every
-/// row is in the [`Report`].
+/// The most lines a [`Report`]'s `Display` prints.
+pub(crate) const LINES: usize = 60;
+
+/// How many of each list the summary prints.
+#[derive(Clone, Copy)]
+struct Caps {
+    notes: usize,
+    excused: usize,
+    bands: usize,
+    findings: usize,
+    /// The findings printed with their steps and replay.
+    detailed: usize,
+    steps: usize,
+    curves: usize,
+    stops: usize,
+    todo: usize,
+}
+
+/// Each list in full, as far as a summary prints one.
+const FULL: Caps = Caps {
+    notes: 6,
+    excused: 5,
+    bands: 8,
+    findings: 8,
+    detailed: 3,
+    steps: 4,
+    curves: 8,
+    stops: 10,
+    todo: 10,
+};
+
+/// The report in 60 lines at most: what was found and what is open,
+/// the coverage, the findings ranked (the first three with their steps),
+/// the curve rows that crossed or stopped, and the to-do list. Where that
+/// is more, the lists are cut, the least telling first (gas bands,
+/// excuses, notes, a finding's steps, curve rows, stopped sites, then the
+/// findings and the to-do items), each to one at least, and each cut list
+/// says how many more. Every row is in the [`Report`].
 impl fmt::Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        type Knob = fn(&mut Caps) -> &mut usize;
+        let cuts: [(Knob, usize); 15] = [
+            (|c| &mut c.bands, 1),
+            (|c| &mut c.excused, 1),
+            (|c| &mut c.notes, 2),
+            (|c| &mut c.steps, 2),
+            (|c| &mut c.curves, 3),
+            (|c| &mut c.stops, 3),
+            (|c| &mut c.detailed, 1),
+            (|c| &mut c.steps, 1),
+            (|c| &mut c.notes, 1),
+            (|c| &mut c.curves, 1),
+            (|c| &mut c.stops, 1),
+            (|c| &mut c.findings, 3),
+            (|c| &mut c.todo, 3),
+            (|c| &mut c.findings, 1),
+            (|c| &mut c.todo, 1),
+        ];
+        let mut caps = FULL;
+        let mut s = self.render(&caps);
+        for (knob, floor) in cuts {
+            while s.lines().count() > LINES && *knob(&mut caps) > floor {
+                let k = knob(&mut caps);
+                *k = k.saturating_sub(1);
+                s = self.render(&caps);
+            }
+        }
+        // Each list at one and still more (a note or an item of several
+        // lines): the first lines, and how many more.
+        let n = s.lines().count();
+        if n > LINES {
+            let head: Vec<&str> = s.lines().take(LINES - 1).collect();
+            let cut = n - head.len();
+            s = format!(
+                "{}\n... {cut} more line(s); print it with {{:#?}} for all\n",
+                head.join("\n")
+            );
+        }
+        f.write_str(&s)
+    }
+}
+
+impl Report {
+    /// The summary with each list cut to `c`.
+    fn render(&self, c: &Caps) -> String {
         let (r, mut s) = (self, String::new());
         let p = &r.paths;
         let forced = r.findings.iter().filter(|f| f.label.starts_with("forced")).count();
@@ -834,9 +913,10 @@ impl fmt::Display for Report {
         if !p.left_out.is_empty() {
             let _ = writeln!(s, "left out of the audit: {}", p.left_out.join(", "));
         }
-        for note in &r.notes {
+        for note in r.notes.iter().take(c.notes) {
             let _ = writeln!(s, "{}", short(note, 400));
         }
+        more(&mut s, r.notes.len(), c.notes, "note(s) (Report::notes)");
         if !skipped.is_empty() {
             let _ = writeln!(s, "not judged: {}", short(&skipped.join("; "), 200));
         }
@@ -855,21 +935,14 @@ impl fmt::Display for Report {
             let n = r.seeds.len();
             let _ = writeln!(s, "seed {seed:#x} (NEAR_SIM_SEED repeats it), {n} seed(s)");
         }
-        // What is cut says how many, and where all of them are.
-        let more = |s: &mut String, n: usize, shown: usize, what: &str| {
-            if n > shown {
-                let _ =
-                    writeln!(s, "  ... {} more {what}; print it with {{:#?}} for all", n - shown);
-            }
-        };
-        for (id, why, closed) in r.excused.iter().take(5) {
+        for (id, why, closed) in r.excused.iter().take(c.excused) {
             let _ = writeln!(s, "excused {id} ({} item(s)): {}", closed.len(), short(why, 200));
         }
-        more(&mut s, r.excused.len(), 5, "excuse(s) (Report::excused)");
-        for band in r.bands.iter().take(8) {
+        more(&mut s, r.excused.len(), c.excused, "excuse(s) (Report::excused)");
+        for band in r.bands.iter().take(c.bands) {
             let _ = writeln!(s, "gas band: {}", short(band, 200));
         }
-        more(&mut s, r.bands.len(), 8, "gas band(s) (Report::bands)");
+        more(&mut s, r.bands.len(), c.bands, "gas band(s) (Report::bands)");
         if !r.fixed.is_empty() {
             let names = short(&r.fixed.join(", "), 110);
             let _ = writeln!(s, "not axes (changed, they don't deserialize): {names}");
@@ -878,7 +951,7 @@ impl fmt::Display for Report {
             let names = short(&r.left_out_axes.join(", "), 150);
             let _ = writeln!(s, "left out by Axes::only (not climbed): {names}");
         }
-        for (k, f) in r.findings.iter().enumerate().take(8) {
+        for (k, f) in r.findings.iter().enumerate().take(c.findings) {
             let also = if f.also.is_empty() {
                 String::new()
             } else {
@@ -888,22 +961,23 @@ impl fmt::Display for Report {
             let (n, kind, check, site, label) = (k + 1, &f.kind, &f.check, &f.site, &f.label);
             let _ = writeln!(s, "{n}. [{kind}] {check} at {site}: {label}{also}{cut}");
             let _ = writeln!(s, "   {}", f.message);
-            if k < 3 {
-                for (i, step) in f.steps.iter().enumerate().take(4) {
+            if k < c.detailed {
+                for (i, step) in f.steps.iter().enumerate().take(c.steps) {
                     let _ = writeln!(s, "   step {i}: {}", short(step, 160));
                 }
-                more(&mut s, f.steps.len(), 4, &format!("step(s) in Report::findings[{k}].steps"));
+                let steps = format!("step(s) in Report::findings[{k}].steps");
+                more(&mut s, f.steps.len(), c.steps, &steps);
                 if let Some(path) = &f.replay {
                     let _ = writeln!(s, "   replay: {path}");
                 }
             }
         }
-        more(&mut s, r.findings.len(), 8, "finding(s) (Report::findings)");
+        more(&mut s, r.findings.len(), c.findings, "finding(s) (Report::findings)");
         let rows: Vec<&Curve> = r.curves.iter().filter(|c| c.reach != Reach::Below).collect();
-        for row in rows.iter().take(8) {
+        for row in rows.iter().take(c.curves) {
             let _ = writeln!(s, "curve: {}", short(&row.line, 200));
         }
-        more(&mut s, rows.len(), 8, "curve row(s) (Report::curves)");
+        more(&mut s, rows.len(), c.curves, "curve row(s) (Report::curves)");
         // Unreached methods are one line: often dozens, closed by family;
         // so are incomplete cases.
         let (unreached, rest): (Vec<&Todo>, Vec<&Todo>) =
@@ -938,15 +1012,22 @@ impl fmt::Display for Report {
             }
         }
         let open: Vec<&str> = r.todo.iter().map(|t| t.id.as_str()).collect();
-        for ((site, cause), ids) in groups.iter().take(10) {
+        for ((site, cause), ids) in groups.iter().take(c.stops) {
             let _ = writeln!(s, "{}", short(&stop_line(site, cause, ids, &open), 300));
         }
-        more(&mut s, groups.len(), 10, "stopped site(s) (Report::todo)");
-        for t in rest.iter().take(10) {
+        more(&mut s, groups.len(), c.stops, "stopped site(s) (Report::todo)");
+        for t in rest.iter().take(c.todo) {
             let _ = writeln!(s, "TODO {}: {}", t.id, short(&t.why, 200));
         }
-        more(&mut s, rest.len(), 10, "item(s) to do (Report::todo)");
-        f.write_str(&s)
+        more(&mut s, rest.len(), c.todo, "item(s) to do (Report::todo)");
+        s
+    }
+}
+
+/// What is cut says how many, and where all of them are.
+fn more(s: &mut String, n: usize, shown: usize, what: &str) {
+    if n > shown {
+        let _ = writeln!(s, "  ... {} more {what}; print it with {{:#?}} for all", n - shown);
     }
 }
 
@@ -1020,7 +1101,7 @@ pub(super) fn short(s: &str, n: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Report, union};
+    use super::*;
 
     /// A union keeps each run's timings and whether any ran curves, and
     /// names a fixed string or a band once however many reports hold it,
@@ -1046,6 +1127,169 @@ mod tests {
         assert_eq!(u.timings, [("scan".to_owned(), 2.0), ("curves".to_owned(), 1.0)]);
         assert!(u.ran_curves);
         assert!(!union(&[], &[a]).ran_curves);
+    }
+
+    fn n(k: usize, what: &str) -> Vec<String> {
+        (0..k).map(|i| format!("{what} {i}")).collect()
+    }
+
+    /// Finding `i`, of `steps` steps.
+    fn row(i: usize, steps: usize) -> Row {
+        Row {
+            kind: "check".into(),
+            check: format!("check {i}"),
+            site: "world".into(),
+            label: "shown".into(),
+            message: "broke".into(),
+            cases: 1,
+            steps: n(steps, "step"),
+            replay: Some(format!("found/{i}.json")),
+            also: vec![],
+            broke: None,
+            id: format!("{i}"),
+            shrink: String::new(),
+            saved: vec![],
+        }
+    }
+
+    fn curve(i: usize) -> Curve {
+        Curve {
+            site: format!("c.near::m{i}"),
+            resource: super::super::Resource::ReceiptGas,
+            step: 0,
+            axis: "/X/n".into(),
+            slope: 1.0,
+            used: 1,
+            limit: 2,
+            moved_to: 3,
+            reach: Reach::Stopped("refused".into()),
+            replay: None,
+            line: format!("curve row {i}"),
+        }
+    }
+
+    /// `stops` stopped axes and `items` other to-do items, the first of
+    /// them `why`.
+    fn todo(stops: usize, items: usize, why: &str) -> Vec<Todo> {
+        let stop = |i: usize| Todo {
+            stop: Some((format!("c.near::s{i}"), "a refusal".into())),
+            ..Todo::new(format!("axis:step 0:/S/{i}"), "stopped".into(), "")
+        };
+        let item = |i: usize| {
+            let why = if i == 0 { why.to_owned() } else { "never".into() };
+            Todo::new(format!("unjudged:check {i}"), why, "")
+        };
+        (0..stops).map(stop).chain((0..items).map(item)).collect()
+    }
+
+    /// A report with every list past what a summary prints.
+    fn large(why: &str) -> Report {
+        Report {
+            what: "a campaign".into(),
+            cases: 99,
+            findings: (0..12).map(|i| row(i, 6)).collect(),
+            curves: (0..12).map(curve).collect(),
+            todo: todo(12, 12, why),
+            excused: (0..7).map(|i| (format!("x{i}"), "why".into(), vec![])).collect(),
+            fixed: n(3, "fixed"),
+            bands: n(10, "band"),
+            notes: n(10, "note"),
+            seeds: vec![1],
+            faults: (3, 0),
+            left_out_axes: n(2, "axis"),
+            ..Report::default()
+        }
+    }
+
+    fn lines(s: &str) -> usize {
+        s.lines().count()
+    }
+
+    /// Every list long prints in [`LINES`] lines: each list cut says how
+    /// many more, the first finding keeps its steps, the to-do list a line.
+    #[test]
+    fn a_large_report_is_cut_to_fit() {
+        let report = large("never");
+        // Every list in full is past it: so was the summary before cuts.
+        assert!(lines(&report.render(&FULL)) > LINES + 20);
+        let shown = report.to_string();
+        assert!(lines(&shown) <= LINES, "{} lines:\n{shown}", lines(&shown));
+        for what in ["finding(s)", "curve row(s)", "stopped site(s)", "item(s) to do", "note(s)"] {
+            assert!(shown.contains(&format!("more {what}")), "no cut {what}:\n{shown}");
+        }
+        assert!(shown.contains("1. [check] check 0") && shown.contains("   step 0"), "{shown}");
+        assert!(shown.lines().any(|l| l.starts_with("TODO ")), "{shown}");
+    }
+
+    /// With each list at one and still too long (an item's reason of many
+    /// lines), the summary is its first lines and how many more: exactly
+    /// [`LINES`] lines, the one finding and the one item each lists.
+    #[test]
+    fn a_summary_past_its_floors_ends_counting_the_lines_cut() {
+        let report = large(&"x\n".repeat(99));
+        let floors = Caps {
+            notes: 1,
+            excused: 1,
+            bands: 1,
+            findings: 1,
+            detailed: 1,
+            steps: 1,
+            curves: 1,
+            stops: 1,
+            todo: 1,
+        };
+        let full = report.render(&floors);
+        let all = lines(&full);
+        let shown = report.to_string();
+        assert_eq!(lines(&shown), LINES, "{shown}");
+        let more = format!("... {} more line(s); print it with {{:#?}} for all", all - LINES + 1);
+        assert_eq!(shown.lines().last(), Some(more.as_str()), "{shown}");
+        let head: Vec<&str> = full.lines().take(LINES - 1).collect();
+        assert!(shown.starts_with(&head.join("\n")), "{shown}");
+        assert!(shown.contains("1. [check] check 0") && !shown.contains("2. [check]"), "{shown}");
+        assert!(shown.contains("TODO unjudged:check 0") && !shown.contains("check 1: never"));
+    }
+
+    /// A report of exactly [`LINES`] lines prints whole; one line more, and
+    /// it is cut.
+    #[test]
+    fn a_summary_of_exactly_its_budget_is_not_cut() {
+        let mut report = Report {
+            findings: (0..8).map(|i| row(i, 4)).collect(),
+            todo: todo(0, 11, "never"),
+            ..Report::default()
+        };
+        // Up to 8 bands and 6 notes, a line each, until it is that long.
+        for k in 0..14 {
+            if lines(&report.render(&FULL)) < LINES {
+                let list = if k < 8 { &mut report.bands } else { &mut report.notes };
+                list.push(format!("line {k}"));
+            }
+        }
+        assert_eq!(lines(&report.render(&FULL)), LINES);
+        assert_eq!(report.to_string(), report.render(&FULL));
+        report.excused.push(("x".into(), "why".into(), vec![]));
+        assert_eq!(lines(&report.render(&FULL)), LINES + 1);
+        let shown = report.to_string();
+        assert!(lines(&shown) <= LINES && shown != report.render(&FULL), "{shown}");
+    }
+
+    /// A report that fits prints its first three findings with their
+    /// first four steps, and how many more of each list.
+    #[test]
+    fn a_short_summary_details_the_first_three_findings() {
+        let shown = Report { findings: (0..10).map(|i| row(i, 6)).collect(), ..Report::default() };
+        let shown = shown.to_string();
+        let count = |what: &str| shown.lines().filter(|l| l.starts_with(what)).count();
+        assert_eq!((count("   step 0:"), count("   step 3:"), count("   step 4:")), (3, 3, 0));
+        assert_eq!(count("   replay: "), 3, "{shown}");
+        let steps =
+            "  ... 2 more step(s) in Report::findings[2].steps; print it with {:#?} for all";
+        assert!(shown.lines().any(|l| l == steps), "{shown}");
+        let more = "  ... 2 more finding(s) (Report::findings); print it with {:#?} for all";
+        assert!(shown.lines().any(|l| l == more), "{shown}");
+        let eight = Report { findings: (0..8).map(|i| row(i, 4)).collect(), ..Report::default() };
+        assert!(!eight.to_string().contains("more"), "{eight}");
     }
 
     /// A line cut short keeps its head and its tail: a gas

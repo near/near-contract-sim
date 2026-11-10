@@ -22,8 +22,11 @@ pub struct Audit<O> {
     /// [`report`](Self::report) from the typed fields below.
     pub(crate) r: super::Report,
     pub(crate) found: Vec<Found<O>>,
-    /// Variants that didn't complete: their family (op, axis) and case, why.
+    /// Variants that didn't complete: their family (op, axis) and case,
+    /// why; a case several checks didn't judge, once per check.
     pub(crate) incomplete: Vec<(String, String)>,
+    /// The cases whose verdict is incomplete, each once.
+    pub(crate) incomplete_cases: u32,
     /// Curves' rows.
     pub(crate) curves: Vec<CurveRow<O>>,
     /// The harness's excuses: the id or glob, and why.
@@ -149,6 +152,7 @@ impl<O: Clone + fmt::Debug> Audit<O> {
             r: super::Report { what, ..Default::default() },
             found: vec![],
             incomplete: vec![],
+            incomplete_cases: 0,
             curves: vec![],
             excused: vec![],
             stale: vec![],
@@ -199,6 +203,7 @@ impl<O: Clone + fmt::Debug> Audit<O> {
         match run.verdict {
             Verdict::HarnessError => self.r.errors.push(format!("{at}: {why}")),
             Verdict::Incomplete => {
+                self.incomplete_cases += 1;
                 let op = run.ops.iter().find_map(|o| Some((&o.name, o.skipped.as_ref()?)));
                 let skip = op.map(|(op, s)| format!(" ({op} skipped: {s})")).unwrap_or_default();
                 // One item per check that didn't judge, if that is all, so
@@ -570,7 +575,8 @@ impl<O> Audit<O> {
 
     /// The cases not tried to their end (a scan's edge whose op skipped
     /// among them), each with its family, `op, axis`, and why: a family
-    /// is one open `incomplete:<family>` item.
+    /// is one open `incomplete:<family>` item. A case several checks
+    /// didn't judge is here once per check, its family each check.
     pub fn incomplete(&self) -> &[(String, String)] {
         &self.incomplete
     }
@@ -644,13 +650,12 @@ impl<O> Audit<O> {
         &self.r.seeds
     }
 
-    /// Nothing found, nothing wrong, and some case complete: no check
-    /// failed in what was tried (not that none can). What wasn't tried
-    /// is open: [`incomplete`](Self::incomplete), [`todo`](Self::todo).
+    /// Nothing found, nothing wrong, and some case complete (its verdict
+    /// not incomplete): no check failed in what was tried (not that none
+    /// can). What wasn't tried is open: [`incomplete`](Self::incomplete),
+    /// [`todo`](Self::todo).
     pub fn is_clean(&self) -> bool {
-        self.found.is_empty()
-            && self.r.errors.is_empty()
-            && self.incomplete.len() < self.r.cases as usize
+        self.found.is_empty() && self.r.errors.is_empty() && self.incomplete_cases < self.r.cases
     }
 
     /// [`is_clean`](Self::is_clean), or a panic printing the audit.

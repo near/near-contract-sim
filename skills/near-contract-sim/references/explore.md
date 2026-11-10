@@ -16,8 +16,7 @@ findings, curve rows, coverage and a to-do list of what is still open.
 
 ## Scan
 
-A scan runs each witness as written. Then, for each witness, it runs
-one variant per:
+A scan runs each witness as written, then, for each, one variant per:
 
 - **fault** of its `Faults` at each receipt the fault fits;
 - **edge of the caller's gas**: the least that succeeds, and each gas
@@ -70,8 +69,7 @@ Name a gas floor that isn't a wasm constant in `Op::axes`:
 
 ## Curves
 
-`curves` measures what each receipt uses as an axis of a witness moves.
-The axes:
+`curves` measures what each receipt uses as an axis of a witness moves:
 
 - each number, each list's length and each string's bytes;
 - the caller's gas;
@@ -99,9 +97,8 @@ each of the op's lists doubled is a `list:` item: no axis can grow it.
 Each row is a (site, resource, axis) triple. The resources are:
 
 - `ReceiptGas`: the gas a receipt burnt, against what it was attached;
-- `PrepaidGas`: what the whole transaction burnt of its attached gas
-  (not the refunds, nor the entry's prepaid exec fees), against the
-  ceiling;
+- `PrepaidGas`: what the whole transaction burnt of its attached gas (not
+  the refunds, nor the entry's prepaid exec fees), against the ceiling;
 - `LogBytes`: bytes logged, against the host's 16 KiB;
 - `StoragePaid`: storage its own account staked, against its free
   balance. Along `fresh callers of`, the site ends `(fresh callers)`: what
@@ -171,9 +168,10 @@ apart. Judge shared state under overlap with `at_rest_ops`
 search, and `NEAR_SIM_CASES` lengthens it. A list field an op sent at
 one length in every case is a `length:` to-do item.
 
-Each new finding, shown ones first, is shrunk for at most 15 minutes (a
-cut shrink says so). One cause is one row: its other cases and checks
-are in its `also`, where `assert_found` finds them.
+A seed's new findings shrink, shown ones first, for as long as its cases
+ran: a minute a shown one at least, 15 in all at most (a cut shrink says
+so). One cause is one row: its other cases and checks are in its `also`,
+where `assert_found` finds them.
 
 Two ops that must meet (a request and its redeem, a sign and its
 respond) pair in one of two ways. The second draws a `Pick`
@@ -266,11 +264,11 @@ classes, the findings, and how far each reading moved from step 0.
 ## The summary and the to-do list
 
 `audit.to_string()` (its `Display`) prints at most 60 lines: a headline
-counting findings (shown and forced) and open items
-(`audit.with_open_gaps(why)` puts `Coverage not achieved (why)` above
-it), coverage, `not judged:` (each check's skipped judgments, and why:
-never passes), faults, the findings ranked, the notable curve rows, and
-the to-do items, each list cut short ("N more"; `{:#?}` prints all).
+counting findings (shown and forced) and open items (`audit.with_open_gaps(why)`
+puts `Coverage not achieved (why)` above it), coverage, `not judged:` (each
+check's skipped judgments, and why: never passes), faults, the findings
+ranked, the notable curve rows, and the to-do items, each list cut to fit,
+the least telling first ("N more"; `{:#?}` prints all).
 
 `audit.todo()` lists the open items, each with a stable id (`report()`
 is the whole `Report`, as JSON too). The summary prints the
@@ -281,12 +279,14 @@ message) for the `axis:` ones a copy stopped, with a glob closing them.
 | id | open because |
 |---|---|
 | `unreached:<account>::<method>` | no case, setup or view ran this exported method of an audited contract (a view a check reads ran; excuse the rest, `unreached:<account>::get_*`); a report that ran it closes it in `harness.union` |
-| `axis:step N:<axis>` | a curve row stopped, or moved too little |
+| `axis:step N:<axis>`, `distinct:<axis>` | a curve row stopped, or moved too little; a list that grows only by copies of one item |
 | `list:<site>` | a call receives lists, and refuses them sent directly; an excused one still prints in the headline |
 | `unjudged:<check>` | no case judged this check (nothing ever owed; a book that never held anything) |
 | `stale:<path>` | a replay can't be judged now |
 | `replays:<dir>` | replays couldn't be written there |
-| `truncated:depth N`, `unexplored:depth N` | an enumeration's `.cases` ran out at depth N, or never reached it (its notes say what it didn't vary) |
+| `truncated:depth N`, `unexplored:depth N` | an enumeration's `.cases` ran out at depth N, or never reached it (its notes say what it didn't vary); `unexplored:epoch boundaries` (and `... placed late`): boundary offsets it didn't try |
+| `length:<op>:<list>` | a search sent this list at one length in every case: a bug needing another length went untried |
+| `timeout:<variant>` | a case ran past a minute and was stopped: nothing after was judged (an op that bounds the size closes it) |
 | `incomplete:<op>, <axis>` | cases not tried to their end, one item an op and axis (an op skipped at its edges): count, first case and why; `incomplete:<op>*` closes an op's, but a blanket `incomplete:*` hides those skips. Where checks not judging were a case's only gap, the family is the check: `incomplete:<check> not judged (overlapped)` (read `effects()`, or judge in `at_rest_ops`), or `incomplete:<check> not judged` |
 | `errors` | harness errors, an op's `submit` panic among them (its message printed) |
 
