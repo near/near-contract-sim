@@ -24,6 +24,7 @@
 //! Verification boundary: which plans scans and curves run (scheduling of
 //! arguments and copies), over actual runs of the pinned runtime.
 
+mod common;
 use near_contract_sim::CryptoHash;
 use near_contract_sim::explore::{AxisKind, Call, Harness, Op, Plan, Reach, Resource, Skip};
 use near_contract_sim::{AccountId, Balance, Fixture, Reply, Sim, Stub};
@@ -234,12 +235,9 @@ fn a_list_its_receiver_refuses_directly_is_open() {
 const LEDGER: &str = "ledger.near";
 
 fn ledger() -> Harness<Half> {
-    let text = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/res/refund_ledger.wat"),
-    );
     let f = Fixture::new()
         .account("alice.near", Balance::from_near(100))
-        .contract(LEDGER, ::wat::parse_str(text.unwrap()).unwrap())
+        .contract(LEDGER, common::wat("refund_ledger.wat"))
         .stub("sink.near", Stub::new().on("on_receive", Reply::json("0")))
         .setup("fund alice", |sim: &mut Sim| {
             let fund = sim.call("alice.near", LEDGER, "fund").args(1000u64.to_le_bytes());
@@ -307,12 +305,9 @@ impl Op for Nonce {
 
 #[test]
 fn a_copy_hook_gives_each_copy_a_fresh_nonce() {
-    let text = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/res/nonce_box.wat"),
-    );
     let f = Fixture::new()
         .account("alice.near", Balance::from_near(100))
-        .contract(NONCES, ::wat::parse_str(text.unwrap()).unwrap());
+        .contract(NONCES, common::wat("nonce_box.wat"));
     let h = Harness::new(f.build());
     let axis = "repeat Nonce (step 0)";
     let rows = |resign| {
@@ -492,13 +487,10 @@ impl Op for Spend {
 /// `payload_ledger.wat`, alice holding 25; books whose spend is
 /// authorized by the holder its op names.
 fn payloads() -> Harness<Spend> {
-    let text = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/res/payload_ledger.wat"),
-    );
     let world = Fixture::new()
         .account("alice.near", Balance::from_near(10))
         .account("relayer.near", Balance::from_near(100))
-        .contract(PAYLOADS, ::wat::parse_str(text.unwrap()).unwrap())
+        .contract(PAYLOADS, common::wat("payload_ledger.wat"))
         .setup("alice holds 25", |sim| {
             let args = [&25u64.to_le_bytes()[..], b"alice.near"].concat();
             sim.call(PAYLOADS, PAYLOADS, "set").args(args).transact().assert_success();
@@ -597,12 +589,9 @@ impl Op for Relayed {
 /// it, so the row climbs instead of stopping at the first reuse.
 #[test]
 fn a_repeated_inner_call_carries_each_copys_nonce() {
-    let text = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/res/nonce_box.wat"),
-    );
     let f = Fixture::new()
         .account("alice.near", Balance::from_near(100))
-        .contract(NONCES, ::wat::parse_str(text.unwrap()).unwrap())
+        .contract(NONCES, common::wat("nonce_box.wat"))
         .contract("relay.near", ::wat::parse_str(RELAY_WAT).unwrap());
     let h = Harness::new(f.build());
     let axis = "repeat nonces.near::use";
@@ -660,13 +649,10 @@ impl Op<Registry> for Register {
 /// and each printed step is the copy that ran, not the witness's call.
 #[test]
 fn a_fresh_callers_copy_runs_through_the_op() {
-    let text = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/res/payload_ledger.wat"),
-    );
     let sim = Fixture::new()
         .account("alice.near", Balance::from_near(10))
         .account("relayer.near", Balance::from_near(100))
-        .contract(PAYLOADS, ::wat::parse_str(text.unwrap()).unwrap())
+        .contract(PAYLOADS, common::wat("payload_ledger.wat"))
         .build();
     let check = "every holder is registered";
     let h = Harness::new(Registry { sim, holders: vec![] }).at_rest(check, |w: &Registry| {

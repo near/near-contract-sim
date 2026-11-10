@@ -91,9 +91,8 @@ fn lock_with(epoch_length: u64) -> Sim {
     sim.config.epoch_length = epoch_length;
     sim.create_account("alice.near", Balance::from_near(100));
     sim.create_account("bob.near", Balance::from_near(100));
-    let wasm = wat::parse_file(manifest_dir().join("tests/res/flight_lock.wat")).unwrap();
     sim.create_account(LOCK, Balance::from_near(10));
-    sim.deploy(LOCK, wasm);
+    sim.deploy(LOCK, wat("flight_lock.wat"));
     sim
 }
 

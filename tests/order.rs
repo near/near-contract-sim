@@ -5,7 +5,9 @@
 //! were held, ahead of the block's new receipts; and the chain isn't idle,
 //! or snapshotted, while one is held.
 
+mod common;
 mod fuzz_common;
+use common::panic_message;
 use fuzz_common::*;
 use near_contract_sim::explore::{
     Faults, Harness, Op as XOp, OpDone, Plan, Skip, Verdict, submit_injected,
@@ -37,6 +39,13 @@ fn forward(to: &str, then: &[Op]) -> Op {
     });
     let gas = 10 * TGAS + inner.sum::<u64>();
     Op::Call { to: to.into(), args: encode(then), deposit: 0, gas, weight: 0 }
+}
+
+/// A call to `d.near` that resumes yield slot 9 with a 1.2 MB payload of
+/// `i` bytes.
+fn big(i: u8) -> Op {
+    let then = [Op::YieldResume { slot: 9, payload: vec![i; 1_200_000] }];
+    Op::Call { to: "d.near".into(), args: encode(&then), deposit: 0, gas: 30 * TGAS, weight: 0 }
 }
 
 /// `user` asks `c.near` to run `prog`.
@@ -233,7 +242,7 @@ fn nth_holds_the_kth_receipt_the_hold_fits() {
     assert_eq!(none, run(Receipts::all().nth(7), Fault::Hold(1)));
     assert!(!none.0.contains("held "), "{}", none.0);
     let strict = catch_unwind(AssertUnwindSafe(|| run(Receipts::index(1), result.clone())));
-    let msg = strict.unwrap_err().downcast_ref::<String>().cloned().unwrap_or_default();
+    let msg = panic_message(strict);
     assert!(msg.contains("its result goes to no callback"), "{msg}");
     assert_eq!(
         run(Receipts::callbacks().nth(0), Fault::Hold(3)),
@@ -300,7 +309,7 @@ fn run_and_snapshots_wait_for_held_receipts() {
         Sim::cached(std::time::SystemTime::now(), || held.clone());
     }))
     .unwrap_err();
-    let msg = err.downcast_ref::<&str>().copied().unwrap_or_default();
+    let msg = panic_message(Err::<(), _>(err));
     assert!(msg.starts_with("a snapshot needs no receipt held (Fault::Hold)"), "{msg}");
 
     sim.settle();
@@ -422,10 +431,6 @@ fn nearcore_lets_a_later_receipt_overtake_a_buffered_one() {
     for i in 0..4 {
         sim.create_account(format!("w{i}.near"), Balance::from_near(100));
     }
-    let big = |i: u8| {
-        let then = [Op::YieldResume { slot: 9, payload: vec![i; 1_200_000] }];
-        Op::Call { to: "d.near".into(), args: encode(&then), deposit: 0, gas: 30 * TGAS, weight: 0 }
-    };
     let users = ["u0.near", "u1.near", "u2.near", "w1.near", "w2.near", "w3.near"];
     let bigs: Vec<CryptoHash> =
         users.iter().zip(0u8..).map(|(u, i)| ask(&mut sim, u, &[big(i)]).submit()).collect();
@@ -454,16 +459,6 @@ struct Bigs;
 
 impl XOp for Bigs {
     fn submit(&self, sim: &mut Sim) -> Result<(), Skip> {
-        let big = |i: u8| {
-            let then = [Op::YieldResume { slot: 9, payload: vec![i; 1_200_000] }];
-            Op::Call {
-                to: "d.near".into(),
-                args: encode(&then),
-                deposit: 0,
-                gas: 30 * TGAS,
-                weight: 0,
-            }
-        };
         let users = ["u0.near", "u1.near", "u2.near", "w0.near", "w1.near", "w2.near"];
         for (u, i) in users.iter().zip(0u8..) {
             ask(sim, u, &[big(i)]).submit();
@@ -555,11 +550,7 @@ fn a_receipt_without_a_method_is_named_by_its_action() {
 fn order_edges() {
     let prog = [forward("d.near", &[])];
     let sim = order_sim();
-    let panics = |f: &dyn Fn()| {
-        let err = catch_unwind(AssertUnwindSafe(f)).unwrap_err();
-        let s = err.downcast_ref::<String>().cloned();
-        s.or(err.downcast_ref::<&str>().map(|s| s.to_string())).unwrap()
-    };
+    let panics = |f: &dyn Fn()| panic_message(catch_unwind(AssertUnwindSafe(f)));
 
     let msg = panics(&|| {
         let mut sim = sim.clone();
@@ -754,11 +745,9 @@ fn hold_until_edges() {
     let panics = |at: Receipts, until: Receipts, prog: &[Op]| {
         let mut sim = sim.clone();
         let fault = Fault::HoldUntil(until);
-        let err = catch_unwind(AssertUnwindSafe(|| {
+        panic_message(catch_unwind(AssertUnwindSafe(|| {
             let _ = ask(&mut sim, "u0.near", prog).inject(at, fault).transact();
-        }))
-        .unwrap_err();
-        err.downcast_ref::<String>().cloned().unwrap_or_default()
+        })))
     };
     let msg = panics(Receipts::index(2), Receipts::index(0), &race());
     let start = "HoldUntil(Receipts::index(0)) at Receipts::index(2) (c.near::run): receipt ";
@@ -814,32 +803,27 @@ fn an_op_submits_with_injections_outside_a_harness() {
     assert_eq!(at(&held, "x"), at(&held, "late") + 1, "{held}");
     assert_eq!(at(&plain, "x") + 1, at(&plain, "late"), "{plain}");
 
-    let err = catch_unwind(AssertUnwindSafe(|| {
+    let msg = panic_message(catch_unwind(AssertUnwindSafe(|| {
         let mut sim = order_sim();
         let ask = asks("u0.near", &race());
         let late = [(Receipts::index(2), Fault::HoldUntil(Receipts::index(0)))];
         submit_injected(&mut sim, &ask, late).unwrap();
         sim.settle();
-    }))
-    .unwrap_err();
-    let msg = err.downcast_ref::<String>().cloned().unwrap_or_default();
+    })));
     assert!(msg.ends_with("which it waits for, already ran"), "{msg}");
-    let err = catch_unwind(AssertUnwindSafe(|| {
+    let msg = panic_message(catch_unwind(AssertUnwindSafe(|| {
         submit_injected(
             &mut order_sim(),
             &asks("u0.near", &[]),
             [(Receipts::all(), Fault::Hold(0))],
         )
-    }))
-    .unwrap_err();
-    let msg = err.downcast_ref::<String>().cloned().unwrap_or_default();
+    })));
     assert!(msg.contains("holds nothing"), "{msg}");
     // An op that submits nothing has nothing to inject into; one that
     // skips is fine.
-    let err =
-        catch_unwind(AssertUnwindSafe(|| submit_injected(&mut order_sim(), &Nothing, until(1))))
-            .unwrap_err();
-    let msg = err.downcast_ref::<String>().cloned().unwrap_or_default();
+    let msg = panic_message(catch_unwind(AssertUnwindSafe(|| {
+        submit_injected(&mut order_sim(), &Nothing, until(1))
+    })));
     assert_eq!(msg, "submit_injected: Nothing submitted no transaction to inject into");
     assert!(submit_injected(&mut order_sim(), &Nothing, []).is_ok());
     assert!(submit_injected(&mut order_sim(), &Skips, until(1)).is_err());

@@ -10,7 +10,7 @@ mod explore_vault;
 mod fuzz_common;
 
 use common::res;
-use explore_vault::{User, VaultOp, fails_after_ops, vault_on};
+use explore_vault::{User, VaultOp, deposit_then_withdraw, fails_after_ops, vault_on};
 use near_contract_sim::explore::builtin;
 use near_contract_sim::explore::{
     Amount, Call, Fail, Faults, Harness, Label, Op, Plan, Skip, Verdict,
@@ -20,12 +20,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 /// Alice deposits 100 tokens, then withdraws 40.
-fn deposit_then_withdraw() -> Plan<VaultOp> {
-    Plan::new()
-        .op(VaultOp::Deposit { who: User::Alice, amount: Amount::Exact(100) })
-        .op(VaultOp::Withdraw { who: User::Alice, amount: Amount::Exact(40) })
-}
-
 /// The forgetful build drops the shares of a withdraw whose payout fails:
 /// the variant failing `on_withdraw`'s call to the token shows it, every
 /// time, labeled forced, with the receipt named exactly. The fixed build
@@ -143,10 +137,9 @@ fn coverage_is_the_same_from_a_built_and_a_cached_fixture() {
 
 /// alice, and settle_starves.wat on pay.near.
 fn pay_world() -> Sim {
-    let wasm = wat::parse_file(common::manifest_dir().join("tests/res/settle_starves.wat"));
     Fixture::new()
         .account("alice.near", Balance::from_near(100))
-        .contract("pay.near", wasm.unwrap())
+        .contract("pay.near", common::wat("settle_starves.wat"))
         .build()
 }
 
@@ -617,7 +610,7 @@ fn reorder_runs_each_pair_of_unrelated_receipts_the_other_way() {
 /// pair to reorder: `reorder` adds no case a hold could only deadlock.
 #[test]
 fn reorder_holds_nothing_on_a_chain_of_callbacks() {
-    let wasm = wat::parse_file(common::manifest_dir().join("tests/res/vault_pair.wat")).unwrap();
+    let wasm = common::wat("vault_pair.wat");
     let mut sim = Sim::new();
     sim.create_account("alice.near", Balance::from_near(100));
     for c in ["token.near", "vault.near"] {

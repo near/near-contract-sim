@@ -8,9 +8,9 @@
 mod common;
 mod explore_vault;
 
-use explore_vault::{User, VAULT, VaultOp, ft};
+use explore_vault::{VAULT, VaultOp, deposit_then_withdraw, ft};
 use near_contract_sim::Sim;
-use near_contract_sim::explore::{Amount, Books, Faults, Harness, Plan};
+use near_contract_sim::explore::{Books, Faults, Harness, Plan};
 use serde_json::json;
 use std::collections::BTreeMap;
 
@@ -29,12 +29,6 @@ fn harness_on(world: Sim) -> Harness<VaultOp> {
         .asset("vault tokens", |sim: &Sim| ft(sim, VAULT))
         .backs("vault shares", "vault tokens");
     Harness::new(world).books(books)
-}
-
-fn deposit_then_withdraw() -> Plan<VaultOp> {
-    Plan::new()
-        .op(VaultOp::Deposit { who: User::Alice, amount: Amount::Exact(100) })
-        .op(VaultOp::Withdraw { who: User::Alice, amount: Amount::Exact(40) })
 }
 
 /// On the plain plan the builds agree; on the forgetful build's finding,

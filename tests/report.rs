@@ -245,9 +245,8 @@ fn a_method_another_audit_reached_is_not_open() {
     assert!(!open(union.todo.clone()), "{:#?}", union.todo);
     assert!(!union.paths.unreached.iter().any(|s| s == "custody.near::withdraw"));
     let kept = alone.todo().into_iter().find(|t| !t.id.starts_with("unreached:"));
-    if let Some(t) = kept {
-        assert!(union.todo.iter().any(|x| x.id == t.id), "{t:?} stays open");
-    }
+    let t = kept.expect("an item other than coverage is open");
+    assert!(union.todo.iter().any(|x| x.id == t.id), "{t:?} stays open");
 }
 
 /// Coverage is what ran: the near-sdk desk's three views
@@ -440,10 +439,9 @@ fn a_check_not_judged_in_some_cases_is_counted() {
     use near_contract_sim::explore::{Fail, Faults, OpDone};
     const REGISTRY: &str = "registry.near";
     const CHECK: &str = "register judged alone";
-    let text = std::fs::read_to_string(common::manifest_dir().join("tests/res/open_registry.wat"));
     let world = Fixture::new()
         .account("alice.near", Balance::from_near(100))
-        .contract(REGISTRY, ::wat::parse_str(text.unwrap()).unwrap())
+        .contract(REGISTRY, common::wat("open_registry.wat"))
         .build();
     // It never asks isolated(): reading the shared world is enough.
     let h = Harness::new(world).per_op(CHECK, |d: &OpDone<Call>| {

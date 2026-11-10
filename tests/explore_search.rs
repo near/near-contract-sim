@@ -604,15 +604,10 @@ fn a_deeply_nested_strategy_needs_no_stack_setting() {
 
 /// alice, and settle_starves.wat on pay.near.
 fn pay_world() -> Sim {
-    let wasm = wat::parse_str(std::fs::read_to_string(res_path("settle_starves.wat")).unwrap());
     Fixture::new()
         .account("alice.near", Balance::from_near(100))
-        .contract("pay.near", wasm.unwrap())
+        .contract("pay.near", common::wat("settle_starves.wat"))
         .build()
-}
-
-fn res_path(name: &str) -> std::path::PathBuf {
-    std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("tests/res").join(name)
 }
 
 fn pay() -> near_contract_sim::explore::Call {
@@ -643,7 +638,7 @@ const LEDGER_HELD: u64 = 1000;
 /// refund_ledger.wat: as written (the refund capped by what the receiver
 /// holds) or `fixed` (capped by what it was sent). The receiver is a stub.
 fn ledger_world(fixed: bool) -> Sim {
-    let wat = std::fs::read_to_string(res_path("refund_ledger.wat")).unwrap();
+    let wat = String::from_utf8(common::res("refund_ledger.wat")).unwrap();
     let cap = "(if (i64.gt_u (local.get $take) (local.get $amount)) \
                (then (local.set $take (local.get $amount))))";
     let wat = if fixed { wat.replace(";; {cap}", cap) } else { wat };

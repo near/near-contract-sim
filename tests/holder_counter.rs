@@ -9,7 +9,7 @@
 //! against actual simulator behavior.
 
 mod common;
-use common::manifest_dir;
+use common::wat;
 use near_contract_sim::explore::{Harness, Op, Plan, Skip, plans};
 use near_contract_sim::{Balance, Fixture, Sim};
 use proptest::prelude::*;
@@ -20,8 +20,7 @@ const USERS: [&str; 3] = ["alice.near", "bob.near", "carol.near"];
 const TRAP: &str = "pool.near::on_unstake";
 
 fn world() -> Sim {
-    let wat = std::fs::read_to_string(manifest_dir().join("tests/res/holder_counter.wat")).unwrap();
-    let mut fixture = Fixture::new().contract(POOL, wat::parse_str(&wat).unwrap());
+    let mut fixture = Fixture::new().contract(POOL, wat("holder_counter.wat"));
     for user in USERS {
         fixture = fixture.account(user, Balance::from_near(100));
     }

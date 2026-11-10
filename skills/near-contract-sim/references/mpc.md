@@ -15,9 +15,9 @@ Reach a state where requests are served the way the contract's own tests
 do, with real calls, and patch what can't be reached that way.
 `mpc_fixture::world()` runs `init_running` with a domain whose root key
 the test knows, so `respond` can sign what the contract checks.
-`dcap_world()` deploys MPC with its real TEE verifier, sets the clock
-inside the DCAP quote's collateral window before anything runs, and
-patches the contract's `STATE` with `set_state` to allow the quote's
+`mpc_fixture::dcap_world()` deploys MPC with its real TEE verifier, sets
+the clock inside the DCAP quote's collateral window before anything runs,
+and patches the contract's `STATE` with `set_state` to allow the quote's
 image hashes.
 
 ## 2. A request, answered or timed out
@@ -42,7 +42,7 @@ consumed: no attestation grant (`tests/mpc.rs`):
         .transact();
     assert!(out.is_failure());
     assert_eq!(out.expect_receipt("verify_quote").fault, Some(Fault::OutOfGas));
-    assert_eq!(grants(&sim), 1);
+    assert_eq!(grants(&sim, NODE), 1);
 ```
 
 The stub version uses `deploy_stub` and `calls_to` ([stubs.md](stubs.md)).

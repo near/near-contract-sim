@@ -13,7 +13,7 @@
 
 mod common;
 mod explore_vault;
-use common::manifest_dir;
+use common::wat;
 use near_contract_sim::explore::{Faults, Harness, Op, Plan, Skip, Verdict};
 use near_contract_sim::{Balance, Fixture, Sim};
 use serde::{Deserialize, Serialize};
@@ -22,11 +22,10 @@ const POOL: &str = "pool.near";
 const CHECK: &str = "the books never exceed the balance";
 
 fn world() -> Sim {
-    let wat = std::fs::read_to_string(manifest_dir().join("tests/res/pool_sync.wat")).unwrap();
     Fixture::new()
         .account("alice.near", Balance::from_near(100))
         .account("bob.near", Balance::from_near(100))
-        .contract(POOL, wat::parse_str(&wat).unwrap())
+        .contract(POOL, wat("pool_sync.wat"))
         .setup("book the pool's balance", |sim| {
             sim.call("alice.near", POOL, "init").transact().assert_success();
         })

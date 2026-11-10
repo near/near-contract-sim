@@ -1,7 +1,8 @@
 //! Shared machinery for the tests that run the fuzz contract: the property
-//! tests (`tests/prop_*.rs`), the differential test against a real sandbox
-//! (`tests/differential.rs`), and `chain`, `congestion`, `delegate`,
-//! `invariants`, `order` and `trie_gas`:
+//! tests (`tests/prop_invariants.rs`), the differential test against a real
+//! sandbox (`tests/differential.rs`), and `chain`, `congestion`, `delegate`,
+//! `explore_replay`, `explore_run`, `explore_scan`, `explore_search`,
+//! `faults`, `invariants`, `order`, `stubs` and `trie_gas`:
 //!
 //! - `Op`: mirror of the fuzz contract's program encoding
 //!   (`tests/contracts/fuzz-contract/src/lib.rs`, same borsh layout);

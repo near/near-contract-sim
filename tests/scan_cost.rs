@@ -12,7 +12,6 @@ mod common;
 use near_contract_sim::explore::{Harness, Op, Plan, Skip};
 use near_contract_sim::{Balance, Fixture, Sim};
 use serde::{Deserialize, Serialize};
-use std::time::{Duration, Instant};
 
 /// alice pays bob `count` times, `tip` yocto each; or alice calls
 /// `pay.near::pay`, `min_gas` unset by the witness; or `count` tips from
@@ -47,11 +46,10 @@ impl Op for Fan {
 }
 
 fn world() -> Sim {
-    let wasm = wat::parse_file(common::manifest_dir().join("tests/res/settle_starves.wat"));
     Fixture::new()
         .account("alice.near", Balance::from_near(1000))
         .account("bob.near", Balance::from_near(1))
-        .contract("pay.near", wasm.unwrap())
+        .contract("pay.near", common::wat("settle_starves.wat"))
         .build()
 }
 
@@ -62,10 +60,10 @@ fn world() -> Sim {
 fn a_count_is_tried_at_a_curves_top_not_its_types_max() {
     let harness = Harness::<Fan>::new(world());
     let witness = Plan::new().op(Fan::Tips { count: 1, tip: 5 });
-    let started = Instant::now();
     let audit = harness.scan(&[witness]).run();
-    assert!(started.elapsed() < Duration::from_secs(120), "{:?}", started.elapsed());
     let names: Vec<String> = audit.report().timings.into_iter().map(|(n, _)| n).collect();
+    // A handful of variants, not one per value the type allows.
+    assert!(names.len() < 20, "{names:#?}");
     let has = |n: &str| names.iter().any(|x| x == n);
     assert!(has("step 0, /Tips/count = 2048"), "{names:#?}");
     assert!(!names.iter().any(|n| n.contains(&u32::MAX.to_string())), "{names:#?}");

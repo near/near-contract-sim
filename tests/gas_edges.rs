@@ -8,7 +8,7 @@
 //! pinned runtime, in this world.
 
 mod common;
-use common::{manifest_dir, panic_message};
+use common::{manifest_dir, panic_message, wat};
 use near_contract_sim::explore::{OutcomeShape, Region, Why, edges};
 use near_contract_sim::{Balance, Failure, Fault, Fixture, Gas, Receipts, Sim, TxOutcome};
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -20,10 +20,6 @@ const RESERVE: u64 = 9_876_543_210_123;
 
 fn tgas(n: u64) -> Gas {
     Gas::from_teragas(n)
-}
-
-fn wat(name: &str) -> Vec<u8> {
-    wat::parse_file(manifest_dir().join("tests/res").join(name)).unwrap()
 }
 
 /// alice, and `code` on `SPLIT`.

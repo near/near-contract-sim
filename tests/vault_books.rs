@@ -9,7 +9,7 @@
 mod common;
 mod explore_vault;
 
-use explore_vault::{User, VAULT, VaultOp, ft};
+use explore_vault::{User, VAULT, VaultOp, deposit_then_withdraw, ft};
 use near_contract_sim::explore::{Amount, Books, Faults, Harness, Plan};
 use near_contract_sim::{Fault, Receipts, Sim};
 use serde_json::json;
@@ -24,12 +24,6 @@ fn vault_books() -> Books<VaultOp> {
         })
         .asset("vault tokens", |sim: &Sim| ft(sim, VAULT))
         .backs("vault shares", "vault tokens")
-}
-
-fn deposit_then_withdraw() -> Plan<VaultOp> {
-    Plan::new()
-        .op(VaultOp::Deposit { who: User::Alice, amount: Amount::Exact(100) })
-        .op(VaultOp::Withdraw { who: User::Alice, amount: Amount::Exact(40) })
 }
 
 #[test]
@@ -83,20 +77,7 @@ fn a_reader_that_panics_is_refused_at_declaration() {
 /// Verification boundary: how findings fold into rows, over actual runs.
 #[test]
 fn one_forced_fault_breaking_two_checks_is_one_finding() {
-    let mut world = explore_vault::vault_world("vault.wasm");
-    let left = |sim: &mut Sim| {
-        let one = near_contract_sim::Balance::from_yoctonear(1);
-        let all = json!({ "receiver_id": VAULT, "amount": "1000", "msg": "" });
-        let token = explore_vault::TOKEN;
-        sim.call("alice.near", token, "ft_transfer_call")
-            .args_json(all)
-            .deposit(one)
-            .transact()
-            .assert_success();
-        let out = sim.call("alice.near", token, "storage_unregister").args_json(json!({}));
-        out.deposit(one).transact().assert_success();
-    };
-    left(&mut world);
+    let world = alice_left("vault.wasm");
     let witness = Plan::new().op(VaultOp::Withdraw { who: User::Alice, amount: Amount::Exact(40) });
     let audit = Harness::new(world)
         .books(vault_books())

@@ -247,6 +247,8 @@ proptest! {
 }
 
 // ---- the audit harness ----
+// A copy of `tests/explore_vault/mod.rs`, kept in this file so the guides'
+// example reads as one file; change the two together.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 enum User {

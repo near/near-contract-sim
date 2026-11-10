@@ -16,6 +16,20 @@ pub fn res(name: &str) -> Vec<u8> {
     std::fs::read(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))
 }
 
+/// `tests/res/<name>`, a `.wat` file, assembled.
+pub fn wat(name: &str) -> Vec<u8> {
+    let p = manifest_dir().join("tests/res").join(name);
+    wat::parse_file(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))
+}
+
+pub fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+pub fn unhex(s: &str) -> Vec<u8> {
+    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
+}
+
 // The four wasm below were built with cargo-near on a host whose Rust
 // toolchain went unrecorded (`rustc` commit 2d8144b7). Each embedded the
 // build machine's home directory in its panic-location strings; every
@@ -43,16 +57,16 @@ pub fn probe_wasm() -> Vec<u8> {
     res("probe.wasm")
 }
 pub fn tip_jar_wasm() -> Vec<u8> {
-    wat::parse_file(manifest_dir().join("tests/res/tip_jar.wat")).unwrap()
+    wat("tip_jar.wat")
 }
 pub fn ledger_pair_wasm() -> Vec<u8> {
-    wat::parse_file(manifest_dir().join("tests/res/ledger_pair.wat")).unwrap()
+    wat("ledger_pair.wat")
 }
 pub fn staking_pool_wasm() -> Vec<u8> {
-    wat::parse_file(manifest_dir().join("tests/res/staking_pool.wat")).unwrap()
+    wat("staking_pool.wat")
 }
 pub fn failure_probe_wasm() -> Vec<u8> {
-    wat::parse_file(manifest_dir().join("tests/res/failure_probe.wat")).unwrap()
+    wat("failure_probe.wat")
 }
 
 pub fn near(n: u128) -> Balance {

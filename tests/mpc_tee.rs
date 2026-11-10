@@ -33,16 +33,13 @@
 //! collateral is valid 2026-08-13T10:45:38Z .. 2026-09-11T23:57:11Z.
 
 mod common;
+mod mpc_fixture;
 use common::*;
-use near_contract_sim::{Balance, Gas, Sim};
+use mpc_fixture::{PINNED_NOW_NS, dcap_world, mpc_res as mpc, submit_quote};
+use near_contract_sim::{Gas, Sim};
 use std::path::{Path, PathBuf};
 
-const PINNED_NOW_NS: u64 = 1_786_622_400_000_000_000;
 const TODAY_NS: u64 = 1_790_121_600_000_000_000; // 2026-09-23, after the window
-
-fn mpc(name: &str) -> Vec<u8> {
-    res(&format!("mpc/{name}"))
-}
 
 fn sim_at(ts: u64) -> Sim {
     let mut sim = Sim::new();
@@ -137,24 +134,8 @@ fn an_mpc_world_snapshot_stays_under_5_mb() {
     // call below saves exactly one.
     snapshot_files().iter().for_each(|p| std::fs::remove_file(p).unwrap());
     Sim::cached("mpc world", || {
-        let mut sim = sim_at(PINNED_NOW_NS);
-        sim.deploy("mpc.near", mpc("mpc_contract.wasm"));
-        let init = sim.call("alice.near", "mpc.near", "init").args(mpc("mpc_init_args.json"));
-        init.transact().assert_success();
-        sim.set_state("mpc.near", b"STATE", Some(&mpc("mpc_state_patched.borsh")));
-        let sk = String::from_utf8(mpc("near_account_secret_key")).unwrap();
-        let node = "fixture-node-a.near";
-        sim.create_account_with_key(node, near(10), &sk.trim().parse().unwrap());
-        sim.call("alice.near", "mpc.near", "prepay_attestation_storage")
-            .args(mpc("mpc_prepay_attestation_storage_args.json"))
-            .deposit(Balance::from_millinear(20))
-            .transact()
-            .assert_success();
-        sim.call(node, "mpc.near", "submit_participant_info")
-            .args(mpc("mpc_submit_participant_info_args.json"))
-            .gas(Gas::from_teragas(300))
-            .transact()
-            .assert_success();
+        let mut sim = dcap_world();
+        submit_quote(&mut sim).transact().assert_success();
         sim
     });
     let [path] = &snapshot_files()[..] else { panic!("{:?}", snapshot_files()) };

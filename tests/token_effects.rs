@@ -576,13 +576,12 @@ fn a_discovered_id_not_minted_there_is_unobserved_if_its_views_fail() {
 /// receiver panics.
 #[test]
 fn ft_transfer_call_keeps_or_refunds() {
-    let receiver = format!("{}/tests/res/ft_receiver.wat", env!("CARGO_MANIFEST_DIR"));
     let mut sim = Fixture::new()
         .account("alice.near", near(10))
         .contract("token.near", ft_wasm())
         .init("new_default_meta")
         .args_json(json!({ "owner_id": "alice.near", "total_supply": "1000" }))
-        .contract("receiver.near", wat::parse_file(receiver).unwrap())
+        .contract("receiver.near", common::wat("ft_receiver.wat"))
         .ft_register("token.near", ["receiver.near"])
         .token(Token::nep141("token.near"))
         .build();
