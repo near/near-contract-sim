@@ -127,19 +127,20 @@ jobs:
             fi
             args+=(--in-diff "$RUNNER_TEMP/pr.diff")
           fi
-          if [ "${{ matrix.shard }}" = baseline ]; then
-            # What cargo-mutants runs first (.cargo/mutants.toml's filter),
-            # when there is a mutant to test.
-            if [ -z "$(cargo mutants --list "${args[@]}")" ]; then exit 0; fi
-            exec cargo nextest run --all-features -E 'not test(=the_public_api_is_the_committed_list)'
-          fi
           # A mutant's time is mostly its build (the crate and every test
           # binary): ~190 s each at ci.yml's opt-level 1. At 0, incrementally
           # (only the mutated function changes), a shard's first build takes
           # ~3.5 min (it rebuilds the dependencies too) and the rest ~35..65 s,
           # while a caught mutant's tests still stop within a minute or two.
-          # A full run at 0 is 10..15 min; the timeout is cargo-mutants' 3x.
+          # A full run at 0 is 10..15 min. The baseline builds the same way,
+          # so it checks the suite as the shards run it.
           export CARGO_PROFILE_DEV_OPT_LEVEL=0 CARGO_INCREMENTAL=1
+          if [ "${{ matrix.shard }}" = baseline ]; then
+            # What cargo-mutants runs first (.cargo/mutants.toml's filter and
+            # profile), when there is a mutant to test.
+            if [ -z "$(cargo mutants --list "${args[@]}")" ]; then exit 0; fi
+            exec cargo nextest run --all-features --profile mutants -E 'not test(=the_public_api_is_the_committed_list)'
+          fi
           args+=(--baseline skip --timeout 2700 --sharding round-robin
                  --shard "${{ matrix.shard }}/${{ needs.plan.outputs.count }}")
           cargo mutants --list "${args[@]}" | tee mutants-list.txt

@@ -14,9 +14,6 @@ additional_cargo_test_args = [
     "--profile", "mutants",
 ]
 
-# Baseline `cargo nextest run` is ~20 s; nothing legitimate takes 3x that.
-timeout_multiplier = 3.0
-
 # Mutants that no test can (or should) observe. One reason per entry.
 exclude_re = [
     # Equivalent: the failed callback at `at` committed nothing, so it is never in `wrote`.
