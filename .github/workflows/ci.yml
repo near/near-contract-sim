@@ -243,7 +243,7 @@ jobs:
           save-if: false
 
       - name: Run property tests
-        run: cargo test --test prop_invariants
+        run: cargo test --all-features --test prop_invariants
         env:
           NCS_INV_CASES: "128"
 
@@ -312,7 +312,7 @@ jobs:
           curl -sf http://localhost:3030/status | head -c 300
 
       - name: Differential test
-        run: cargo test --test differential -- --ignored --nocapture
+        run: cargo test --all-features --test differential -- --ignored --nocapture
         env:
           NCS_SANDBOX_RPC: http://localhost:3030
           NCS_DIFF_CASES: ${{ inputs.diff_cases || '10' }}
