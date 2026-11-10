@@ -819,8 +819,19 @@ struct Case<'h, O, W> {
     /// checks read it.
     rest_key: Option<u64>,
     /// Each op whose transactions are all complete, by index: their
-    /// outcomes and effects, which later blocks change neither of.
-    finished: HashMap<usize, (Vec<TxOutcome>, Effects)>,
+    /// outcomes and effects, and what of the world they read ([`Live`]);
+    /// the log they read otherwise only grows.
+    finished: HashMap<usize, (Live, (Vec<TxOutcome>, Effects))>,
+}
+
+/// What a complete transaction's outcome reads of the world as it stands,
+/// not of the log: the watched tokens (`Log::watch_stamp`), which a watch
+/// or a discovered id changes, and the chain id a missing method's exports
+/// are read under.
+type Live = (Vec<(crate::effects::TokenKey, usize, bool)>, String);
+
+fn live(sim: &Sim) -> Live {
+    (sim.chain.log().watch_stamp(), sim.config.chain_id.clone())
 }
 
 impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
@@ -857,13 +868,25 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
     /// Op `i`'s outcomes and effects: those it finished with, or as they
     /// stand.
     fn outcomes(&self, i: usize) -> std::borrow::Cow<'_, (Vec<TxOutcome>, Effects)> {
-        if let Some(f) = self.finished.get(&i) {
+        if let Some((_, f)) = self.finished.get(&i) {
             return std::borrow::Cow::Borrowed(f);
         }
         let outcomes: Vec<TxOutcome> =
             self.ops[i].record.txs.iter().map(|t| self.sim().outcome(t)).collect();
         let effects = merge(&outcomes);
         std::borrow::Cow::Owned((outcomes, effects))
+    }
+
+    /// Rebuilds each finished op's outcomes that read the world as it no
+    /// longer is: what a rebuild would give, before anything reuses them.
+    fn refresh(&mut self) {
+        let now = live(self.sim());
+        let stale = self.finished.iter().filter(|(_, (was, _))| *was != now);
+        for i in stale.map(|(&i, _)| i).collect::<Vec<_>>() {
+            self.finished.remove(&i);
+            let fresh = self.outcomes(i).into_owned();
+            self.finished.insert(i, (now.clone(), fresh));
+        }
     }
 
     fn sim(&self) -> &Sim {
@@ -1204,6 +1227,7 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
     /// `always`, `at_rest` if nothing is in flight, and the per-op checks
     /// of each op that just completed.
     fn checkpoint(&mut self) {
+        self.refresh();
         let height = self.sim().height();
         for o in self.ops.iter_mut().filter(|o| o.record.skipped.is_none()) {
             o.record.at.get_or_insert(height);
@@ -1233,6 +1257,7 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
     /// Judges the `at_rest` checks: those judged at every rest point, or,
     /// with `end`, those judged once at the end.
     fn rest_checks(&mut self, end: bool) {
+        self.refresh();
         let results = self.judge_at_rest(end);
         self.record_world(self.harness.always.len(), results);
     }
@@ -1328,7 +1353,8 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
             debug_assert!(outcomes.iter().all(TxOutcome::is_complete));
             self.ops[i].done = true;
             let effects = merge(&outcomes);
-            let (outcomes, effects) = self.finished.entry(i).or_insert((outcomes, effects));
+            let stored = (live(self.sim()), (outcomes, effects));
+            let (_, (outcomes, effects)) = self.finished.entry(i).or_insert(stored);
             let shared = Default::default();
             let Some(done @ OpDone { op: Some(op), .. }) =
                 self.ops[i].done(outcomes, effects, &self.world, &shared)
@@ -1605,10 +1631,11 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
 
     /// Labels what was forced, and gives the verdict.
     fn finish(mut self) -> Run<O> {
+        self.refresh();
         let mut outcomes: Vec<TxOutcome> = vec![];
         for i in 0..self.ops.len() {
             outcomes.extend(match self.finished.remove(&i) {
-                Some((done, _)) => done,
+                Some((_, (done, _))) => done,
                 None => self.outcomes(i).into_owned().0,
             });
         }
@@ -2335,6 +2362,56 @@ mod tests {
         assert_eq!(failed, [&site], "{run}");
         assert!(run.reached.contains(&site), "{:?}", run.reached);
         assert!(!run.reached.iter().any(|s| s.starts_with("x.alice.near")), "{:?}", run.reached);
+    }
+
+    /// An op's effects read the watch as it stands, not as it was when
+    /// the op completed: an id a later op mints, discovered from its
+    /// event, is watched in the earlier op's effects too (nothing moved
+    /// there), as rebuilding them would say.
+    #[test]
+    fn an_id_discovered_after_an_op_completed_is_watched_in_its_effects() {
+        const MT: &str = "mt.near";
+        let wasm = include_bytes!("../../tests/res/mtoken_events.wasm").to_vec();
+        let sim = crate::Fixture::new()
+            .account("issuer.near", Balance::from_near(100))
+            .account("alice.near", Balance::from_near(100))
+            .contract(MT, wasm)
+            .init("new")
+            .args_json(serde_json::json!({ "owner": "issuer.near", "ids": [] }))
+            .token(crate::Token::nep245_ids(MT, Vec::<String>::new()).discover())
+            .build();
+        #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+        enum M {
+            /// alice pays issuer: nothing of the token moves.
+            Pay,
+            /// issuer mints a new id, with an `mt_mint` event.
+            Create(String),
+        }
+        impl super::super::Op for M {
+            fn submit(&self, sim: &mut Sim) -> Result<(), super::super::Skip> {
+                match self {
+                    M::Pay => {
+                        sim.tx("alice.near", "issuer.near").transfer(Balance::from_near(1)).submit()
+                    }
+                    M::Create(id) => sim
+                        .call("issuer.near", MT, "create")
+                        .args_json(serde_json::json!({ "id": id }))
+                        .submit(),
+                };
+                Ok(())
+            }
+        }
+        let seen = std::rc::Rc::new(std::cell::RefCell::new(vec![]));
+        let into = seen.clone();
+        let h = super::super::Harness::<M>::new(sim).at_rest_ops("reads X", move |_, ops| {
+            *into.borrow_mut() =
+                ops.iter().map(|d| d.effects().token_net((MT, "X"), "alice.near")).collect();
+            Ok::<(), String>(())
+        });
+        let run = h.run(&Plan::new().op(M::Pay).op(M::Create("X".into())));
+        assert_eq!(run.verdict, Verdict::Clean, "{run}");
+        let zero = Ok(crate::Delta::ZERO);
+        assert_eq!(*seen.borrow(), [zero.clone(), zero], "{run}");
     }
 
     #[test]
