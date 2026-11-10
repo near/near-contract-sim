@@ -27,10 +27,9 @@ The test crate's layout and dependency block are in
   `ActionErrorKind`). `Gas` is nearcore's: near-sdk's
   `Gas::from_tgas(30)` is `Gas::from_teragas(30)`.
 - **nearcore's types come from this crate**, at the root and in
-  `near_contract_sim::nearcore`. A nearcore dependency of your own is a
-  second copy of every type.
-- A test crate that also depends on near-sdk needs its
-  `non-contract-usage` feature.
+  `near_contract_sim::nearcore`: a nearcore dependency of your own is a
+  second copy of every type. A test crate that also depends on near-sdk
+  needs its `non-contract-usage` feature.
 
 ## A world by hand
 
@@ -156,7 +155,8 @@ writes nearcore `StateRecord`s, and `state_records(ids)` reads them back.
 
 ## Environment and CI
 
-`NO_COLOR` turns off color in receipt trees; the `NEAR_SIM_*` variables
-are a search's ([explore.md](explore.md)). In CI, run `cargo test
---locked` in the test crate, after building any wasm it reads from
-`tests/res/` with the contract's toolchain.
+`NO_COLOR` turns off color in receipt trees; `NEAR_SIM_PROGRESS=0` mutes a
+campaign's progress; `NEAR_SIM_GAS_LIMITS` is the simulator's, the rest a
+search's ([explore.md](explore.md)). In CI, run `cargo test --locked` in
+the test crate, after building any `tests/res/` wasm with the contract's
+toolchain.

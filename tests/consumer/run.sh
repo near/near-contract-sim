@@ -25,7 +25,7 @@ import sys
 root, out = map(Path, sys.argv[1:])
 page = (root / 'skills/near-contract-sim/references/quickstart.md').read_text()
 blocks = lambda lang: re.findall(rf'^```{lang}\n(.*?)^```', page, re.S | re.M)
-# The pinned git source, its rev a placeholder or a commit.
+# The pinned git source, its rev a commit.
 git = r'\{ git = "https://github\.com/near/near-contract-sim", rev = "[^"]+" \}'
 toml = blocks('toml')[0]
 assert re.search(git, toml), toml

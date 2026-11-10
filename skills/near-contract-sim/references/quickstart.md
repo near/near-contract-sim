@@ -34,7 +34,7 @@ and a `Cargo.lock` if the contract had none, worth committing.
 
 ```toml
 [dev-dependencies]
-near-contract-sim = { git = "https://github.com/near/near-contract-sim", rev = "c40ce151f8b00dcc114bcd34bf58534593fef24a" }
+near-contract-sim = { git = "https://github.com/near/near-contract-sim", rev = "96bc8fb6a390c22d93cfd3ac30dcc0337a98e1d2" }
 cargo-near-build = "0.11"
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
@@ -46,9 +46,9 @@ debug = false
 ```
 
 The crate isn't on crates.io (nearcore's runtime crates aren't
-published), so it is a git dependency: pin `rev` to a commit of the repo
-(the one shown, or any later one), and keep it pinned. Set the profile before the first build:
-unoptimized nearcore can take a minute for one large call.
+published), so it is a git dependency: pin `rev` to the commit of a release
+tag (`v0.1.0`'s is shown), and keep it pinned. Set the profile before the
+first build: unoptimized nearcore can take a minute for one large call.
 
 nearcore's VM has 1000 wasm instances per process: cap the test threads
 in `.cargo/config.toml`, where no one has to remember it:

@@ -3,8 +3,12 @@
 //! cargo compiles (`src/`, `examples/`, or `tests/` outside the contract
 //! crates under `tests/contracts/`), and every `wat` block in a `.wat`
 //! file. A block that can't be is marked on the line before its fence,
-//! `<!-- not compiled: why -->`. Every fence names one of the languages
-//! these checks know, so none skips them. Their links name files.
+//! `<!-- not compiled: why -->`. Every fence names one of `rust`, `wat`,
+//! `toml`, `sh` or `text`, so a `rust,ignore` or bare fence can't skip
+//! the checks. Only `rust`, `wat` and the dependency `toml` blocks are
+//! checked here; the `sh` and `text` blocks aren't (`tests/consumer/run.sh`
+//! runs the README's last `sh` block and reads its layout `text` block).
+//! Links name files.
 //! `tests/consumer/run.sh` runs the quickstart's blocks and the first
 //! harness under the quickstart's own dependencies, and the README's test
 //! in a fresh consumer; other fragments run here. `tests/consumer/*.rs`
@@ -181,8 +185,9 @@ fn the_docs_fit_their_budget() {
 }
 
 /// One form of the dependency: the quickstart and the README add the same
-/// `[dev-dependencies]`, pinned by `rev`, and no page puts the simulator
-/// under `[dependencies]`.
+/// `[dev-dependencies]`, pinned by the `rev` of a release's commit (every
+/// page names the same one), and no page puts the simulator under
+/// `[dependencies]`.
 #[test]
 fn the_dependency_has_one_form() {
     let deps = |page: &str| -> String {
@@ -196,9 +201,8 @@ fn the_dependency_has_one_form() {
     assert!(quickstart.starts_with("[dev-dependencies]\n"), "{quickstart}");
     let rev = quickstart.split(", rev = \"").nth(1).and_then(|r| r.split_once("\" }"));
     let rev = rev.unwrap_or_else(|| panic!("no rev: {quickstart}")).0;
-    let commit = (7..=40).contains(&rev.len())
-        && rev.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
-    assert!(rev == "<commit>" || commit, "rev {rev:?} is no commit: {quickstart}");
+    let commit = rev.len() == 40 && rev.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+    assert!(commit, "rev {rev:?} is no 40-digit commit: {quickstart}");
     assert_eq!(deps("README.md"), quickstart);
     for (page, text) in pages() {
         for block in blocks(&text, "toml") {
@@ -209,6 +213,7 @@ fn the_dependency_has_one_form() {
                 }
                 if line.starts_with("near-contract-sim = ") {
                     assert_eq!(table, "[dev-dependencies]", "{page}: {line}");
+                    assert!(line.contains(&format!("rev = \"{rev}\"")), "{page}: {line}");
                 }
             }
         }
