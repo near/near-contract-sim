@@ -73,7 +73,9 @@ pub struct PendingYield {
 /// In-process NEAR chain (single shard) running nearcore's own runtime.
 ///
 /// `Clone` is a cheap snapshot: the clone shares the insert-only trie store
-/// and copies the rest, so the two evolve independently.
+/// and copies the rest, so the two evolve independently. Only the record
+/// of which methods ran as views is shared, so the views a harness's cases
+/// make on their clones count toward its fixture's coverage.
 ///
 /// ```
 /// use near_contract_sim::prelude::*;
@@ -166,6 +168,15 @@ pub struct Sim {
 
 /// Methods that ran as views ([`Sim::viewed`]).
 pub(crate) type Viewed = std::sync::Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>;
+
+impl Sim {
+    /// A clone that records its views apart from `self`'s, starting from
+    /// those made so far.
+    pub(crate) fn with_own_views(&self) -> Sim {
+        let seen = self.viewed.lock().map(|v| v.clone()).unwrap_or_default();
+        Sim { viewed: std::sync::Arc::new(std::sync::Mutex::new(seen)), ..self.clone() }
+    }
+}
 
 impl AsRef<Sim> for Sim {
     fn as_ref(&self) -> &Sim {

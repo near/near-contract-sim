@@ -418,11 +418,19 @@ impl Chain {
     ) -> CryptoHash {
         let h = tx.get_hash();
         let before = self.replies.get(&h).map_or(&[][..], Vec::as_slice);
-        if self.log.txs.contains_key(&h) {
+        // A refused one is fresh, its replies replaced as `queue` replaces
+        // its injections and delivery.
+        let refused = matches!(
+            self.log.status(&h),
+            Some(ExecutionStatus::Failure(TxExecutionError::InvalidTxError(_)))
+        );
+        if self.log.txs.contains_key(&h) && !refused {
             resubmitted(&h, before == replies.as_slice(), "with other stub replies");
         }
         let h = self.queue(tx, results, injections);
-        if !replies.is_empty() {
+        if replies.is_empty() {
+            self.replies.remove(&h);
+        } else {
             self.replies.insert(h, replies);
         }
         h
@@ -695,6 +703,28 @@ mod tests {
         assert_eq!(spawned.iter().map(|s| s.site()).collect::<Vec<_>>(), ["bob.near::ping"]);
     }
 
+    /// A refused transaction is forgotten, as nearcore forgets it: the same
+    /// one sent again binds the stub replies it comes with now, as it takes
+    /// the injections and delivery it comes with.
+    #[test]
+    fn a_refused_transaction_sent_again_binds_its_new_replies() {
+        use crate::{Reply, Stub};
+        let mut sim = probe_sim();
+        sim.deploy_stub("app.near", Stub::new().on("ask", Reply::json("wide")));
+        sim.set_balance("alice.near", Balance::ZERO);
+        let first = Reply::json("first");
+        let h = sim.call("alice.near", "app.near", "ask").stub_reply("app.near", "ask", first);
+        let h = h.submit();
+        sim.settle();
+        assert!(sim.outcome(h).is_failure(), "refused: alice can't pay");
+        sim.set_balance("alice.near", Balance::from_near(10));
+        let tx = (*sim.chain.log.txs[&h]).clone();
+        let second = sim.bound_reply("app.near".parse().unwrap(), "ask", &Reply::json("second"));
+        assert_eq!(sim.chain.submit(tx, None, None, vec![second]), h);
+        sim.settle();
+        assert_eq!(sim.outcome(h).json::<String>(), "second");
+    }
+
     /// Past a stale timeout-queue head (a resumed yield's entry), the chain
     /// is busy: the next block pops the head. Yet nothing is queued or in
     /// flight, so a snapshot takes it, and a loaded one is just as busy, and
@@ -729,7 +759,7 @@ mod tests {
     #[test]
     fn conservation_counts_what_a_parked_yield_holds() {
         let mut sim = probe_sim();
-        let held = |sim: &Sim| sim.chain.total_supply() as i128 - sim.chain.log.supply();
+        let held = |sim: &Sim| sim.chain.total_supply().wrapping_sub(sim.chain.log.supply());
         park(&mut sim);
         assert!(sim.chain.is_settled() && held(&sim) == 0);
         sim.call("alice.near", "probe.near", "resume").transact().assert_success();

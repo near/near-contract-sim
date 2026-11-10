@@ -524,3 +524,27 @@ fn one_case_unjudged_by_several_checks_is_one_incomplete_case() {
     let found = refusing.enumerate(&[register("alice.near"), register("bob.near")]).depth(1).run();
     assert!(!found.found().is_empty() && !found.is_clean(), "{found}");
 }
+
+/// Coverage is what this harness's fixture and cases ran: a view made on
+/// another build of the same fixture, in another test say, leaves the
+/// method open here.
+#[test]
+fn a_view_on_another_build_is_not_coverage() {
+    const DESK: &str = "desk.near";
+    let world = || {
+        Fixture::new()
+            .account("alice.near", Balance::from_near(100))
+            .stub("issuer.near", Stub::new().on("issue", Reply::json("ok")))
+            .contract(DESK, res("desk.wasm"))
+            .init("new")
+            .args_json(json!({ "issuer": "issuer.near" }))
+            .build()
+    };
+    let elsewhere = world();
+    assert_eq!(elsewhere.view(DESK, "total", json!({})).json::<String>(), "0");
+    let h = Harness::new(world()).audits([DESK]);
+    let plans = [Plan::new().op(Call::new("alice.near", DESK, "register").args_json(json!({})))];
+    let audit = h.scan(&plans).faults(near_contract_sim::explore::Faults::none()).run();
+    let open: Vec<String> = audit.todo().into_iter().map(|t| t.id).collect();
+    assert!(open.contains(&format!("unreached:{DESK}::total")), "{audit}");
+}

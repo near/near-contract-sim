@@ -192,6 +192,7 @@ impl Reply {
 
     /// First burns gas until at most `gas` of the attached gas is left (a
     /// little less once it returns), as a contract that does expensive work.
+    /// A view of it fails: a view can't read gas.
     pub fn burn_leaving(self, gas: Gas) -> Self {
         Self { leave: Some(gas), ..self }
     }
@@ -199,7 +200,7 @@ impl Reply {
     /// First burns `gas` (a little more), whatever was attached, as a
     /// contract whose work costs a fixed amount: attached less, the call
     /// runs out of gas. Before [`burn_leaving`](Self::burn_leaving), if
-    /// both.
+    /// both. A view of it fails: a view can't read gas.
     pub fn burn(self, gas: Gas) -> Self {
         Self { burn: Some(gas), ..self }
     }
@@ -207,7 +208,7 @@ impl Reply {
     /// Panics with `stub: attached <a> gas below <gas>` when its receipt
     /// was attached less than `gas`, before anything else: a receiver that
     /// needs `gas` to do its work and checks for it, as contracts that
-    /// call on do.
+    /// call on do. A view of it fails: a view has no prepaid gas.
     pub fn fail_below(self, gas: Gas) -> Self {
         Self { below: Some(gas), ..self }
     }

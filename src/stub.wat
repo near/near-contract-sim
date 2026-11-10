@@ -10,7 +10,8 @@
 ;; the stub-wide reply, under its key alone.
 ;;
 ;; A view runs it too: it reads the stub-wide reply (no bound one matches a
-;; view's seed), and only a reply that burns gas fails there.
+;; view's seed). A reply that reads gas (least gas, burns) or makes a call
+;; fails there, as views can't use `prepaid_gas`, `used_gas` or promises.
 ;;
 ;; It does what the value says (`Reply`, little endian):
 ;;   u8 kind (0: return the payload, 1: panic with it), u64 gas to leave

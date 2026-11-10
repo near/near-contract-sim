@@ -84,9 +84,10 @@ pub(crate) struct Log {
     /// Every transaction submitted to be delivered as a callback, with the
     /// hash of its results, so a copy can't change them.
     pub delivered: HashMap<CryptoHash, CryptoHash>,
-    /// NEAR the simulator created outside the runtime, by its state writes
-    /// (negative: destroyed).
-    pub minted: i128,
+    /// NEAR the simulator created outside the runtime, by its state writes,
+    /// less what they destroyed: modulo 2^128, so the supply comes out
+    /// exact for any total a `u128` holds.
+    pub minted: u128,
     /// NEAR the runtime created (zero-balance subsidies, gas price deficits,
     /// epoch rewards) and burnt (gas, lost refunds, slashing).
     runtime_minted: u128,
@@ -364,8 +365,8 @@ impl Log {
 
     /// The NEAR there should be: everything minted since genesis, by state
     /// writes and by the runtime, less everything burnt.
-    pub(crate) fn supply(&self) -> i128 {
-        self.minted + self.runtime_minted as i128 - self.burnt as i128
+    pub(crate) fn supply(&self) -> u128 {
+        self.minted.wrapping_add(self.runtime_minted).wrapping_sub(self.burnt)
     }
 }
 

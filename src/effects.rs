@@ -76,7 +76,8 @@ impl<A: IntoAccountId, B: AsRef<str>> WhichToken for (A, B) {
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NearMove {
-    /// Who paid: the depositor, or the deleted account.
+    /// Who paid: the depositor (the signer, for a receipt the simulator
+    /// [delivered](crate::ReceiptOutcome::delivered)), or the deleted account.
     pub from: AccountId,
     /// Who was credited.
     pub to: AccountId,
@@ -574,14 +575,22 @@ impl Effects {
             .chain(receipts)
             .flat_map(|r| r.receipt_ids.iter().map(move |c| (*c, r)))
             .collect();
+        // Who attached `r`'s deposit: its predecessor, unless the simulator
+        // delivered it from another account (or from the receiver itself),
+        // when the signer still paid it, as the conversion's predecessor.
+        let signer = transaction.map(|t| &t.predecessor_id);
+        let payer = |r: &ReceiptOutcome| match signer {
+            Some(s) if r.delivered => s.clone(),
+            _ => r.predecessor_id.clone(),
+        };
         let mut near = vec![];
         for r in receipts.iter().filter(|r| r.is_success() && r.deposit > Balance::ZERO) {
             let (from, kind) = match r.refund {
-                None => (r.predecessor_id.clone(), NearKind::Deposit),
+                None => (payer(r), NearKind::Deposit),
                 Some(Refund::Gas) => continue,
                 // The failed receipt's deposit, from whoever attached it.
                 Some(Refund::Deposit) => match parent.get(&r.receipt_id) {
-                    Some(p) => (p.predecessor_id.clone(), NearKind::DepositRefund),
+                    Some(p) => (payer(p), NearKind::DepositRefund),
                     None => continue,
                 },
                 // The deleted account's balance.

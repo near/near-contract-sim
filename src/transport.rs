@@ -587,9 +587,7 @@ fn block_view(sim: &Sim, k: usize) -> BlockView {
         chunks_included: 1,
         chunk_mask: vec![true],
         gas_price: sim.config.gas_price,
-        total_supply: Balance::from_yoctonear(
-            sim.chain.log().supply().try_into().expect("a non-negative supply"),
-        ),
+        total_supply: Balance::from_yoctonear(sim.chain.log().supply()),
         last_final_block: b.hash,
         last_ds_final_block: b.hash,
         latest_protocol_version: b.protocol_version,
@@ -764,7 +762,7 @@ fn view(
             QueryResponseKind::GasKeyNonces(GasKeyNoncesView { nonces })
         }
         QueryRequest::CallFunction { account_id, method_name, args } => {
-            let (result, logs) = sim.chain.view(&sim.config, at, &account_id, &method_name, &args);
+            let (result, logs) = sim.run_view(at, &account_id, &method_name, &args);
             let result = result.map_err(|e| match e {
                 CallFunctionError::AccountDoesNotExist { requested_account_id } => {
                     unknown(requested_account_id)

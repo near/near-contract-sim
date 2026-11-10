@@ -618,3 +618,27 @@ fn a_bound_reply_keeps_what_it_leaves_unset_from_the_stub_wide_one() {
     assert_eq!(own.receipts[0].logs, ["own"]);
     assert_eq!(own.failure(), Some(Failure::Panic("no".into())), "{own}");
 }
+
+/// In a view, a reply that reads gas (`fail_below`, `burn`,
+/// `burn_leaving`) or calls (`Reply::call`) fails, on the host function a
+/// view can't use; any other serves it.
+#[test]
+fn a_view_fails_on_a_reply_that_reads_gas_or_calls() {
+    let mut sim = sim_with_alice();
+    let tgas = Gas::from_teragas;
+    let stub = Stub::new()
+        .on("checked", Reply::json(1).fail_below(tgas(5)))
+        .on("fixed", Reply::json(1).burn(tgas(1)))
+        .on("slow", Reply::json(1).burn_leaving(tgas(2)))
+        .on("ask", Reply::call("alice.near", "ping", ()).then(Reply::json(1)));
+    sim.deploy_stub("s.near", stub);
+    for (method, host) in [
+        ("checked", "prepaid_gas"),
+        ("fixed", "used_gas"),
+        ("slow", "prepaid_gas"),
+        ("ask", "promise_batch_create"),
+    ] {
+        let failed = sim.view("s.near", method, ()).result.unwrap_err();
+        assert!(failed.to_string().contains(host), "{method}: {failed}");
+    }
+}
