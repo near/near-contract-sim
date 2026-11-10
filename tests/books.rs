@@ -1438,6 +1438,31 @@ fn a_claim_past_reach_leaves_the_next_judged() {
     assert!(f.message.contains("alice.near's claim of"), "{run}");
 }
 
+/// A claim maturing exactly `LIVENESS_EPOCHS` epochs from now is within
+/// reach: liveness advances to it and judges it, so a stuck one is a
+/// finding, not "not judged". One epoch later is past reach.
+#[test]
+fn a_claim_maturing_at_the_last_reachable_epoch_is_judged() {
+    const LIVE: &str = "unstaked NEAR is redeemable";
+    let at = |later: u64| {
+        let alice = unstaked(0);
+        let open = move |sim: &Sim| {
+            let matures = Some(sim.epoch_height() + LIVENESS_EPOCHS + later);
+            alice(sim).into_iter().map(|c| Claim { matures, ..c }).collect()
+        };
+        let redeem = |_: &Claim| Plan::new().op(PoolOp::Withdraw);
+        let books =
+            Books::new().near("pool NEAR", POOL).claim("unstaked NEAR", "pool NEAR", open, redeem);
+        Harness::new(pool(true)).books(books).run(&Plan::new().op(PoolOp::Unstake))
+    };
+    let last = at(0);
+    let f = last.assert_found(LIVE, "alice.near");
+    assert!(f.message.contains("alice.near's claim of"), "{last}");
+    let past = at(1);
+    assert_eq!(past.verdict(), Verdict::Incomplete, "{past}");
+    assert!(past.findings().is_empty(), "{past}");
+}
+
 const BANK: &str = "bank.near";
 
 /// alice's claims on the bank: one per entry `c1` to `c3`, each its amount.
