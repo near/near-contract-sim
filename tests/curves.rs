@@ -1463,3 +1463,89 @@ fn a_first_rung_that_is_the_witness_is_no_second_case() {
     let found = audit.assert_found("v is never 1", "world");
     assert_eq!((found.label.to_string().as_str(), found.cases), ("shown", 1), "{audit}");
 }
+
+/// Sets `v` to `x` whatever its quota, with the gas pinned: every value
+/// of `quota` runs the same transaction.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct Quota {
+    quota: u32,
+}
+
+impl Op for Quota {
+    fn submit(&self, sim: &mut Sim) -> Result<(), Skip> {
+        let call = sim.call("alice.near", "store.near", "set").args("x");
+        call.gas(near_contract_sim::Gas::from_teragas(30)).submit();
+        Ok(())
+    }
+}
+
+/// A rung that runs the witness's transactions at another value is still
+/// a case: a per-op check reading the op's argument fails there, and is
+/// a finding.
+#[test]
+fn a_rung_running_the_witness_s_transactions_at_another_value_is_a_case() {
+    let sim = Fixture::new()
+        .account("alice.near", Balance::from_near(10))
+        .contract("store.near", wat::parse_str(STORE).unwrap())
+        .build();
+    let h = Harness::<Quota>::new(sim).per_op("a quota of at most 1", |d| match d.op().quota {
+        0 | 1 => Ok(()),
+        _ => Err("over quota"),
+    });
+    let witness = Plan::new().op(Quota { quota: 1 });
+    h.run(&witness).assert_clean();
+    let audit = h.curve(&witness, 0, "quota").run();
+    let found = audit.found().iter().find(|x| x.finding.check == "a quota of at most 1");
+    let found = found.unwrap_or_else(|| panic!("not found: {audit}"));
+    assert!(found.label.to_string().starts_with("shown at step 0, /quota = "), "{audit}");
+}
+
+/// `spin.near::go` schedules `cb` with 5 Tgas; `cb` spins until it runs
+/// out of gas.
+const SPIN_OUT: &str = r#"(module
+  (import "env" "register_len" (func $len (param i64) (result i64)))
+  (import "env" "read_register" (func $read (param i64 i64)))
+  (import "env" "current_account_id" (func $me (param i64)))
+  (import "env" "promise_batch_create" (func $create (param i64 i64) (result i64)))
+  (import "env" "promise_batch_action_function_call"
+    (func $call (param i64 i64 i64 i64 i64 i64 i64)))
+  (memory 1)
+  (export "memory" (memory 0))
+  (data (i32.const 0) "cb")
+  (func (export "go") (local $id i64)
+    (call $me (i64.const 1))
+    (local.set $id (call $len (i64.const 1)))
+    (call $read (i64.const 1) (i64.const 128))
+    (call $call (call $create (local.get $id) (i64.const 128))
+      (i64.const 2) (i64.const 0) (i64.const 0) (i64.const 0) (i64.const 512)
+      (i64.const 5000000000000)))
+  (func (export "cb") (loop $spin (br $spin))))"#;
+
+/// Calls `go` with the gas pinned, whatever `n`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct SpinOut {
+    n: u32,
+}
+
+impl Op for SpinOut {
+    fn submit(&self, sim: &mut Sim) -> Result<(), Skip> {
+        let call = sim.call("alice.near", "spin.near", "go");
+        call.gas(near_contract_sim::Gas::from_teragas(30)).submit();
+        Ok(())
+    }
+}
+
+/// A first rung that is the witness but crosses its limit is still a
+/// case, the crossing's own: `cb` runs out of gas at the witness's value,
+/// so the ladder stops there, with the witness and that rung its cases.
+#[test]
+fn a_first_rung_that_is_the_witness_and_crosses_is_a_case() {
+    let sim = Fixture::new()
+        .account("alice.near", Balance::from_near(10))
+        .contract("spin.near", wat::parse_str(SPIN_OUT).unwrap())
+        .build();
+    let audit = Harness::<SpinOut>::new(sim).curve(&Plan::new().op(SpinOut { n: 1 }), 0, "n").run();
+    let row = audit.assert_curve("spin.near::cb", Resource::ReceiptGas, "/n");
+    assert_eq!(row.reach, Reach::Crossed { at: 1 }, "{row}");
+    assert_eq!(audit.cases(), 2, "{audit}");
+}

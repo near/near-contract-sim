@@ -354,9 +354,6 @@ struct Climb<'a, O> {
     axis: Axis,
     /// The step has an unpinned call.
     unpinned: bool,
-    /// The witness's run ([`Run::fingerprint`]): a rung that ran the same
-    /// is the witness, already a case.
-    witness: CryptoHash,
 }
 
 /// One rung: the run, and what it measured.
@@ -609,8 +606,7 @@ impl<O: Op<W>, W: World> Curves<'_, O, W> {
                 for axis in axes {
                     audit.unmoved.extend(same_items::<O, W>(plan, step, &axis).filter(|_| fresh));
                     if self.wanted(step, &axis) && (axis.climbs() || self.only.is_some()) {
-                        let witness = witness.fingerprint;
-                        work.push((w, Climb { plan, step, axis, unpinned, witness }));
+                        work.push((w, Climb { plan, step, axis, unpinned }));
                     }
                 }
             }
@@ -683,10 +679,15 @@ impl<O: Op<W>, W: World> Curves<'_, O, W> {
             .find_map(|(n, p)| Some((n, p.t.refused.as_ref()?)));
         let stop = refused.map(|(n, r)| self.judge_stop(c, &points, n, r));
         let points = &points[..refused.map_or(points.len(), |(n, _)| n + 1)];
-        // Every rung is a case, but one that ran as the witness did: what a
-        // check found there is a finding.
+        // Every rung is a case but the witness itself, already one: a rung
+        // whose plan is the witness's, as a run is its plan's. A rung at any
+        // other value, or at the ceiling's gas, is a case even where it ran
+        // the witness's transactions: a check may read the op or the world.
+        let witness = serde_json::to_value(c.plan).ok();
         for p in points {
-            if p.run.fingerprint != c.witness || crossed(p) || p.run.overlapped_only {
+            let plan = serde_json::to_value(&p.run.plan).ok();
+            let again = witness.is_some() && plan == witness;
+            if !again || crossed(p) || p.run.overlapped_only {
                 let at = format!("step {i}, {} = {}", axis.name, p.value);
                 audit.add(&p.run, Some((&at, &axis.name)));
             } else {

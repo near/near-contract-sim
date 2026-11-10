@@ -253,7 +253,7 @@ impl<O: Op<W>, W: World> Curves<'_, O, W> {
         if p >= i128::from(MARGIN) && unpaid.is_empty() {
             return;
         }
-        let under = if p < i128::from(MARGIN) { MARGIN } else { p as u32 + 1 };
+        let under = threshold(p);
         // Each clause only where it holds: an unpaid axis, legs moved, a
         // shaped trie that lowered it.
         let mut head: Vec<String> = vec![];
@@ -303,6 +303,13 @@ pub fn trie_siblings(account: &AccountId, key: &[u8]) -> Vec<(AccountId, Vec<u8>
 /// shaper forks a key along all of its bytes, up to this many.
 const KEY_MAX: usize = 2048;
 
+/// The percent a target at a worst margin of `p` percent must keep to
+/// pass: [`MARGIN`] under it, else one over `p` (an unpaid axis whose cost
+/// outgrows its budget is a finding at any margin).
+fn threshold(p: i128) -> u32 {
+    if p < i128::from(MARGIN) { MARGIN } else { p as u32 + 1 }
+}
+
 /// `v` doubled (zero to one), at most to `top`; `None` once it is there or
 /// past it.
 fn doubled(v: u128, top: u128) -> Option<u128> {
@@ -315,7 +322,18 @@ type Best<O> = (i128, i128, Vec<u128>, Run<O>);
 
 #[cfg(test)]
 mod tests {
-    use super::{doubled, left};
+    use super::{MARGIN, doubled, left, threshold};
+
+    /// Under [`MARGIN`] the finding's threshold is `MARGIN`; at it or over
+    /// it, one over the margin, so a margin of exactly 25% with an unpaid
+    /// axis is still found (it keeps 25%, under 26).
+    #[test]
+    fn a_margin_at_the_threshold_is_judged_one_over_it() {
+        assert_eq!(threshold(0), MARGIN);
+        assert_eq!(threshold(i128::from(MARGIN) - 1), MARGIN);
+        assert_eq!(threshold(i128::from(MARGIN)), MARGIN + 1);
+        assert_eq!(threshold(60), 61);
+    }
 
     /// The ascent doubles a leg up to its top, never past it, nor again
     /// once there; a leg at zero moves on to one.

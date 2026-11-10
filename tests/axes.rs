@@ -858,3 +858,28 @@ fn a_map_keyed_by_digits_is_no_list() {
     let moved = op(&h.moved(&witness, *i, to, 9).unwrap());
     assert_eq!(moved.to[0]["3"], 9, "{moved:?}");
 }
+
+/// Pays with the gas pinned.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct PinnedPay {}
+
+impl Op for PinnedPay {
+    fn submit(&self, sim: &mut Sim) -> Result<(), Skip> {
+        let call = sim.call("alice.near", PAYER, "pay").args_json(json!({}));
+        call.gas(near_contract_sim::Gas::from_teragas(30)).submit();
+        Ok(())
+    }
+}
+
+/// The caller's gas is an axis only of a step with an unpinned call: one
+/// whose calls all pin their gas has none.
+#[test]
+fn a_step_whose_calls_pin_their_gas_has_no_caller_gas_axis() {
+    let gas = |plan: Plan<PinnedPay>| {
+        let axes = Harness::new(world()).axes(&plan);
+        axes.iter().any(|(_, a)| a.kind == AxisKind::CallerGas)
+    };
+    assert!(!gas(Plan::new().op(PinnedPay {})));
+    let unpinned = Plan::new().call(Call::new("alice.near", PAYER, "pay").args_json(json!({})));
+    assert!(gas(unpinned));
+}
