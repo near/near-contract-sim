@@ -176,11 +176,10 @@ impl Reply {
     /// A view can't make calls: a view of a method with one fails.
     #[track_caller]
     pub fn call(receiver: impl IntoAccountId, method: &str, args: impl Serialize) -> StubCall {
-        let json = serde_json::to_vec(&args).expect("the call's args serialize to JSON");
         StubCall {
             receiver: receiver.into_account_id(),
             method: method.to_owned(),
-            args: if json == b"null" { vec![] } else { json },
+            args: crate::tx::json_input(args),
             deposit: Balance::ZERO,
         }
     }

@@ -31,12 +31,12 @@ fn world(code: Vec<u8>) -> Sim {
     Fixture::new().account(ALICE, Balance::from_near(100)).contract(SPLIT, code).build()
 }
 
-/// `method` on `SPLIT` with `gas`, on a copy of `sim`.
 /// A region's range, key and why, to compare.
 fn shape<K: Clone>(r: &Region<K>) -> (std::ops::RangeInclusive<u64>, K, Why) {
     (r.range.clone(), r.key.clone(), r.why)
 }
 
+/// `method` on `SPLIT` with `gas`, on a copy of `sim`.
 fn at(sim: &Sim, method: &str, gas: u64) -> TxOutcome {
     sim.clone().call(ALICE, SPLIT, method).gas(Gas::from_gas(gas)).transact()
 }

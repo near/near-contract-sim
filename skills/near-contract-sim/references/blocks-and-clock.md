@@ -97,7 +97,7 @@ A callback waiting on a yield stays parked after `transact()`, listed in
 - `expires_at`: the height its timeout fires at (a height, not a time);
 - `callback_methods` and `callback_args`: what the contract passed to
   `promise_yield_create`, to match a yield to its request;
-- `tx`, `receipt_id`, `data_id` and `account_id`.
+- `tx`, `receipt_id`, `data_id` and `receiver_id`.
 
 `expire(&y)` advances to `y.expires_at`, settles and returns
 `outcome(y.tx)`. To race a resume against the timeout, play each side

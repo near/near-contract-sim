@@ -231,8 +231,8 @@ impl<O: fmt::Debug> From<&CurveRow<O>> for Curve {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Row {
     /// What it breaks: `books` or `conservation`, `stranded` or `not
-    /// serializable`, `claim stuck`, `check`, `gas margin`, `storage paid`
-    /// or `failed receipt`; the order they rank in.
+    /// serializable`, `claim stuck`, `check`, `gas margin`, `storage paid`,
+    /// `self-only` or `failed receipt`; the order they rank in.
     pub kind: String,
     /// The check.
     pub check: String,
@@ -377,9 +377,7 @@ pub(crate) fn union(excused: &[(String, String)], reports: &[Report]) -> Report 
         findings,
         curves: reports.iter().flat_map(|r| r.curves.clone()).collect(),
         paths: reports.first().map(|r| r.paths.clone()).unwrap_or_default(),
-        fixed: reports.iter().flat_map(|r| r.fixed.clone()).collect(),
         timings: reports.iter().flat_map(|r| r.timings.clone()).collect(),
-        bands: reports.iter().flat_map(|r| r.bands.clone()).collect(),
         ran_curves: reports.iter().any(|r| r.ran_curves),
         errors: reports.iter().flat_map(|r| r.errors.clone()).collect(),
         incomplete: reports.iter().flat_map(|r| r.incomplete.clone()).collect(),
@@ -389,6 +387,8 @@ pub(crate) fn union(excused: &[(String, String)], reports: &[Report]) -> Report 
     for r in &reports {
         r.seeds.iter().for_each(|&seed| push_new(&mut out.seeds, seed));
         r.parts.iter().for_each(|part| push_new(&mut out.parts, part.clone()));
+        r.fixed.iter().for_each(|s| push_new(&mut out.fixed, s.clone()));
+        r.bands.iter().for_each(|b| push_new(&mut out.bands, b.clone()));
         r.left_out_axes.iter().for_each(|a| push_new(&mut out.left_out_axes, a.clone()));
         r.notes.iter().for_each(|n| push_new(&mut out.notes, n.clone()));
     }

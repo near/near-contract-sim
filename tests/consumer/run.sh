@@ -54,7 +54,7 @@ cp "$root"/tests/res/{fungible_token,vault,floor}.wasm "$pages/tests/res/"
 # template pinned with the CLI); auction-tests/ is the README's crate, its
 # toml blocks and commands run verbatim, the simulator's git source swapped
 # for this checkout. The parent directory's config builds nearcore
-# unoptimized, as the pages above do, so the two share artifacts.
+# at the opt-level the pages above use, so the two share artifacts.
 template=https://raw.githubusercontent.com/near/cargo-near/108a48d505148145b419cf1060dc5f3026881984/cargo-near/src/commands/new/new-project-template
 mkdir -p "$work/auction/src" "$work/auction-tests/src" "$work/auction-tests/tests" \
     "$work/auction-tests/.cargo" "$work/.cargo"

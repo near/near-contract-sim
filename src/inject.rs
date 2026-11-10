@@ -309,7 +309,7 @@ impl Receipts {
 }
 
 /// nearcore's `Action` variants, as `AsRef<str>` names them.
-const ACTIONS: [&str; 14] = [
+const ACTIONS: [&str; 16] = [
     "CreateAccount",
     "DeployContract",
     "FunctionCall",
@@ -324,6 +324,8 @@ const ACTIONS: [&str; 14] = [
     "DeterministicStateInit",
     "TransferToGasKey",
     "WithdrawFromGasKey",
+    "DelegateV2",
+    "UniversalStateInit",
 ];
 
 /// The expression that builds it, `Receipts::callbacks().nth(1)`, but for
@@ -407,6 +409,15 @@ mod tests {
         let err = std::panic::catch_unwind(|| Receipts::action("Unstake")).unwrap_err();
         let msg = err.downcast_ref::<String>().unwrap();
         assert!(msg.starts_with("Receipts::action(\"Unstake\"): not one of nearcore's"), "{msg}");
+    }
+
+    /// nearcore 2.14.0's two newest `Action` variants are kinds too.
+    #[test]
+    fn the_newest_actions_are_kinds() {
+        for kind in ["DelegateV2", "UniversalStateInit"] {
+            let other = Spawned { methods: vec![], actions: vec![kind.into()], ..spawned(&[], 0) };
+            assert!(Receipts::action(kind).matches(0, &other));
+        }
     }
 
     #[test]

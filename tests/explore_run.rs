@@ -250,8 +250,7 @@ fn temporary_state() -> Vec<Fz> {
 }
 
 /// A check after every block sees state a callback hasn't cleaned up yet;
-/// one at rest waits for the callback. (Ported from the old runner's
-/// `at_rest_waits_for_the_callback_but_block_checks_see_temporary_state`.)
+/// one at rest waits for the callback.
 #[test]
 fn always_sees_temporary_state_but_at_rest_waits_for_the_callback() {
     let plan = Plan::new().op(Prog::Run(temporary_state()));

@@ -527,7 +527,8 @@ pub(crate) fn axes_of<O: Op<W>, W: World>(
             calls.push((site, CopySource::Call(call(r), of.clone())));
         }
     }
-    held.dedup_by(|a, b| a.0 == b.0);
+    let mut seen = std::collections::BTreeSet::new();
+    held.retain(|h| seen.insert(h.0.clone()));
     let repeat = |name: String, copy: CopySource| Axis {
         name: format!("repeat {name}"),
         kind: AxisKind::Repeat,
@@ -756,7 +757,7 @@ pub(crate) fn moved_with<O: Op<W>, W: World>(
             let (json, _) = act_json::<O, W>(&step.act)?;
             let edit = |fresh: bool, beside: bool| {
                 let mut json = json.clone();
-                for at in expand(&json.clone(), pointer) {
+                for at in expand(&json, pointer) {
                     json = match axis.kind {
                         AxisKind::Number => with_number(&json, &at, value, *string),
                         AxisKind::Len => with_len(&json, &at, n?, (fresh, beside))?,
@@ -783,7 +784,7 @@ pub(crate) fn moved_with<O: Op<W>, W: World>(
         How::Choice { pointer, values } => {
             let v = values.get(n?)?.clone();
             let (mut json, _) = act_json::<O, W>(&step.act)?;
-            for at in expand(&json.clone(), pointer) {
+            for at in expand(&json, pointer) {
                 *json.pointer_mut(&at)? = v.clone();
             }
             step.act = step.act.rebuild(json).ok()?;

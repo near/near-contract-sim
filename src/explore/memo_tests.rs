@@ -592,7 +592,7 @@ const TOKEN: &str = "token.near";
 const VAULT: &str = "vault.near";
 
 fn res(name: &str) -> Vec<u8> {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/res").join(name);
+    let path = crate::sim::tests::manifest_dir().join("tests/res").join(name);
     std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
