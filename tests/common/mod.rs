@@ -26,7 +26,7 @@ pub fn res(name: &str) -> Vec<u8> {
 // --remap-path-prefix=$HOME/.cargo/registry/src=/cargo"` to `cargo near
 // build`.
 
-/// near-sdk 5.29.0's status-message example (licence: `tests/res/NOTICE.md`).
+/// near-sdk 5.29.0's status-message example (license: `tests/res/NOTICE.md`).
 pub fn status_wasm() -> Vec<u8> {
     res("status_message.wasm")
 }

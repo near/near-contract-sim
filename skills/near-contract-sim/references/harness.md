@@ -90,7 +90,7 @@ fn withdraw_delivers(d: &OpDone<VaultOp>) -> Result<(), Fail> {
 
 The vault registers it with `.per_op_for(is_withdraw, "withdraw
 delivers what it debits", withdraw_delivers)` beside its `always` and
-`at_rest` checks (`harness` in `tests/vault.rs`); a predicate can be
+`at_rest` checks (`audit` in `tests/vault.rs`); a predicate can be
 `|op| matches!(op, VaultOp::Claim { .. })`.
 
 Shared state under overlap goes in `at_rest_ops`, judged at every rest

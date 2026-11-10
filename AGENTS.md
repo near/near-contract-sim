@@ -39,10 +39,11 @@ before finishing.
   contract's operations. **Experimental**: its API and files change
   between minor versions.
 - `tests/*.rs`: integration tests, one topic per file. Helpers are in
-  `tests/common/`, `tests/fuzz_common/` and `tests/mpc_fixture/`.
+  `tests/common/`, `tests/fuzz_common/`, `tests/mpc_fixture/`,
+  `tests/explore_vault/` and `tests/differential/`.
 - `tests/res/`: checked-in wasm and `.wat` fixtures, with READMEs for the
   third-party ones. `tests/contracts/<name>/`: the sources and `build.sh`
-  of this repo's own fixtures.
+  of this repo's own fixtures (`custody/build.sh` builds `receiver` too).
 - `tests/api/public.txt`: the public API, one line per item.
 - `README.md`, `skills/near-contract-sim/SKILL.md` and its `references/`:
   the user docs. Their code blocks are compiled (`tests/docs.rs`,

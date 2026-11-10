@@ -231,8 +231,8 @@ impl<O: fmt::Debug> From<&CurveRow<O>> for Curve {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Row {
     /// What it breaks: `books` or `conservation`, `stranded` or `not
-    /// serializable`, `claim stuck`, `check`, `gas margin`, `storage paid`
-    /// or `failed receipt`; the order they rank in.
+    /// serializable`, `claim stuck`, `check`, `gas margin`, `storage paid`,
+    /// `self-only` or `failed receipt`; the order they rank in.
     pub kind: String,
     /// The check.
     pub check: String,
@@ -377,9 +377,7 @@ pub(crate) fn union(excused: &[(String, String)], reports: &[Report]) -> Report 
         findings,
         curves: reports.iter().flat_map(|r| r.curves.clone()).collect(),
         paths: reports.first().map(|r| r.paths.clone()).unwrap_or_default(),
-        fixed: reports.iter().flat_map(|r| r.fixed.clone()).collect(),
         timings: reports.iter().flat_map(|r| r.timings.clone()).collect(),
-        bands: reports.iter().flat_map(|r| r.bands.clone()).collect(),
         ran_curves: reports.iter().any(|r| r.ran_curves),
         errors: reports.iter().flat_map(|r| r.errors.clone()).collect(),
         incomplete: reports.iter().flat_map(|r| r.incomplete.clone()).collect(),
@@ -389,6 +387,8 @@ pub(crate) fn union(excused: &[(String, String)], reports: &[Report]) -> Report 
     for r in &reports {
         r.seeds.iter().for_each(|&seed| push_new(&mut out.seeds, seed));
         r.parts.iter().for_each(|part| push_new(&mut out.parts, part.clone()));
+        r.fixed.iter().for_each(|s| push_new(&mut out.fixed, s.clone()));
+        r.bands.iter().for_each(|b| push_new(&mut out.bands, b.clone()));
         r.left_out_axes.iter().for_each(|a| push_new(&mut out.left_out_axes, a.clone()));
         r.notes.iter().for_each(|n| push_new(&mut out.notes, n.clone()));
     }
@@ -1021,6 +1021,34 @@ pub(super) fn short(s: &str, n: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::{Report, union};
+
+    /// A union keeps each run's timings and whether any ran curves, and
+    /// names a fixed string or a band once however many reports hold it,
+    /// as a resumed scan's own report and the one it read back both do.
+    #[test]
+    fn a_union_keeps_timings_and_names_fixed_strings_and_bands_once() {
+        let a = Report {
+            fixed: vec!["memo".into(), "note".into()],
+            bands: vec!["a band".into()],
+            timings: vec![("scan".into(), 2.0)],
+            ..Report::default()
+        };
+        let b = Report {
+            fixed: vec!["note".into(), "tag".into()],
+            bands: vec!["a band".into(), "another".into()],
+            timings: vec![("curves".into(), 1.0)],
+            ran_curves: true,
+            ..Report::default()
+        };
+        let u = union(&[], &[a.clone(), b]);
+        assert_eq!(u.fixed, ["memo", "note", "tag"]);
+        assert_eq!(u.bands, ["a band", "another"]);
+        assert_eq!(u.timings, [("scan".to_owned(), 2.0), ("curves".to_owned(), 1.0)]);
+        assert!(u.ran_curves);
+        assert!(!union(&[], &[a]).ran_curves);
+    }
+
     /// A line cut short keeps its head and its tail: a gas
     /// band's failing receipt, a step's forced fault, an error's reason.
     #[test]

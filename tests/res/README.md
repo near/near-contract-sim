@@ -14,7 +14,7 @@ tests) that load each one, directly or through a helper.
 | file | what it is | used by |
 |---|---|---|
 | `abort_ledger.wat` | A ledger that panics as a `panic = "abort"` build does (`unreachable`): `withdraw` traps above 100; `relay` calls its own `withdraw`, detached. | `explore_scan.rs`, `trap_site.rs` |
-| `batch.wat` | A keeper and worker in one module: `batch(n)` gives `work(n)` a fixed 20 Tgas, which runs out at 8 items; `register`, `touch`, an `items` view. | `batch.rs`, `custody_batch.rs`, `outsider.rs` |
+| `batch.wat` | A keeper and worker in one module: `batch(n)` gives `work(n)` a fixed 20 Tgas, which runs out at 8 items; `register`, `touch`, an `items` view. | `batch.rs`, `custody_batch.rs` |
 | `budget_ledger.wat` | `put` appends ids, then runs `on_put` on 4 Tgas plus 2 Tgas an id, a budget that misses the cost of moving the list's last entry. | `margin.rs` |
 | `callback_probe.wat` | `start` and `start_and` chain calls into `cb`, which returns its signer, predecessor, deposit, gas and each promise result: for `Tx::promise_results`. | `src/explore/hook.rs`, `src/outcome.rs`, `callbacks.rs` |
 | `claim_queue.wat` | `request` queues a claim under the next id; `redeem(id)` removes it or panics "no such claim"; a `count` view. | `src/explore/memo_tests.rs`, `explore_enumerate.rs`, `live_keys.rs` |
@@ -25,7 +25,7 @@ tests) that load each one, directly or through a helper.
 | `custody_log_bug.wasm` | custody.wasm with its `bug_log` feature: the refund log isn't size-checked, so long ids or memos pass 16 KiB and trap the resolver. | `curves.rs`, `intents_like.rs` |
 | `desk.wasm` | A ticket desk ([tests/contracts/desk](../contracts/desk)): `redeem` calls the issuer's `issue`, then `on_issued`, whose budget is sized to the event bytes. | `explore_scan.rs`, `report.rs` |
 | `desk_band.wasm` | desk.wasm with its `band` feature: inside a band of caller gas, `release` runs out and the pending amount stays locked. | `curves.rs` |
-| `drivers_capped.wasm` | drivers_funded.wasm with `capped`: `pledge` refuses 8 or more ids. | `curves.rs` |
+| `drivers_capped.wasm` | drivers_funded.wasm with `capped`: `pledge` refuses 32 or more ids. | `curves.rs` |
 | `drivers_funded.wasm` | A holdings contract ([tests/contracts/drivers](../contracts/drivers)): `settle` then `on_settled`, whose cost per id grows with the entries after it; `fund`, `issue`, `pledge`. | `curves.rs` |
 | `failure_probe.wat` | `hello`, `write`, `write_then_panic` ("boom"), and `send_to_missing`, which sends 1 NEAR to a missing account and logs the callback's result. | `accounts.rs`, `calls.rs`, `chain.rs`, `color.rs`, `effects.rs` and 2 more |
 | `flight_lock.wat` | `start` sets a busy flag until `finish`; `sync` panics and `try_sync` returns false while busy; `work` always ends in a failing call; epoch checks. | `src/explore/enumerate.rs`, `src/explore/memo_tests.rs`, `explore_enumerate.rs`, `explore_run.rs` |
@@ -52,11 +52,11 @@ tests) that load each one, directly or through a helper.
 | `nonce_box.wat` | `use(nonce)` stores the nonce and panics on one it has seen. | `axes.rs`, `trie_gas.rs` |
 | `open_registry.wat` | `register` (payable) stores a 1000-byte profile paid from the registry's own balance; the paying build requires 0.011 NEAR. | `curves.rs`, `report.rs` |
 | `payload_ledger.wat` | `set` and `spend` act on a holder named in the args, not the caller, as a relayed signed payload does; `spend` panics "not enough credit". | `axes.rs` |
-| `pending.wat` | Self-callbacks: `request`, `process` then `on_withdraw` then `on_result`, and `batch`, `keyed` and `pair`, each a multi-action receipt to itself. | `src/tx.rs`, `explore_replay.rs`, `explore_run.rs`, `explore_search.rs`, `outsider.rs` |
-| `purse.wat` | `deposit(n)` adds to a balance; `withdraw(n)` refuses only an empty purse, so an amount over the balance wraps it above what was deposited. | `explore_enumerate.rs` |
+| `pending.wat` | Self-callbacks: `request`, `process` then `on_withdraw` then `on_result`, and `batch`, `keyed` and `pair`, each a multi-action receipt to itself. | `outsider.rs` |
 | `pool_sync.wat` | A pool that books its balance less deposits as reward: two `deposit`s in one block double-count the one in flight. | `src/explore/memo_tests.rs`, `explore_enumerate.rs`, `faults.rs`, `identity.rs` |
 | `probe.wasm` | A near-sdk probe built from [probe_src.rs.txt](probe_src.rs.txt): views of the seed, key, time and height; `start_yield` and `resume`; `call_missing`; `last`. | `examples/tour.rs`, `src/sim.rs`, `accounts.rs`, `callbacks.rs`, `calls.rs` and 17 more |
-| `probe_src.rs.txt` | probe.wasm's source. | `calls.rs`, `docs.rs`, `effects.rs`, `token_effects.rs`, `trie_gas.rs` and 1 more |
+| `probe_src.rs.txt` | probe.wasm's source. | no test: it is read, not loaded |
+| `purse.wat` | `deposit(n)` adds to a balance; `withdraw(n)` refuses only an empty purse, so an amount over the balance wraps it above what was deposited. | `src/explore/scan.rs`, `explore_enumerate.rs` |
 | `receiver.wasm` | custody.wasm's notify receiver ([tests/contracts/receiver](../contracts/receiver)): `on_notify` returns half of each position to refund. Not an NEP-141 receiver: that is ft_receiver.wat. | `intents_like.rs` |
 | `refund_book.wat` | `deposit` credits ids, calls a sink, then `resolve` on 3 Tgas plus 0.2 Tgas an id, while its cost is per distinct id it removes. | `margin.rs` |
 | `refund_ledger.wat` | `send` calls the receiver's `on_receive`, then `resolve`; the refund is capped by the receiver's credit, not by what was sent, so a hostile reply drains it. | `axes.rs`, `books.rs`, `explore_search.rs`, `fault_address.rs` |

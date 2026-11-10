@@ -147,7 +147,7 @@ fn timed_block(sim: &mut Sim) -> Duration {
     t.elapsed()
 }
 
-/// `run`, one timed block at a time.
+/// `settle`, one timed block at a time.
 fn timed_run(sim: &mut Sim) -> Vec<Duration> {
     let mut times = vec![];
     while !sim.is_idle() {

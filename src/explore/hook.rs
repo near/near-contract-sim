@@ -128,7 +128,7 @@ mod tests {
     /// `cb` given a failed result.
     #[test]
     fn a_step_with_two_injections_fires_both() {
-        let wat = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/res/callback_probe.wat");
+        let wat = crate::sim::tests::manifest_dir().join("tests/res/callback_probe.wat");
         let mut sim = Sim::new();
         sim.create_account("alice.near", Balance::from_near(10));
         sim.deploy("probe.near", wat::parse_file(wat).unwrap());

@@ -320,6 +320,7 @@ mod tests {
         cached_at(&path, 2, setup);
         assert_eq!(runs.get(), 3);
         std::fs::remove_file(&path).unwrap();
+        std::fs::remove_file(path.with_extension("lock")).unwrap();
     }
 
     #[test]

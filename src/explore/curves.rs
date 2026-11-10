@@ -627,7 +627,9 @@ impl<O: Op<W>, W: World> Curves<'_, O, W> {
             AxisKind::Len | AxisKind::Bytes => (axis.at.max(1), u128::MAX),
             AxisKind::Choice => (axis.at, axis.at),
         };
-        let end = v.saturating_mul(1u128.checked_shl(self.rungs - 1).unwrap_or(u128::MAX)).min(top);
+        let end = v
+            .saturating_mul(1u128.checked_shl(self.rungs.saturating_sub(1)).unwrap_or(u128::MAX))
+            .min(top);
         let mut out = vec![];
         while v < end {
             out.push(v);

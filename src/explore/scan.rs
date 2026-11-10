@@ -594,7 +594,7 @@ fn number_edges<O: Op<W>, W: World>(
                 gas::thresholds().iter().map(|g| g.as_gas()).filter(|&g| g >= from).collect();
             gases.extend(floor.map(|f| f.as_gas()));
             for g in gases {
-                edges.extend([g - 1, g, g + 1].map(u128::from));
+                edges.extend([g.saturating_sub(1), g, g.saturating_add(1)].map(u128::from));
             }
         }
         edges.sort_unstable();

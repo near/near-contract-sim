@@ -1,6 +1,6 @@
-//! The token vault specimen as an exploration harness, shared by
-//! the scan, replay and diff tests: the world, the
-//! ops and the checks of plan-phase-d.md example (c).
+//! The token vault specimen as an exploration harness, shared by the
+//! explore, diff, identity and vault-books tests: the world, the ops and
+//! the checks.
 #![allow(dead_code)]
 
 use crate::common::res;

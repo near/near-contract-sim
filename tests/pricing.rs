@@ -26,11 +26,11 @@ fn priced(v: Option<u32>) -> Config {
 }
 
 /// Protocol 81's prices are nearcore's 81 values (a first trie-node touch
-/// 16.1 Ggas, 7 times 87's 2.28), action fees included; limits and
+/// 16.1 Ggas, 7 times 88's 2.28), action fees included; limits and
 /// features stay the pinned protocol's.
 #[test]
 fn prices_come_from_the_store_and_nothing_else_does() {
-    let (at81, at87) = (store(81), store(87));
+    let (at81, at88) = (store(81), store(88));
     let touch = |c: &Config| {
         c.runtime_config().wasm_config.ext_costs.gas_cost(ExtCosts::touching_trie_node)
     };
@@ -42,7 +42,7 @@ fn prices_come_from_the_store_and_nothing_else_does() {
     assert_eq!(touch(&new).as_gas(), 2_280_000_000);
     assert_eq!(cached(&old).as_gas(), 2_280_000_000);
     assert_eq!(touch(&old), at81.wasm_config.ext_costs.gas_cost(ExtCosts::touching_trie_node));
-    assert_eq!(touch(&new), at87.wasm_config.ext_costs.gas_cost(ExtCosts::touching_trie_node));
+    assert_eq!(touch(&new), at88.wasm_config.ext_costs.gas_cost(ExtCosts::touching_trie_node));
     for e in [ExtCosts::storage_write_base, ExtCosts::storage_read_base, ExtCosts::base] {
         assert_eq!(
             old.runtime_config().wasm_config.ext_costs.gas_cost(e),
@@ -53,7 +53,7 @@ fn prices_come_from_the_store_and_nothing_else_does() {
     // Action fees: account creation changed between them.
     let create = |c: &Config| c.runtime_config().fees.fee(ActionCosts::create_account).execution;
     assert_eq!(create(&old), at81.fees.fee(ActionCosts::create_account).execution);
-    assert_eq!(create(&new), at87.fees.fee(ActionCosts::create_account).execution);
+    assert_eq!(create(&new), at88.fees.fee(ActionCosts::create_account).execution);
     assert_ne!(create(&old), create(&new));
     // Semantics and limits are the pinned protocol's.
     let (o, n) = (&old.runtime_config().wasm_config, &new.runtime_config().wasm_config);
@@ -90,7 +90,7 @@ fn a_write_costs_more_under_old_prices_and_the_books_balance() {
     };
     let (new, new_touch) = burnt(None);
     let (old, old_touch) = burnt(Some(81));
-    assert!(old > new, "81: {old}, 87: {new}");
+    assert!(old > new, "81: {old}, 88: {new}");
     assert!(old_touch > 0 && new_touch > 0);
     assert_eq!(old_touch % 16_101_955_926, 0, "{old_touch}");
     assert_eq!(new_touch % 2_280_000_000, 0, "{new_touch}");

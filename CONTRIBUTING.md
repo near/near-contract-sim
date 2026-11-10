@@ -190,7 +190,8 @@ one.
 submit, produces the blocks its plan says, and judges checks at block
 boundaries (`src/explore/run.rs`). A sampled fault is resolved against a
 run of the plan without it, then the plan reruns with the fault at one
-receipt, as `Receipts::index(n)`, so a case reruns exactly. A replay file
+receipt, as `Receipts::occurrence(receiver, method, k)` (`Receipts::index(n)`
+if it makes other than one call), so a case reruns exactly. A replay file
 records the plan, the finding and the fixture's code hashes and state
 root (`src/explore/store.rs`).
 

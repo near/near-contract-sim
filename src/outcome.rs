@@ -288,8 +288,8 @@ impl StorageOps {
     }
 }
 
-/// `read 2 (1.0 KiB), wrote 3 (32.1 KiB), evicted 31.0 KiB, 9 trie nodes
-/// (+4 cached), 3 keys written`.
+/// `read 2 (1.0 KiB), wrote 3 (32.1 KiB), removed 0, evicted 31.0 KiB, 9
+/// trie nodes (+4 cached), 3 keys written`.
 impl fmt::Display for StorageOps {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let kib = |n: u64| format!("{:.1} KiB", n as f64 / 1024.0);

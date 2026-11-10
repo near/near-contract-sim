@@ -2,7 +2,7 @@
 
 Use this page to hunt for bugs in a contract that holds value, with
 `explore`, which is experimental: its API and files change between
-minor versions. It is a checklist of seven steps, each with what it produces and when it is
+minor versions. It is a checklist of eight steps, each with what it produces and when it is
 done. Do the steps in order. Before your first harness, read up to the
 end of step 2; read the later steps when you reach them. The tools are
 in [harness.md](harness.md) and [explore.md](explore.md).
