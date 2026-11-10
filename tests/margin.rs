@@ -12,7 +12,7 @@
 mod common;
 
 use common::{manifest_dir, wat};
-use near_contract_sim::explore::{Audit, Harness, Op, Plan, Resource, Skip, Status};
+use near_contract_sim::explore::{Audit, Axes, Harness, Op, Plan, Resource, Skip, Status};
 use near_contract_sim::{Balance, Fault, Fixture, Receipts, Sim, StateRecord};
 use serde::{Deserialize, Serialize};
 
@@ -350,7 +350,7 @@ mod registry {
             "gas margin at registry.near::resolve (on_receive): forced (Hold(130) at \
              registry.near::resolve)",
         ];
-        assert_eq!(pinned(&audit), (80, found.map(String::from).to_vec()), "{audit}");
+        assert_eq!(pinned(&audit), (92, found.map(String::from).to_vec()), "{audit}");
         let bytes = audit.assert_curve(RESOLVE, Resource::ReceiptGas, "/ids/*");
         let tail = "registry.near::on_receive while registry.near::resolve is held";
         let held = audit.assert_curve(RESOLVE, Resource::ReceiptGas, tail);
@@ -468,8 +468,8 @@ mod book {
             "failed callback at book.near::resolve (Deposit): shown at step 0, /ids = 52",
             "gas margin at book.near::resolve (Deposit): shown at margin of book.near::resolve",
         ];
-        // 79 cases: the stub's `on_deposit` (unaudited) is no repeat axis.
-        assert_eq!(pinned(&audit), (79, found.map(String::from).to_vec()), "{audit}");
+        // 95 cases: the stub's `on_deposit` (unaudited) is no repeat axis.
+        assert_eq!(pinned(&audit), (95, found.map(String::from).to_vec()), "{audit}");
         let rows = audit.curves().iter().filter(|r| {
             r.site == RESOLVE && r.resource == Resource::ReceiptGas && r.axis.name == "/ids"
         });
@@ -502,4 +502,108 @@ mod book {
             scan.report().timings.iter().any(|t| t.0.contains("gives back all it was sent"));
         assert!(tried, "{scan}");
     }
+}
+
+/// `count.near::put` counts its calls and schedules `on_count` with a
+/// flat 10 Tgas; `on_count` hashes 1000 bytes once per call counted, so
+/// each copy of the call before it costs it more.
+const COUNT: &str = r#"(module
+  (import "env" "storage_read" (func $get (param i64 i64 i64) (result i64)))
+  (import "env" "storage_write" (func $set (param i64 i64 i64 i64 i64) (result i64)))
+  (import "env" "register_len" (func $len (param i64) (result i64)))
+  (import "env" "read_register" (func $read (param i64 i64)))
+  (import "env" "current_account_id" (func $me (param i64)))
+  (import "env" "promise_batch_create" (func $create (param i64 i64) (result i64)))
+  (import "env" "promise_batch_action_function_call"
+    (func $call (param i64 i64 i64 i64 i64 i64 i64)))
+  (import "env" "sha256" (func $sha (param i64 i64 i64)))
+  (memory 1)
+  (export "memory" (memory 0))
+  (data (i32.const 0) "on_count")
+  (data (i32.const 8) "n")
+  (func $count (result i64)
+    (if (result i64) (i64.eq (call $get (i64.const 1) (i64.const 8) (i64.const 0)) (i64.const 1))
+      (then (call $read (i64.const 0) (i64.const 16)) (i64.load (i32.const 16)))
+      (else (i64.const 0))))
+  (func (export "put") (local $id i64)
+    (i64.store (i32.const 16) (i64.add (call $count) (i64.const 1)))
+    (drop (call $set (i64.const 1) (i64.const 8) (i64.const 8) (i64.const 16) (i64.const 1)))
+    (call $me (i64.const 1))
+    (local.set $id (call $len (i64.const 1)))
+    (call $read (i64.const 1) (i64.const 128))
+    (call $call (call $create (local.get $id) (i64.const 128))
+      (i64.const 8) (i64.const 0) (i64.const 0) (i64.const 0) (i64.const 512)
+      (i64.const 10000000000000)))
+  (func (export "on_count") (local $i i64) (local $n i64)
+    (local.set $n (call $count))
+    (block $done (loop $more
+      (br_if $done (i64.ge_u (local.get $i) (local.get $n)))
+      (call $sha (i64.const 1000) (i64.const 1024) (i64.const 2))
+      (local.set $i (i64.add (local.get $i) (i64.const 1)))
+      (br $more)))))"#;
+
+const ON_COUNT: &str = "count.near::on_count";
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct Count {}
+
+impl Op for Count {
+    fn submit(&self, sim: &mut Sim) -> Result<(), Skip> {
+        sim.call("alice.near", "count.near", "put").submit();
+        Ok(())
+    }
+
+    /// One copy axis, the step's own repeat: the others climb the same.
+    fn axes(&self) -> Axes {
+        Axes::only(["repeat Count"])
+    }
+}
+
+fn counter(wat: &str) -> Harness<Count> {
+    let world = Fixture::new()
+        .account("alice.near", Balance::from_near(100))
+        .contract("count.near", wat::parse_str(wat).unwrap())
+        .build();
+    Harness::new(world).must_not_fail("on_count")
+}
+
+/// The values a margin finding's message gives its combined legs.
+fn combined(message: &str) -> Vec<u128> {
+    let legs = message.split("combined [").nth(1).and_then(|m| m.split(']').next());
+    let legs = legs.unwrap_or_else(|| panic!("no combined legs: {message}")).split(", ");
+    legs.filter_map(|l| l.rsplit_once(" = ")).map(|(_, v)| v.parse().unwrap()).collect()
+}
+
+/// `on_count`'s margin falls with each copy of the step before it; the
+/// ladder climbs to 64 copies, and so does the ascent, never past it.
+#[test]
+fn an_ascent_climbs_no_more_copies_than_the_ladder() {
+    let h = counter(COUNT);
+    let audit = h.curves(&[Plan::new().op(Count {})]).run();
+    eprintln!("{audit}");
+    let message = &audit.assert_found("gas margin", ON_COUNT).finding.message;
+    let values = combined(message);
+    assert!(!values.is_empty() && values.iter().all(|&v| v <= 64), "{message}");
+    assert!(message.contains("unpaid along [repeat Count (step 0)]"), "{message}");
+    // Nothing planted: no shaped margin to speak of.
+    assert!(!message.contains("siblings"), "{message}");
+}
+
+/// A margin under 25% that no axis moves is a finding by margin alone:
+/// its message names no unpaid axis and no combined legs.
+#[test]
+fn a_margin_no_axis_moves_names_no_unpaid_axis() {
+    let flat = COUNT.replace(
+        "(br_if $done (i64.ge_u (local.get $i) (local.get $n)))",
+        "(br_if $done (i64.ge_u (local.get $i) (i64.const 64)))",
+    );
+    let flat = flat.replace("(i64.const 10000000000000)", "(i64.const 3000000000000)");
+    let h = counter(&flat);
+    h.run(&Plan::new().op(Count {})).assert_clean();
+    let audit = h.curves(&[Plan::new().op(Count {})]).run();
+    eprintln!("{audit}");
+    let message = &audit.assert_found("gas margin", ON_COUNT).finding.message;
+    assert!(message.contains("under 25%"), "{message}");
+    assert!(!message.contains("unpaid along []") && !message.contains("combined []"), "{message}");
+    assert!(!message.contains("siblings"), "{message}");
 }

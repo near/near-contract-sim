@@ -821,3 +821,40 @@ fn fresh_callers_come_from_another_account() {
     assert!(fresh("alice.near"));
     assert!(!fresh(PAYER));
 }
+
+/// Pays each of `to` its amount, keyed by id.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct PayById {
+    amounts: std::collections::BTreeMap<String, u64>,
+    to: Vec<std::collections::BTreeMap<String, u64>>,
+}
+
+impl Op for PayById {
+    fn submit(&self, sim: &mut Sim) -> Result<(), Skip> {
+        sim.call("alice.near", PAYER, "pay").args_json(json!({ "amounts": self.amounts })).submit();
+        Ok(())
+    }
+}
+
+/// A digit key of a map (a map keyed by id) is the key itself, its own
+/// axis that moves its value; only a list's index is any item (`*`).
+#[test]
+fn a_map_keyed_by_digits_is_no_list() {
+    let h = Harness::new(world());
+    let by_id = |k: &str, v: u64| [(k.to_owned(), v)].into_iter().collect();
+    let witness = Plan::new().op(PayById { amounts: by_id("7", 100), to: vec![by_id("3", 1)] });
+    let axes = h.axes(&witness);
+    let names: Vec<&str> = axes.iter().map(|(_, a)| a.name.as_str()).collect();
+    assert!(names.contains(&"/amounts/7") && names.contains(&"/to/*/3"), "{names:?}");
+    let get = |name: &str| axes.iter().find(|(_, a)| a.name == name).unwrap();
+    let op = |p: &Plan<PayById>| match &p.steps[0].act {
+        near_contract_sim::explore::Act::Op(op) => op.clone(),
+        act => panic!("{act:?}"),
+    };
+    let (i, amount) = get("/amounts/7");
+    let moved = op(&h.moved(&witness, *i, amount, 5).unwrap());
+    assert_eq!(moved.amounts["7"], 5, "{moved:?}");
+    let (i, to) = get("/to/*/3");
+    let moved = op(&h.moved(&witness, *i, to, 9).unwrap());
+    assert_eq!(moved.to[0]["3"], 9, "{moved:?}");
+}

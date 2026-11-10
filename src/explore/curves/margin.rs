@@ -215,7 +215,7 @@ impl<O: Op<W>, W: World> Curves<'_, O, W> {
                     AxisKind::Repeat | AxisKind::HoldTail => super::COPIES,
                     _ => 1 << 16,
                 };
-                tries.insert(0, (k, v.saturating_mul(2).min(top).max(v + 1)));
+                tries.splice(0..0, doubled(v, top).map(|v| (k, v)));
             }
         }
         // The shaper: the trie forked along each key the target wrote, in
@@ -223,12 +223,9 @@ impl<O: Op<W>, W: World> Curves<'_, O, W> {
         // could break its own reads.
         let clean = pct(best.0, best.1);
         let receipts = best.3.outcomes.iter().flat_map(|o| &o.receipts);
-        let audited = |a: &AccountId| {
-            self.harness.audits.as_ref().is_none_or(|x| x.iter().any(|x| x == a.as_str()))
-        };
         let written = (receipts.filter(|r| kept(r, site).is_some()))
             .flat_map(|r| r.storage_ops().written)
-            .filter(|w| audited(&w.account));
+            .filter(|w| self.harness.audited(w.account.as_str()));
         let mut shaped = best.3.plan.clone();
         shaped.planted = written.flat_map(|w| trie_siblings(&w.account, &w.key)).collect();
         let n = shaped.planted.len();
@@ -242,11 +239,12 @@ impl<O: Op<W>, W: World> Curves<'_, O, W> {
             best = b;
         }
         let (left, attached, values, run) = best;
-        let shaped = if run.plan.planted.is_empty() { "" } else { ", trie shaped" };
+        let shaped = !run.plan.planted.is_empty();
         let moved = legs.iter().zip(&values).filter(|(l, v)| **v != l.1.at);
-        let moved: Vec<String> = moved.map(|(l, v)| format!("{} = {v}", l.1.name)).collect();
+        let mut moved: Vec<String> = moved.map(|(l, v)| format!("{} = {v}", l.1.name)).collect();
+        moved.extend(shaped.then(|| "trie shaped".to_owned()));
         let unpaid: Vec<&str> = legs.iter().filter(|l| l.4).map(|l| l.1.name.as_str()).collect();
-        let (unpaid, moved) = (unpaid.join(", "), moved.join(", ") + shaped);
+        let (unpaid, moved) = (unpaid.join(", "), moved.join(", "));
         let p = pct(left, attached);
         eprintln!(
             "margin of {site}: worst {p}% ({left} gas) at [{moved}]; clean trie {clean}%, \
@@ -256,12 +254,15 @@ impl<O: Op<W>, W: World> Curves<'_, O, W> {
             return;
         }
         let under = if p < i128::from(MARGIN) { MARGIN } else { p as u32 + 1 };
-        let lines: Vec<&str> = legs.iter().map(|l| l.3.as_str()).collect();
-        let why = format!(
-            "unpaid along [{unpaid}]; combined [{moved}]; {clean}% with a clean trie, {p}% with \
-             {n} siblings forking it along the keys it writes\n{}",
-            lines.join("\n")
-        );
+        // Each clause only where it holds: an unpaid axis, legs moved, a
+        // shaped trie that lowered it.
+        let mut head: Vec<String> = vec![];
+        head.extend((!unpaid.is_empty()).then(|| format!("unpaid along [{unpaid}]")));
+        head.extend((!moved.is_empty()).then(|| format!("combined [{moved}]")));
+        let forked = format!(", {p}% with {n} siblings forking it along the keys it writes");
+        head.push(format!("{clean}% with a clean trie{}", if shaped { &forked[..] } else { "" }));
+        let lines = legs.iter().map(|l| l.3.clone());
+        let why = std::iter::once(head.join("; ")).chain(lines).collect::<Vec<_>>().join("\n");
         let mut plan = run.plan.clone();
         plan.margin = vec![Margin { site: site.to_owned(), under, why }];
         let at = format!("margin of {site}");
@@ -302,13 +303,29 @@ pub fn trie_siblings(account: &AccountId, key: &[u8]) -> Vec<(AccountId, Vec<u8>
 /// shaper forks a key along all of its bytes, up to this many.
 const KEY_MAX: usize = 2048;
 
+/// `v` doubled, at most to `top`; `None` once it is there or past it.
+fn doubled(v: u128, top: u128) -> Option<u128> {
+    (v < top).then(|| v.saturating_mul(2).min(top))
+}
+
 /// A combined point: its margin and attached gas, each leg's value, and
 /// the run.
 type Best<O> = (i128, i128, Vec<u128>, Run<O>);
 
 #[cfg(test)]
 mod tests {
-    use super::left;
+    use super::{doubled, left};
+
+    /// The ascent doubles a leg up to its top, never past it, nor again
+    /// once there.
+    #[test]
+    fn a_leg_doubles_to_its_top_and_no_further() {
+        assert_eq!(doubled(3, 64), Some(6));
+        assert_eq!(doubled(40, 64), Some(64));
+        assert_eq!(doubled(64, 64), None);
+        assert_eq!(doubled(2_048_000, 1 << 16), None);
+        assert_eq!(doubled(u128::MAX - 1, u128::MAX), Some(u128::MAX));
+    }
 
     /// A receipt that forwarded exactly what it didn't use (gas weight)
     /// keeps that; one with a static forward keeps what is left after it.

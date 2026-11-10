@@ -302,8 +302,7 @@ pub(crate) fn args<O: Op<W>, W: World>(act: &Act<O>) -> (Vec<Axis>, Vec<String>)
     let builds = |at: &str, j: Option<Value>| j.is_some_and(|j| any(at) || act.rebuild(j).is_ok());
     let (mut out, mut fixed): (Vec<Axis>, Vec<String>) = (vec![], vec![]);
     for (at, leaf) in axes.leaves(&json) {
-        let parts = at.split('/').map(|p| if p.parse::<usize>().is_ok() { "*" } else { p });
-        let name = parts.collect::<Vec<_>>().join("/");
+        let name = starred(&json, &at);
         let arg = |string| How::Arg { pointer: name.clone(), string };
         let (kind, at, how) = match leaf {
             Leaf::Number { value, string } => (AxisKind::Number, value, arg(string)),
@@ -357,8 +356,21 @@ pub(crate) fn args<O: Op<W>, W: World>(act: &Act<O>) -> (Vec<Axis>, Vec<String>)
             None => out.push(Axis { how, name, kind, at }),
         }
     }
-    fixed.dedup();
     (out, fixed)
+}
+
+/// The pointer `at` into `json` with each index of a list `*`: a list's
+/// items move together. A digit key of an object (a map keyed by id)
+/// stays itself.
+fn starred(json: &Value, at: &str) -> String {
+    let (mut name, mut parent) = (String::new(), 0);
+    for part in at.split('/').skip(1) {
+        let list = json.pointer(&at[..parent]).is_some_and(Value::is_array);
+        name.push('/');
+        name.push_str(if list { "*" } else { part });
+        parent += 1 + part.len();
+    }
+    name
 }
 
 /// Each step's strings that aren't axes ([`args`]), named by step.
@@ -424,7 +436,7 @@ mod serde_says {
 }
 
 /// An object key as a JSON pointer part (RFC 6901): `~` and `/` escaped.
-fn pointer_key(k: &str) -> String {
+pub(crate) fn pointer_key(k: &str) -> String {
     k.replace('~', "~0").replace('/', "~1")
 }
 
@@ -488,7 +500,8 @@ pub(crate) fn axes_of<O: Op<W>, W: World>(
         return (out, vec![]);
     };
     if record.unpinned > 0 {
-        let at = if let Some(StepGas::Exactly(g)) = step.gas { g } else { Gas::from_teragas(300) };
+        let at =
+            if let Some(StepGas::Exactly(g)) = step.gas { g } else { crate::chain::WALLET_GAS };
         out.push(Axis {
             name: "caller gas".into(),
             kind: AxisKind::CallerGas,

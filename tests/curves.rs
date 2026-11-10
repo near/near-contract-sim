@@ -641,7 +641,8 @@ mod note {
     #[test]
     fn a_curve_to_the_types_max_stops_there() {
         let audit = curve(&(9 * 10u128.pow(37)).to_string());
-        assert_eq!(audit.cases(), 2, "{audit}");
+        // The witness, and its amount and `u128::MAX` at the ceiling's gas.
+        assert_eq!(audit.cases(), 3, "{audit}");
         let row = audit.assert_curve(NOTE, Resource::LogBytes, "/amount");
         assert_eq!((row.moved_to, &row.reach), (u128::MAX, &Reach::Below));
         let row = audit.assert_curve(NOTE, Resource::ReceiptGas, "/amount");
@@ -1375,4 +1376,90 @@ fn curves_save_the_rows_they_report() {
     let replays = audit.found().iter().map(|x| x.replay.as_ref().expect("saved"));
     assert!(replays.into_iter().all(|p| p.exists()), "{audit}");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `store.near::set` keeps its input under `v`.
+const STORE: &str = r#"(module
+  (import "env" "input" (func $input (param i64)))
+  (import "env" "register_len" (func $len (param i64) (result i64)))
+  (import "env" "read_register" (func $read (param i64 i64)))
+  (import "env" "storage_write" (func $write (param i64 i64 i64 i64 i64) (result i64)))
+  (memory 1)
+  (export "memory" (memory 0))
+  (data (i32.const 0) "v")
+  (func (export "set")
+    (call $input (i64.const 0))
+    (call $read (i64.const 0) (i64.const 64))
+    (drop (call $write (i64.const 1) (i64.const 0) (call $len (i64.const 0)) (i64.const 64)
+                       (i64.const 1)))))"#;
+
+/// Sets `v` to `n`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct Set {
+    n: u32,
+}
+
+impl Op for Set {
+    fn submit(&self, sim: &mut Sim) -> Result<(), Skip> {
+        sim.call("alice.near", "store.near", "set").args(self.n.to_string()).submit();
+        Ok(())
+    }
+}
+
+/// A ladder's first rung is the witness as written only where the run
+/// is: a number the witness leaves at 0 climbs from 1, and a check that
+/// fires there alone is a finding.
+///
+/// Verification boundary: which of a curve's rungs are its cases.
+#[test]
+fn a_first_rung_off_the_witness_is_a_case() {
+    let sim = Fixture::new()
+        .account("alice.near", Balance::from_near(10))
+        .contract("store.near", wat::parse_str(STORE).unwrap())
+        .build();
+    let h = Harness::<Set>::new(sim).at_rest("v is never 1", |sim: &Sim| {
+        match sim.state("store.near", b"v").as_deref() {
+            Some(b"1") => Err("v is 1"),
+            _ => Ok(()),
+        }
+    });
+    let witness = Plan::new().op(Set { n: 0 });
+    h.run(&witness).assert_clean();
+    let audit = h.curve(&witness, 0, "n").run();
+    let found = audit.assert_found("v is never 1", "world");
+    assert_eq!(found.label.to_string(), "shown at step 0, /n = 1", "{audit}");
+}
+
+/// Sets `v` to `n`, with the gas pinned: its curves run at the witness's
+/// gas, so the first rung of a number is the witness as written.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct PinnedSet {
+    n: u32,
+}
+
+impl Op for PinnedSet {
+    fn submit(&self, sim: &mut Sim) -> Result<(), Skip> {
+        let call = sim.call("alice.near", "store.near", "set").args(self.n.to_string());
+        call.gas(near_contract_sim::Gas::from_teragas(30)).submit();
+        Ok(())
+    }
+}
+
+/// A first rung that runs as the witness did is no second case: a check
+/// that fires on the witness is found once.
+#[test]
+fn a_first_rung_that_is_the_witness_is_no_second_case() {
+    let sim = Fixture::new()
+        .account("alice.near", Balance::from_near(10))
+        .contract("store.near", wat::parse_str(STORE).unwrap())
+        .build();
+    let h = Harness::<PinnedSet>::new(sim).at_rest("v is never 1", |sim: &Sim| {
+        match sim.state("store.near", b"v").as_deref() {
+            Some(b"1") => Err("v is 1"),
+            _ => Ok(()),
+        }
+    });
+    let audit = h.curve(&Plan::new().op(PinnedSet { n: 1 }), 0, "n").run();
+    let found = audit.assert_found("v is never 1", "world");
+    assert_eq!((found.label.to_string().as_str(), found.cases), ("shown", 1), "{audit}");
 }

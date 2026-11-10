@@ -113,7 +113,7 @@ fn ids(v: &Value, path: &mut String, fixture: &Sim, out: &mut Vec<(String, Strin
             for (k, item) in map {
                 let len = path.len();
                 path.push('/');
-                path.push_str(&k.replace('~', "~0").replace('/', "~1"));
+                path.push_str(&super::axes::pointer_key(k));
                 ids(item, path, fixture, out);
                 path.truncate(len);
             }
