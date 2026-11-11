@@ -1252,11 +1252,12 @@ fn hold_until_in_another_transaction_refuses_what_cant_apply() {
     // sim it built (what it spawned known) or, the second time at the
     // latest, loads it (not known).
     for loaded in [false, true] {
-        let mut sim = Sim::cached("faults.rs: a settled first deposit", || {
-            let mut sim = vault_sim();
-            deposit(&mut sim, 40).transact().assert_success();
-            sim
-        });
+        let mut sim =
+            Sim::cached(("faults.rs: a settled first deposit", vault_pair_wasm()), || {
+                let mut sim = vault_sim();
+                deposit(&mut sim, 40).transact().assert_success();
+                sim
+            });
         let t1 = *sim.txs().last().unwrap();
         let fault = Fault::HoldUntil(Receipts::method("verify").in_tx(t1));
         let msg = panic_message(catch_unwind(AssertUnwindSafe(|| {

@@ -311,4 +311,4 @@ or `Axes::only` before you cut seeds.
   and is a `timeout:` to-do item. A costly at-rest check can run once per
   case with `Harness::at_end` or `Books::at_end()`.
 - `.saves(path, every)` saves a report as it goes and resumes on the same fixture, checks, binary
-  and enumeration ops and faults, else starts over; resumed, `found_at` gives a saved row as `Shown::Saved` (no case; `assert_found` panics on it).
+  and enumeration ops and faults, else starts over; resumed, `found_at` gives a saved row as `Shown::Saved` (no case; `.here()` gives `None`, `.unwrap_here()` and `assert_found` panic).

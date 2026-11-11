@@ -119,7 +119,7 @@ fn coverage_is_the_same_from_a_built_and_a_cached_fixture() {
     };
     let runs = std::cell::Cell::new(0);
     let fixture = || {
-        Sim::cached("viewed", || {
+        Sim::cached(("viewed", res("status_message.wasm")), || {
             runs.set(runs.get() + 1);
             build()
         })

@@ -1079,12 +1079,16 @@ pub(crate) mod tests {
             .into()
     }
 
+    /// `tests/res/probe.wasm`.
+    pub(crate) fn probe_wasm() -> Vec<u8> {
+        std::fs::read(manifest_dir().join("tests/res/probe.wasm")).unwrap()
+    }
+
     /// alice.near, and probe.near running `tests/res/probe.wasm`.
     pub(crate) fn probe_sim() -> Sim {
         let mut sim = Sim::new();
         sim.create_account("alice.near", Balance::from_near(100));
-        let probe = manifest_dir().join("tests/res/probe.wasm");
-        sim.deploy("probe.near", std::fs::read(probe).unwrap());
+        sim.deploy("probe.near", probe_wasm());
         sim
     }
 

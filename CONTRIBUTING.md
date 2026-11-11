@@ -39,11 +39,14 @@ rustfmt --check --edition 2024 tests/consumer/*.rs
 cargo clippy --all-targets --all-features -- -D warnings
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
-cargo nextest run --all-targets --all-features   # or cargo test --all-targets --all-features
+cargo nextest run --all-targets --all-features --profile ci   # or cargo test --all-targets --all-features
 cargo test --doc
 NCS_INV_CASES=128 cargo test --test prop_invariants
 tests/consumer/run.sh
 ```
+
+`--profile ci` (in `.config/nextest.toml`) kills a test that hangs past 15
+minutes, naming it, and runs every test even after a failure.
 
 CI also runs `tests/chain.rs` and `tests/clock.rs` without debug
 assertions (see the `Test` job), the differential test against a sandbox
@@ -73,10 +76,12 @@ written from titles.
 
 Commit messages and pull request titles follow
 [Conventional Commits](https://www.conventionalcommits.org/):
-`feat(explore): …`, `fix: …`, `docs: …`, `test: …`, `ci: …`,
+`feat(explore): …`, `fix: …`, `perf: …`, `docs: …`, `test: …`, `ci: …`,
 `refactor: …`, `chore: …`. Mark a breaking API change with `!` after the
 type (`feat!: …`), and a new nearcore pin too. Pull requests are
-squash-merged, so the title is the commit that lands on `main`.
+squash-merged, so the title is the commit that lands on `main`. The
+CHANGELOG lists only `feat`, `fix` and `!` titles, so a change a user can
+see takes one of those, not `test`, `perf`, `ci` or `docs`.
 
 ## Releases
 

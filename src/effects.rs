@@ -100,7 +100,9 @@ pub enum NearKind {
     /// A successful receipt's deposit: a call's, or a `Transfer`.
     Deposit,
     /// A failed receipt's deposit, refunded: nets to zero unless the
-    /// refund goes elsewhere (`refund_to`).
+    /// refund goes elsewhere (`refund_to`). A failed callback delivered by
+    /// `promise_results` has no `refund_to`: its deposit, the signer's,
+    /// goes to the contract, so this move from the signer nets to a loss.
     DepositRefund,
     /// A deleted account's balance, paid to its beneficiary.
     AccountDeletion,
