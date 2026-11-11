@@ -72,7 +72,7 @@ impl Hook {
         let n = self.txs;
         self.txs += 1;
         (self.inject.iter())
-            .filter(|i| usize::from(i.tx) == n)
+            .filter(|i| i.tx as usize == n)
             .map(|i| (i.at.clone(), i.fault.clone()))
             .collect()
     }

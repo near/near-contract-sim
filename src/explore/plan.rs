@@ -358,7 +358,7 @@ impl Strategy for DefaultGaps {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Inject {
     /// Which of the step's transactions, from 0.
-    pub tx: u8,
+    pub tx: u32,
     /// Which of its receipts.
     pub at: Receipts,
     /// What to force.
