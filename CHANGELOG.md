@@ -13,6 +13,29 @@ since the last tag: **Breaking** for a `!` title, **Added** for `feat`,
 title. `explore` is experimental and changes more often than the rest;
 its changes follow the same rules.
 
+## 0.2.0 (2026-11-11)
+
+### Breaking
+
+- explore: Drop the replay formats no release wrote ([#7](https://github.com/near/near-contract-sim/pull/7))
+- explore: Judge a resumed audit with its saved part in is_clean, todo, done and found_at, count skipped edges as incomplete ([#17](https://github.com/near/near-contract-sim/pull/17))
+- explore: Send a saved call's args as written, widen Inject.tx to u32 ([#20](https://github.com/near/near-contract-sim/pull/20))
+
+### Added
+
+- explore: Run per-step edges on new enumerate steps placed at rest ([#5](https://github.com/near/near-contract-sim/pull/5))
+
+### Fixed
+
+- Accept nearcore's newest actions, dedupe report lists, correct stale docs ([#6](https://github.com/near/near-contract-sim/pull/6))
+- Find the cache in a target dir without CACHEDIR.TAG, and delete week-old snapshots ([#11](https://github.com/near/near-contract-sim/pull/11))
+- explore: Judge every claim and epoch-crossing overlap, count incomplete cases once, cap the summary at 60 lines ([#14](https://github.com/near/near-contract-sim/pull/14))
+- explore: Cap margin ascents at the ladder's top, count a curve's first rung, keep digit map keys as axes ([#13](https://github.com/near/near-contract-sim/pull/13))
+- explore: Shrink rows a search shows while shrinking, size raw args, count escaped bytes ([#15](https://github.com/near/near-contract-sim/pull/15))
+- Delivered deposits, per-build view coverage, refused retries, forced windows, u128 supply ([#16](https://github.com/near/near-contract-sim/pull/16))
+- Name curve rows by the receipt tree's sites, assert_reached counts a resumed audit's saved part ([#18](https://github.com/near/near-contract-sim/pull/18))
+- explore: A search's determinism check skips a run that hit the case timeout ([#21](https://github.com/near/near-contract-sim/pull/21))
+
 ## 0.1.0 (2026-10-28)
 
 The first release. It runs NEAR contracts on nearcore
