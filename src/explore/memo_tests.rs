@@ -16,8 +16,12 @@
 //! and each case its checks' results on the fixture, inside an
 //! enumeration; the schedule and every verdict are unchanged, which the
 //! memo-off reference run shows over actual runs.
+//!
+//! And the books' readings ([`Reads`](super::books::Reads)): each reader
+//! reads each world once in a case's at-rest judgments, which report the
+//! same as reading it in each check.
 
-use super::books::{PLAYED, UNMEMOIZED};
+use super::books::{PLAYED, READ, UNMEMOIZED, UNREAD};
 use super::enumerate::default_key;
 use super::run::{FIXTURE_EACH_CASE, FIXTURE_JUDGED};
 use super::{Amount, Audit, Books, Claim, Fail, Faults, Gap, Harness, Op, OpDone, Plan, Skip};
@@ -27,8 +31,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::BTreeMap;
 
-/// `enumerate` on a fresh `harness()`, with the memo and without it (as
-/// before the memo, each case judging the fixture): one report, but for
+/// `enumerate` on a fresh `harness()`, with the memos and without them (as
+/// before them, each case judging the fixture, each check reading the
+/// books): one report, but for
 /// the wall-clock timings and the run's own id (`parts`). The serial
 /// orders played, and the fixture's judgments, with and without.
 fn same_report<O: Op>(
@@ -46,6 +51,7 @@ fn same_report<O: Op>(
             fn drop(&mut self) {
                 UNMEMOIZED.set(false);
                 FIXTURE_EACH_CASE.set(false);
+                UNREAD.set(false);
             }
         }
         let _reset = Reset;
@@ -53,6 +59,7 @@ fn same_report<O: Op>(
         let _ = std::fs::remove_dir_all(&dir);
         UNMEMOIZED.set(off);
         FIXTURE_EACH_CASE.set(off);
+        UNREAD.set(off);
         let (played, judged) = (PLAYED.get(), FIXTURE_JUDGED.get());
         let mut report = enumerate(&harness().store(&dir)).report();
         report.timings.clear();
@@ -767,4 +774,82 @@ fn the_vault_at_depth_3_reports_the_same_with_and_without_the_memo() {
     let (played, unmemoized, _) =
         same_report(vault, |h| h.enumerate(&alphabet).depth(3).cases(100).run());
     assert!(played * 2 < unmemoized, "{played} of {unmemoized} played");
+}
+
+// ---- the books' readings: once per world in a case's judgments ----
+
+const BANK: &str = "bank.near";
+const CAROL: &str = "carol.near";
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+enum BankOp {
+    /// alice pays carol 1 NEAR.
+    Tip,
+    /// The bank pays carol 2 NEAR.
+    Spend,
+}
+
+impl Op for BankOp {
+    fn submit(&self, sim: &mut Sim) -> Result<(), Skip> {
+        let (from, near) = match self {
+            BankOp::Tip => ("alice.near", 1),
+            BankOp::Spend => (BANK, 2),
+        };
+        sim.tx(from, CAROL).transfer(Balance::from_near(near)).submit();
+        Ok(())
+    }
+}
+
+/// Two ledgers that mirror their assets: carol's and the bank's NEAR,
+/// each owed to its holder and backing it. Every check holds if each
+/// reader reads the world it is given; one reading another reader's
+/// value, or another world's (the case's before an op, or an earlier
+/// judgment's), breaks a backing or a kept check.
+fn bank() -> Harness<BankOp> {
+    let mut sim = Sim::new();
+    for id in ["alice.near", CAROL, BANK] {
+        sim.create_account(id, Balance::from_near(10));
+    }
+    let near = |id: &'static str| move |sim: &Sim| sim.balance(id).as_yoctonear();
+    let owed = |id: &'static str| move |sim: &Sim| BTreeMap::from([(id.to_owned(), near(id)(sim))]);
+    let books = Books::new()
+        .liability("carol's", owed(CAROL))
+        .asset("carol's NEAR", near(CAROL))
+        .backs("carol's", "carol's NEAR")
+        .liability("the bank's", owed(BANK))
+        .asset("the bank's NEAR", near(BANK))
+        .backs("the bank's", "the bank's NEAR");
+    Harness::new(sim).books(books)
+}
+
+/// The case's world changes between its judgments (carol's NEAR after
+/// the tip, then the bank's and carol's after the spend), and each
+/// judgment reads it anew; the world before each op, read by the kept
+/// and backing checks of each later judgment, is read once. The same
+/// run as reading the books in each check, with fewer reads.
+#[test]
+fn a_reading_follows_the_case_s_world_and_reads_each_world_once() {
+    let plan = Plan::new().op(BankOp::Tip).op(BankOp::Spend);
+    let run = |off: bool| {
+        struct Reset;
+        impl Drop for Reset {
+            fn drop(&mut self) {
+                UNREAD.set(false);
+            }
+        }
+        let _reset = Reset;
+        UNREAD.set(off);
+        let h = bank();
+        let read = READ.get();
+        let run = h.run(&plan);
+        (run.to_string(), READ.get() - read)
+    };
+    let ((on, read), (off, unread)) = (run(false), run(true));
+    assert_eq!(on, off);
+    assert!(on.starts_with("verdict: clean"), "{on}");
+    // Three judgments (the fixture, before the spend, the end), each
+    // reading the 4 readers on the case's world, and the world before the
+    // tip read once: against each judgment's 24 reads, 12 a ledger
+    // (backing 2, kept and backs 5 each).
+    assert_eq!((read, unread), (3 * 4 + 4, 3 * 24));
 }
