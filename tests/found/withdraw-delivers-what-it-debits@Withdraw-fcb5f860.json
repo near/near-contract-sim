@@ -1,5 +1,5 @@
 {
-  "format": 3,
+  "format": 4,
   "check": "withdraw delivers what it debits",
   "site": "Withdraw",
   "label": "forced (PromiseFailed at vault.near::on_withdraw)",
@@ -56,6 +56,7 @@
     "must not fail",
     "gas margin",
     "storage paid by the contract",
+    "self-only method runs for an outsider",
     "total_shares is the sum of shares",
     "the vault holds what it owes",
     "withdraw delivers what it debits",

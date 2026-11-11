@@ -153,7 +153,7 @@ impl<O: Op<W>, W: World> Curves<'_, O, W> {
                 for (n, s) in spawned.iter().enumerate().filter(|(_, s)| s.awaits > 0) {
                     let (site, fault, mut p) = (s.site(), Fault::OutOfGas, witness.plan.clone());
                     let at = address(spawned, n, &fault);
-                    p.steps[i].inject.push(Inject { tx: tx as u8, at, fault });
+                    p.steps[i].inject.push(Inject { tx: tx as u32, at, fault });
                     if s.methods.len() == 1
                         && !out.contains(&site)
                         && self.harness.run_case(&p).findings.iter().any(|f| f.check != other)

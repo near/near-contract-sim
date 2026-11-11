@@ -528,6 +528,40 @@ fn a_folded_finding_its_row_does_not_show_keeps_its_replay() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// A replay sends a call's args as the case that found it did, byte for
+/// byte: JSON written by hand, its keys unsorted and spaced, reads back
+/// as written, not as canonical JSON. Here `w` writes its args as a key,
+/// and the check fails on exactly that key.
+///
+/// Verification boundary: the replay store over an actual scan.
+#[test]
+fn a_replay_sends_a_calls_args_byte_for_byte() {
+    use near_contract_sim::explore::Call;
+    const ARGS: &str = "{\"b\": 1, \"a\": [2]}\n";
+    let dir = temp_dir("raw-args");
+    let sim = Fixture::new()
+        .account("alice.near", near_contract_sim::Balance::from_near(10))
+        .contract("c.near", ::wat::parse_str(WRITES).unwrap())
+        .build();
+    let h = Harness::<Call>::new(sim).store(&dir).at_rest("args unwritten", |sim: &Sim| match sim
+        .state("c.near", ARGS.as_bytes())
+    {
+        Some(_) => Err("the args were written"),
+        None => Ok(()),
+    });
+    let plan = Plan::new().op(Call::new("alice.near", "c.near", "w").args(ARGS));
+    let audit = h.scan(&[plan]).faults(Faults::none()).run();
+    let found = audit.assert_found("args unwritten", "world");
+    let saved = Plan::<Call>::load(found.replay.as_ref().expect("a replay"));
+    let replays = h.regressions();
+    let [replay] = &replays[..] else { panic!("one replay: {replays:#?}") };
+    let Status::Shows(run) = &replay.status else { panic!("{replay:#?}") };
+    assert_eq!(run.plan(), &saved);
+    let sent = &run.outcomes()[0].receipts[0].args[0];
+    assert_eq!(String::from_utf8_lossy(sent), ARGS);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// `go` notes `pending` (the fixed build doesn't), calls `other.near`'s
 /// `x`, then its own `cb`: `cb` clears `pending` when `x` succeeded and
 /// panics when it failed, so a failed `x` leaves `pending` with no one to

@@ -158,6 +158,8 @@ impl<O: Op<W>, W: World> Harness<O, W> {
 pub struct Axes {
     only: Option<Vec<String>>,
     floors: Vec<(String, Gas)>,
+    /// Leaves that are never axes.
+    except: Vec<&'static str>,
 }
 
 /// One leaf of an op's JSON that is an axis, as the witness has it.
@@ -187,7 +189,14 @@ impl Axes {
     /// `repeat fresh callers`, `repeat Deposit`): none unless named. The
     /// caller's gas stays an axis.
     pub fn only<'a>(pointers: impl IntoIterator<Item = &'a str>) -> Self {
-        Axes { only: Some(pointers.into_iter().map(str::to_owned).collect()), floors: vec![] }
+        let only = Some(pointers.into_iter().map(str::to_owned).collect());
+        Axes { only, ..Axes::default() }
+    }
+
+    /// Leaves the leaf at `pointer` out.
+    pub(crate) fn except(mut self, pointer: &'static str) -> Self {
+        self.except.push(pointer);
+        self
     }
 
     /// The number at `pointer` is a gas value compared against `floor`, a
@@ -215,7 +224,7 @@ impl Axes {
                 })
             })
         };
-        out.retain(|(name, _)| wanted(name));
+        out.retain(|(name, _)| wanted(name) && !self.except.contains(&name.as_str()));
         out
     }
 
