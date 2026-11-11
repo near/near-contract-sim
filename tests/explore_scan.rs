@@ -762,6 +762,49 @@ fn a_resumed_scan_is_clean_only_if_its_saved_part_is() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A resumed scan's `assert_reached` counts the methods its saved part
+/// reached, or was covered for, as its summary does; `reached` stays its
+/// own run's. Before, `assert_reached` read only the resumed run's own
+/// part, and failed on a method only the saved part reached.
+///
+/// Verification boundary: actual runs, resumed from the saves file the
+/// scan wrote, with a site planted in it.
+#[test]
+fn a_resumed_scan_asserts_reached_what_its_saved_part_reached() {
+    let dir = std::env::temp_dir().join(format!("resumed-reached-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let sim = Fixture::new()
+        .account("alice.near", Balance::from_near(10))
+        .contract("c.near", wat::parse_str(GOES).unwrap())
+        .build();
+    let h = Harness::<Few>::new(sim).store(dir.join("found"));
+    let path = dir.join("scan.json");
+    let plan = Plan::new().op(Few { n: 1 });
+    let scan = || h.scan(std::slice::from_ref(&plan)).faults(Faults::edges()).saves(&path, 1);
+    let whole = scan().run();
+    whole.assert_reached("c.near::go");
+    let mut saved: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    saved["reached"]["c.near::only_saved"] = json!(1);
+    saved["covered_sites"] = json!(["d.near::covered_for_saved"]);
+    std::fs::write(&path, saved.to_string()).unwrap();
+
+    // Nothing left to run: the run's own part reached nothing.
+    let resumed = scan().run();
+    assert_eq!(resumed.cases(), 0, "{resumed}");
+    assert_eq!(resumed.reached("c.near::only_saved"), 0, "the run's own: {resumed}");
+    for site in ["c.near::only_saved", "only_saved", "c.near::go", "d.near::covered_for_saved"] {
+        resumed.assert_reached(site);
+    }
+    let missing =
+        common::panic_message(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            resumed.assert_reached("c.near::never")
+        })));
+    assert!(missing.contains("no case of 0 reached \"c.near::never\""), "{missing}");
+    assert!(missing.contains("c.near::only_saved"), "lists the saved part's: {missing}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// A scan resumed with nothing left to run finds what its saved part
 /// found, as its summary prints it: `found_at` gives the saved row, which
 /// keeps no case, and `assert_found`, which hands back a case, panics
