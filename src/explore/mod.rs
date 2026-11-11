@@ -80,7 +80,7 @@ mod store;
 pub use crate::edges::{Region, Why, edges};
 pub use crate::tx::OutcomeShape;
 pub use amount::{Amount, AmountError};
-pub use audit::{Audit, Found, Label, Shrink};
+pub use audit::{Audit, Found, Label, Shown, Shrink};
 pub use axes::{Axes, Axis, AxisKind};
 pub use books::{Books, Claim, LIVENESS_EPOCHS};
 pub use check::{Harness, OpDone};
@@ -163,7 +163,7 @@ pub mod builtin {
 pub mod prelude {
     pub use super::{
         Amount, Audit, Books, Fail, Faults, Found, Harness, Label, Op, OpDone, Pick, Plan, Report,
-        Run, Skip, Status, StepGas, Verdict, builtin, input, plans,
+        Run, Shown, Skip, Status, StepGas, Verdict, builtin, input, plans,
     };
     pub use crate::prelude::*;
 }

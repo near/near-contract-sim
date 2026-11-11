@@ -122,7 +122,7 @@ fn a_check_folded_into_another_row_is_found_there() {
     };
     let audit = scan("vault_forgetful.wasm");
     assert!(audit.found().iter().all(|f| f.finding.check != KEPT), "no row of its own: {audit}");
-    let row = audit.found_at(KEPT, "world").unwrap_or_else(|| panic!("{audit}"));
+    let row = audit.found_at(KEPT, "world").unwrap_or_else(|| panic!("{audit}")).unwrap_here();
     assert_eq!(row.finding.check, BACKED, "{audit}");
     assert!(row.folded.iter().any(|f| f.check == KEPT), "{audit}");
     scan("vault.wasm").assert_clean();

@@ -623,7 +623,8 @@ fn every_failure_of_one_judgment_is_a_finding() {
     assert_eq!(counts(&run, "nothing moves"), (0, 1, 0, 0), "{run}");
     let audit = h.scan(&[plan]).faults(Faults::none()).run();
     for at in ["jar.near", "bob.near"] {
-        let row = audit.found_at("nothing moves", at).unwrap_or_else(|| panic!("{audit}"));
+        let row =
+            audit.found_at("nothing moves", at).unwrap_or_else(|| panic!("{audit}")).unwrap_here();
         assert_eq!(row.finding.key(), Some(at), "a row of its own: {audit}");
     }
 }

@@ -118,6 +118,12 @@ enum near_contract_sim::explore::Resource variant LogBytes = LogBytes
 enum near_contract_sim::explore::Resource variant PrepaidGas = PrepaidGas
 enum near_contract_sim::explore::Resource variant ReceiptGas = ReceiptGas
 enum near_contract_sim::explore::Resource variant StoragePaid = StoragePaid
+enum near_contract_sim::explore::Shown = pub enum Shown<'a, O>
+enum near_contract_sim::explore::Shown impl = impl<'a, O> Shown<'a, O>
+enum near_contract_sim::explore::Shown method here = pub fn here(self) -> Option<&'a Found<O>>
+enum near_contract_sim::explore::Shown method unwrap_here = pub fn unwrap_here(self) -> &'a Found<O>
+enum near_contract_sim::explore::Shown variant Here = Here(&'a Found<O>)
+enum near_contract_sim::explore::Shown variant Saved = Saved(&'a Row)
 enum near_contract_sim::explore::Shrink = pub enum Shrink
 enum near_contract_sim::explore::Shrink variant Cut = Cut(u32, String)
 enum near_contract_sim::explore::Shrink variant Done = Done(u32)
@@ -583,7 +589,7 @@ struct near_contract_sim::explore::Audit method curves = pub fn curves(&self) ->
 struct near_contract_sim::explore::Audit method done = pub fn done(&self) -> Result<String, Vec<Todo>>
 struct near_contract_sim::explore::Audit method errors = pub fn errors(&self) -> &[String]
 struct near_contract_sim::explore::Audit method found = pub fn found(&self) -> &[Found<O>]
-struct near_contract_sim::explore::Audit method found_at = pub fn found_at(&self, check: &str, at: &str) -> Option<&Found<O>>
+struct near_contract_sim::explore::Audit method found_at = pub fn found_at(&self, check: &str, at: &str) -> Option<Shown<'_, O>>
 struct near_contract_sim::explore::Audit method incomplete = pub fn incomplete(&self) -> &[(String, String)]
 struct near_contract_sim::explore::Audit method is_clean = pub fn is_clean(&self) -> bool
 struct near_contract_sim::explore::Audit method reached = pub fn reached(&self, site: &str) -> u32
@@ -926,6 +932,7 @@ use near_contract_sim::explore::prelude::Pick
 use near_contract_sim::explore::prelude::Plan
 use near_contract_sim::explore::prelude::Report
 use near_contract_sim::explore::prelude::Run
+use near_contract_sim::explore::prelude::Shown
 use near_contract_sim::explore::prelude::Skip
 use near_contract_sim::explore::prelude::Status
 use near_contract_sim::explore::prelude::StepGas
