@@ -659,18 +659,19 @@ pub(crate) fn exports(code: &[u8]) -> Vec<String> {
 }
 
 impl<O: fmt::Debug> Audit<O> {
-    /// Every open item, excused ones left out, in a stable order.
+    /// Every open item, excused ones left out, in a stable order: the
+    /// summary's, a resumed campaign's saved part's included.
     pub fn todo(&self) -> Vec<Todo> {
-        split(&self.excused, self.items()).0
+        self.report().todo
     }
 
-    /// `Ok` with the summary if nothing is open, else the open items: a
-    /// clean audit with open items is not done. Coverage another campaign
+    /// `Ok` with the summary if nothing is open, else the open items
+    /// ([`todo`](Self::todo)): a clean audit with open items is not done. Coverage another campaign
     /// reached (an `unreached:` method, an `unjudged:` check) closes with
     /// [`Harness::union`] of both reports.
     pub fn done(&self) -> Result<String, Vec<Todo>> {
-        let open = self.todo();
-        if open.is_empty() { Ok(self.to_string()) } else { Err(open) }
+        let report = self.report();
+        if report.todo.is_empty() { Ok(report.to_string()) } else { Err(report.todo) }
     }
 
     /// Every item, excused or not.

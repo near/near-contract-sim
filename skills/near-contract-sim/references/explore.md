@@ -290,13 +290,13 @@ message) for the `axis:` ones a copy stopped, with a glob closing them.
 | `incomplete:<op>, <axis>` | cases not tried to their end, one item an op and axis (an op skipped at its edges): count, first case and why; `incomplete:<op>*` closes an op's, but a blanket `incomplete:*` hides those skips. Where checks not judging were a case's only gap, the family is the check: `incomplete:<check> not judged (overlapped)` (read `effects()`, or judge in `at_rest_ops`), or `incomplete:<check> not judged` |
 | `errors` | harness errors, an op's `submit` panic among them (its message printed) |
 
-`audit.done()` returns `Ok(summary)` only when nothing in that audit is
-open ([harness.md](harness.md), "Excuses"): a scan's says nothing of
-curves or a search not yet run. A gas band and `left out of the audit:`
-(contracts `Harness::audits` didn't name) are information, not items. Saved reports join with
+`audit.done()` returns `Ok(summary)` only when nothing in that audit, a
+resumed one's saved part included, is open ([harness.md](harness.md),
+"Excuses"): a scan's says nothing of curves or a search not yet run. A gas
+band and `left out of the audit:` (contracts `Harness::audits` didn't name)
+are information, not items. Saved reports join with
 `harness.union(&[a, b])`, each run and seed once: a method no report
-reached is unreached, every report's excuses apply, and `Report::done()`
-says what's left.
+reached is unreached, every report's excuses apply, and `Report::done()` says what's left.
 
 ## Cost
 

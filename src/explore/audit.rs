@@ -563,12 +563,14 @@ impl<O> Audit<O> {
     /// every finding folded into another's row has no row of its own: to
     /// assert a check never fired at `at`, use
     /// [`found_at`](Self::found_at)`(check, at).is_none()`; at any site,
-    /// read each row's `finding` and `folded`.
+    /// read each row's `finding` and `folded`. This run's alone, not a resumed campaign's saved part's:
+    /// [`report`](Self::report)`.findings` holds both.
     pub fn found(&self) -> &[Found<O>] {
         &self.found
     }
 
-    /// The cases it ran.
+    /// The cases it ran. This run's alone, not a resumed campaign's saved part's:
+    /// [`report`](Self::report)`.cases` counts both.
     pub fn cases(&self) -> u32 {
         self.r.cases
     }
@@ -577,11 +579,13 @@ impl<O> Audit<O> {
     /// among them), each with its family, `op, axis`, and why: a family
     /// is one open `incomplete:<family>` item. A case several checks
     /// didn't judge is here once per check, its family each check.
+    /// This run's alone, not a resumed campaign's saved part's: [`report`](Self::report)`.incomplete` holds both.
     pub fn incomplete(&self) -> &[(String, String)] {
         &self.incomplete
     }
 
-    /// The cases the harness, a plan or an op got wrong.
+    /// The cases the harness, a plan or an op got wrong. This run's alone, not a resumed campaign's saved part's:
+    /// [`todo`](Self::todo)'s `errors` item counts both.
     pub fn errors(&self) -> &[String] {
         &self.r.errors
     }
@@ -598,6 +602,7 @@ impl<O> Audit<O> {
     /// [`Harness::must_not_fail`](super::Harness::must_not_fail) takes; for a pattern,
     /// the most of any one site it matches). A batch's calls are reached
     /// one by one: `receiver::f`, not the tree's `receiver::f,g`.
+    /// This run's alone, not a resumed campaign's saved part's.
     pub fn reached(&self, site: &str) -> u32 {
         let at = |s: &&String| super::check::site_matches(site, s);
         self.r.reached.iter().filter(|(s, _)| at(s)).map(|(_, n)| *n).max().unwrap_or(0)
@@ -605,6 +610,7 @@ impl<O> Audit<O> {
 
     /// [`reached`](Self::reached) at least once, or by an audit this one
     /// was run [`with`](super::Curves::with); else a panic listing what was.
+    /// This run's alone, not a resumed campaign's saved part's: [`todo`](Self::todo)'s `unreached:` items cover both.
     #[track_caller]
     pub fn assert_reached(&self, site: &str) {
         let all: Vec<&String> = self.r.reached.keys().chain(&self.r.covered_sites).collect();
@@ -616,12 +622,13 @@ impl<O> Audit<O> {
     }
 
     /// Curves' rows, every one, [`Reach::NoEffect`](super::Reach::NoEffect) included.
+    /// This run's alone, not a resumed campaign's saved part's: [`report`](Self::report)`.curves` holds both.
     pub fn curves(&self) -> &[CurveRow<O>] {
         &self.curves
     }
 
     /// The row of `resource` at `site` along the axis named `axis` (or
-    /// whose pointer ends in `/axis`), if any.
+    /// whose pointer ends in `/axis`), if any. This run's alone, not a resumed campaign's saved part's.
     pub fn curve(&self, site: &str, resource: Resource, axis: &str) -> Option<&CurveRow<O>> {
         self.curves.iter().find(|r| {
             r.site == site
@@ -631,6 +638,7 @@ impl<O> Audit<O> {
     }
 
     /// [`curve`](Self::curve), or a panic listing the rows at `site`.
+    /// This run's alone, not a resumed campaign's saved part's.
     #[track_caller]
     pub fn assert_curve(&self, site: &str, resource: Resource, axis: &str) -> &CurveRow<O>
     where
@@ -646,6 +654,7 @@ impl<O> Audit<O> {
     }
 
     /// A search's seeds: `NEAR_SIM_SEED` set to the first repeats it.
+    /// This run's alone, not a resumed campaign's saved part's: [`report`](Self::report)`.seeds` holds both.
     pub fn seeds(&self) -> &[u64] {
         &self.r.seeds
     }

@@ -669,17 +669,19 @@ fn a_scan_whose_only_judged_cases_are_skipped_edges_is_not_clean() {
     assert!(!audit.is_clean(), "no case tried to its end: {:#?}\n{audit}", audit.incomplete());
 }
 
-/// A resumed scan is clean as the whole campaign is: a saved part's
-/// finding or harness error makes it not clean, as its summary says, and
-/// a saved part whose every case was incomplete has no complete case. A
-/// resume that runs no case of its own is clean if the saved part is.
-/// Before, `is_clean` read only the resumed run's own part: a saved
-/// finding or error read clean, and a clean campaign resumed with
-/// nothing left to run read not clean.
+/// A resumed scan is clean, and done, as the whole campaign is: a saved
+/// part's finding or harness error makes it not clean, as its summary
+/// says, and a saved part whose every case was incomplete has no complete
+/// case. A resume that runs no case of its own is clean if the saved part
+/// is. A saved part's open item (an error is one) is open in `todo()`, so
+/// `done()` is `Err`, as the summary lists it. Before, `is_clean`,
+/// `todo()` and `done()` read only the resumed run's own part: a saved
+/// finding, error or open item read clean and done, and a clean campaign
+/// resumed with nothing left to run read not clean.
 ///
 /// Verification boundary: the scan's verdict over actual runs, resumed
-/// from saves files this scan wrote, some with a planted finding, error
-/// or count.
+/// from saves files this scan wrote, some with a planted finding, error,
+/// item or count.
 #[test]
 fn a_resumed_scan_is_clean_only_if_its_saved_part_is() {
     let dir = std::env::temp_dir().join(format!("resumed-clean-{}", std::process::id()));
@@ -690,11 +692,14 @@ fn a_resumed_scan_is_clean_only_if_its_saved_part_is() {
         .build();
     let h = Harness::<Few>::new(sim).store(dir.join("found"));
     let h = h.at_rest("anything", |_: &Sim| Ok::<(), String>(()));
+    // Its skipped edges excused: nothing else is open, so it is done.
+    let h = h.excuse("incomplete:Few*", "n is 1 to 3 by design");
     let plan = Plan::new().op(Few { n: 2 });
     let path = dir.join("scan.json");
     let scan = || h.scan(std::slice::from_ref(&plan)).faults(Faults::edges()).saves(&path, 1);
     let whole = scan().run();
     assert!(whole.is_clean() && whole.cases() > 1, "{whole}");
+    assert!(whole.done().is_ok(), "{whole}");
     let saved: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
     let done = saved["done"].as_u64().unwrap();
@@ -710,8 +715,10 @@ fn a_resumed_scan_is_clean_only_if_its_saved_part_is() {
     let none = |_: &mut serde_json::Value| {};
     let ran = resumed(1, &none);
     assert!(ran.is_clean() && ran.cases() == 1, "one variant run, clean: {ran}");
+    assert!(ran.done().is_ok(), "{ran}");
     let all_done = resumed(0, &none);
     assert!(all_done.is_clean() && all_done.cases() == 0, "nothing left to run: {all_done}");
+    assert!(all_done.done().is_ok(), "{all_done}");
     let row = json!({
         "kind": "check", "check": "anything", "site": "c.near", "label": "shown",
         "message": "planted", "cases": 1, "steps": [], "replay": null, "id": "planted",
@@ -723,6 +730,19 @@ fn a_resumed_scan_is_clean_only_if_its_saved_part_is() {
     let error = resumed(1, &|v| v["errors"] = json!(["planted: a harness error"]));
     assert!(error.errors().is_empty() && error.to_string().contains("planted"), "{error}");
     assert!(!error.is_clean(), "a saved error: {error}");
+    let open = |a: &near_contract_sim::explore::Audit<Few>| {
+        let ids: Vec<String> = a.todo().into_iter().map(|t| t.id).collect();
+        assert_eq!(a.done().map(|_| ()).map_err(|t| t.len()), Err(ids.len()), "{a}");
+        ids
+    };
+    assert_eq!(open(&error), ["errors"], "a saved error is open: {error}");
+    // A saved part's open item, and nothing else.
+    let item = json!({ "id": "planted", "why": "planted", "close": "planted" });
+    let todo = resumed(1, &|v| v["todo"] = json!([item]));
+    assert!(todo.is_clean() && todo.to_string().contains("TODO planted"), "{todo}");
+    assert_eq!(open(&todo), ["planted"], "a saved item is open: {todo}");
+    let with_gaps = todo.with_open_gaps("a test");
+    assert!(with_gaps.starts_with("Coverage not achieved (a test): 1 item(s) open"), "{with_gaps}");
     let cases = saved["cases"].clone();
     let incomplete = resumed(0, &|v| v["incomplete_cases"] = cases.clone());
     assert!(!incomplete.is_clean(), "no complete case in the saved part: {incomplete}");
