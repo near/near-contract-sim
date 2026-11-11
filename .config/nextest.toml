@@ -1,10 +1,12 @@
 # CI's test run (ci.yml): every failure, and each test's time, in the log.
+# The suite runs with no case timeout (.cargo/config.toml), so a test that
+# hangs is killed after 15 minutes, past the slowest's ~2.5 at CI's level.
 [profile.ci]
 fail-fast = false
 failure-output = "immediate-final"
 status-level = "all"
 final-status-level = "slow"
-slow-timeout = { period = "60s" }
+slow-timeout = { period = "60s", terminate-after = 15 }
 
 # cargo-mutants' runs (.cargo/mutants.toml): a test a mutant sends into a
 # loop is killed after 20 minutes and counts as a failure, so the mutant is
