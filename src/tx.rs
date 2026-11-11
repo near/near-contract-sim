@@ -103,6 +103,23 @@ impl Sim {
         id
     }
 
+    /// Runs `method` of `id` as a view at `at`, noting it as one that ran
+    /// (`Sim::viewed`, an audit's coverage) if it succeeded: what
+    /// [`view_raw`](Self::view_raw) and RPC's `call_function` share.
+    pub(crate) fn run_view(
+        &self,
+        at: crate::chain::ViewAt,
+        id: &AccountId,
+        method: &str,
+        args: &[u8],
+    ) -> (Result<Vec<u8>, CallFunctionError>, Vec<String>) {
+        let (result, logs) = self.chain.view(&self.config, at, id, method, args);
+        if result.is_ok() {
+            self.viewed.lock().map(|mut v| v.insert(format!("{id}::{method}"))).ok();
+        }
+        (result, logs)
+    }
+
     /// Calls `method` of `id` without a transaction, as RPC's
     /// `call_function` does on the latest block. `args` go as JSON, but
     /// `null` (`()`) sends no input: all-optional parameters need `json!({})`.
@@ -121,10 +138,7 @@ impl Sim {
     ) -> ViewResult {
         let at = self.chain.latest(&self.config);
         let id = id.into_account_id();
-        let (result, logs) = self.chain.view(&self.config, at, &id, method, &args.into());
-        if result.is_ok() {
-            self.viewed.lock().map(|mut v| v.insert(format!("{id}::{method}"))).ok();
-        }
+        let (result, logs) = self.run_view(at, &id, method, &args.into());
         let result = result.map_err(|e| match e {
             CallFunctionError::VMError { error, .. } => Failure::call(&error),
             CallFunctionError::AccountDoesNotExist { requested_account_id } => {
@@ -809,7 +823,7 @@ impl<'a> Tx<'a> {
             sim.settle();
             let out = sim.outcome(hash);
             let failed = out.receipts.into_iter().find(|r| !r.is_success() && !r.is_refund());
-            failed.map(|r| format!("{}::{}", r.receiver_id, r.method().unwrap_or_default()))
+            failed.map(|r| r.site())
         };
         let site = failing(from.as_gas())?;
         if failing(cap.as_gas()).is_some() {

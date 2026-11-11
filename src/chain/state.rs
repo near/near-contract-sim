@@ -200,7 +200,8 @@ impl Chain {
             let key = c.trie_key.to_vec();
             let old = r.trie.get(&key, AccessOptions::DEFAULT).expect("storage");
             let new = c.changes.last().and_then(|change| change.data.as_deref());
-            self.log.minted += held(&key, new) as i128 - held(&key, old.as_deref()) as i128;
+            let minted = self.log.minted.wrapping_add(held(&key, new));
+            self.log.minted = minted.wrapping_sub(held(&key, old.as_deref()));
             // Locked where there was none: staked, as a genesis validator is
             // (`Epochs::seed`).
             if let TrieKey::Account { account_id } = &c.trie_key

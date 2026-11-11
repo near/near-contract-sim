@@ -357,3 +357,20 @@ fn a_rotated_key_is_named_not_refused_by_the_runtime() {
     let refused = send(&mut sim).failure();
     assert!(matches!(refused, Some(near_contract_sim::Failure::InvalidTx(_))), "{refused:?}");
 }
+
+/// NEAR's balances are `u128`s: one above `i128::MAX` yoctoNEAR (about
+/// 1.7e14 NEAR) is counted exactly, as is a ledger that destroys and
+/// recreates it, and RPC's block header reports the total.
+#[test]
+fn a_balance_above_i128_max_is_conserved() {
+    let mut sim = sim_with_users();
+    let whale = Balance::from_yoctonear(1 << 127);
+    sim.create_account("whale.near", whale);
+    let out = sim.tx("whale.near", "bob.near").transfer(Balance::from_near(1)).transact();
+    out.assert_success();
+    sim.findings().assert_none();
+    // Destroyed below what was minted (whale sent 1 NEAR on), then moved.
+    sim.set_balance("whale.near", Balance::ZERO);
+    sim.set_balance("bob.near", whale);
+    sim.findings().assert_none();
+}

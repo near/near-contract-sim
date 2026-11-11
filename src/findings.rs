@@ -242,9 +242,11 @@ pub(crate) fn forced(receipt: &ReceiptOutcome) -> bool {
         && matches!(receipt.failure(), Some(Failure::OutOfGas | Failure::GasLimitExceeded))
 }
 
-/// The block from which something forced on `r` could change what ran.
+/// The block from which something forced on `r` could change what ran:
+/// for a hold, the longer of its own and its results', counted back from
+/// when it ran.
 pub(crate) fn forced_from(r: &ReceiptOutcome) -> Option<u64> {
-    let held = r.held.or(r.result_held).map(|n| r.block_height.saturating_sub(n));
+    let held = r.held.max(r.result_held).map(|n| r.block_height.saturating_sub(n));
     let ran = (r.fault.is_some() || r.delivered).then_some(r.block_height);
     [held, ran].into_iter().flatten().min()
 }
@@ -377,15 +379,15 @@ impl Sim {
     }
 
     fn conservation(&self) -> Option<Builtin> {
-        let supply = self.chain.total_supply() as i128;
+        let supply = self.chain.total_supply();
         let expected = self.chain.log().supply();
         (supply != expected).then(|| Builtin {
             check: builtin::CONSERVATION,
             message: format!(
                 "total NEAR supply is {} but minted/burnt accounting expects {} (off by {} yocto)",
-                near(supply as u128),
-                near(expected.max(0) as u128),
-                supply - expected
+                near(supply),
+                near(expected),
+                supply.wrapping_sub(expected) as i128
             ),
             outcome: None,
             receipt: None,

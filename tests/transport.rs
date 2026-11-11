@@ -797,3 +797,31 @@ async fn set_status(near: &Near) -> (Vec<near_kit::Gas>, String) {
     let args = json!({"account_id": "alice.near"});
     (gas, near.view("status.near", "get_status").args(args).await.unwrap())
 }
+
+/// A view near-kit makes counts toward an audit's coverage, as one
+/// `Sim::view` makes does: the method ran.
+#[tokio::test(start_paused = true)]
+async fn a_view_near_kit_makes_is_coverage() {
+    use near_contract_sim::explore::{Call, Faults, Harness, Plan};
+    let node = SimTransport::new(Sim::cached(probe_wasm(), probe_sim));
+    let seen: u64 = node.near("alice.near").view("probe.near", "ts").await.unwrap();
+    assert!(seen > 0);
+    let h = Harness::new(node.with(|sim| sim.clone())).audits(["probe.near"]);
+    let plans = [Plan::new().op(Call::new("alice.near", "probe.near", "height"))];
+    let audit = h.scan(&plans).faults(Faults::none()).run();
+    let open: Vec<String> = audit.todo().into_iter().map(|t| t.id).collect();
+    assert!(open.iter().any(|id| id.starts_with("unreached:probe.near::")), "{audit}");
+    assert!(!open.contains(&"unreached:probe.near::ts".to_string()), "{audit}");
+}
+
+/// A block header's `total_supply` is a `u128`, above `i128::MAX` too.
+#[tokio::test(start_paused = true)]
+async fn a_block_reports_a_supply_above_i128_max() {
+    let mut sim = Sim::new();
+    sim.create_account("whale.near", Balance::from_yoctonear(1 << 127));
+    let node = SimTransport::new(sim);
+    let (status, block) = post(&node, "block", json!({"finality": "final"})).await;
+    assert_eq!(status, 200, "{block}");
+    let total = block["result"]["header"]["total_supply"].as_str().unwrap().to_owned();
+    assert_eq!(total, (1u128 << 127).to_string());
+}

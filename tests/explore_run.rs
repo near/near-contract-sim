@@ -1508,3 +1508,26 @@ fn a_per_op_finding_on_an_op_with_no_transaction_names_it() {
         assert_eq!(saved["id"]["ops"], json!(["Mark"]), "{audit}");
     }
 }
+
+/// A callback both held and kept waiting on a held result was forced from
+/// whichever hold reaches further back: a check that fails while it waits
+/// is the holds' consequence, labeled injected, whichever hold is longer.
+#[test]
+fn a_finding_inside_the_longer_hold_is_injected() {
+    // Unforced, the callback removes `pending` by block `done`.
+    let mut sim = fixture();
+    let out = run(&mut sim, "alice.near", &temporary_state()).transact();
+    let done = out.receipts.iter().map(|r| r.block_height).max().unwrap();
+    let late = move |sim: &Sim| match sim.height() > done {
+        true => absent(b"pending")(sim),
+        false => Ok(()),
+    };
+    let harness = Harness::new(fixture()).always("cleaned up in time", late);
+    let plain = Plan::new().op(Prog::Run(temporary_state()));
+    harness.run(&plain).assert_clean();
+    let result_held = plain.clone().inject(Receipts::receiver("other.near"), Fault::HoldResult(5));
+    for plan in [result_held.clone(), result_held.inject(Receipts::callbacks(), Fault::Hold(1))] {
+        let run = harness.run(&plan);
+        assert!(run.assert_found("cleaned up in time", "world").injected, "{run}");
+    }
+}

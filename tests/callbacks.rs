@@ -741,3 +741,40 @@ fn a_copy_of_a_submitted_transaction_keeps_its_results() {
     assert_eq!(seen(r).predecessor, "alice.near");
     sim.findings().assert_none();
 }
+
+/// A delivered call's deposit is the signer's, whoever the predecessor:
+/// the signer's balance changes by `near_net(signer)` less `gas_paid()`,
+/// for a callback on promise results and a call from another account,
+/// each succeeding (the receiver keeps it) or failing (the refund goes to
+/// the contract, or back to the signer).
+#[test]
+fn a_delivered_deposit_is_the_signers_in_effects() {
+    let base = callback_probe_sim();
+    let d = near(3);
+    for (method, delivery, kept) in [
+        ("cb", "results", true),
+        ("boom", "results", true),
+        ("cb", "ghost.near", true),
+        ("boom", "ghost.near", false),
+    ] {
+        let mut sim = base.clone();
+        let before = sim.balance("alice.near").as_yoctonear() as i128;
+        let tx = sim.call("alice.near", "probe.near", method).deposit(d).gas(Gas::from_teragas(20));
+        let out = match delivery {
+            "results" => tx.promise_results([Failed]).transact(),
+            from => tx.predecessor(from).transact(),
+        };
+        let e = out.effects();
+        let case = format!("{method} delivered from {delivery}");
+        let change = sim.balance("alice.near").as_yoctonear() as i128 - before;
+        assert_eq!(
+            e.near_net("alice.near") - near_contract_sim::Delta::gain(e.gas_paid().as_yoctonear()),
+            change,
+            "{case}: {:?}",
+            e.near
+        );
+        let paid = if kept { d } else { Balance::ZERO };
+        assert_eq!(e.near_paid("alice.near", "probe.near"), paid, "{case}: {:?}", e.near);
+        assert_eq!(e.near_net("ghost.near"), 0, "{case}: {:?}", e.near);
+    }
+}

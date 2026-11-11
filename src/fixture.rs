@@ -352,7 +352,8 @@ impl Fixture {
     }
 
     /// The `Sim` the steps make: a fresh clone of the one built, or loaded,
-    /// first in this process. The first build of a step list runs each step
+    /// first in this process, whose views count toward no other build's
+    /// coverage. The first build of a step list runs each step
     /// in order and then settles; a step that fails, or panics, panics
     /// naming its number and itself.
     pub fn build(&self) -> Sim {
@@ -366,11 +367,11 @@ impl Fixture {
         // Not held while building, so a step's panic poisons nothing.
         let memo = || MEMO.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(hit) = memo().get(&key) {
-            return hit.clone();
+            return hit.with_own_views();
         }
         let built = Sim::cached(key, || self.run());
-        memo().insert(key, built.clone());
-        built
+        memo().insert(key, built.with_own_views());
+        built.with_own_views()
     }
 
     fn with(mut self, step: Step) -> Self {
