@@ -787,7 +787,8 @@ fn a_resumed_scan_finds_its_saved_part_s_findings() {
     let plan = Plan::new().op(Few { n: 1 });
     let scan = || h.scan(std::slice::from_ref(&plan)).faults(Faults::edges()).saves(&path, 1);
     let whole = scan().run();
-    assert!(matches!(whole.assert_found("never bad", "world"), Shown::Here(_)), "{whole}");
+    let here = whole.assert_found("never bad", "world").here();
+    assert!(here.is_some_and(|f| f.finding.message == "wrote bad"), "{whole}");
     let resumed = scan().run();
     assert!(resumed.found().is_empty() && resumed.cases() == 0, "{resumed}");
     let Some(Shown::Saved(row)) = resumed.found_at("never bad", "world") else {
