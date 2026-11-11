@@ -13,6 +13,13 @@ since the last tag: **Breaking** for a `!` title, **Added** for `feat`,
 title. `explore` is experimental and changes more often than the rest;
 its changes follow the same rules.
 
+## 0.2.1 (2026-11-11)
+
+### Fixed
+
+- Docs: a failed callback's deposit is refunded to the contract (`NearKind::DepositRefund`, transactions.md); sim.md lists every `NEAR_SIM_*` variable ([#28](https://github.com/near/near-contract-sim/pull/28))
+- explore: Measure a batch receipt's gas margin, judge a resume by its own excuses, no axis on a wrapped call's written args ([#29](https://github.com/near/near-contract-sim/pull/29))
+
 ## 0.2.0 (2026-11-11)
 
 ### Breaking
