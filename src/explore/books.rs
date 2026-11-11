@@ -120,14 +120,14 @@ impl<O: Op<W>, W: World> Books<O, W> {
         name: &str,
         read: impl Fn(&W) -> BTreeMap<String, u128> + 'static,
     ) -> Self {
-        self.liabilities.push((name.to_owned(), Rc::new(read)));
+        self.liabilities.push((name.to_owned(), holders(read)));
         self
     }
 
     /// An asset: what the contract holds, as `held` reads it (a token
     /// balance, stake). For the contract's own NEAR use [`near`](Self::near).
     pub fn asset(mut self, name: &str, held: impl Fn(&W) -> u128 + 'static) -> Self {
-        let (decl, held) = (format!("asset({name:?}, ..)"), Rc::new(held));
+        let (decl, held) = (format!("asset({name:?}, ..)"), amount(held));
         self.assets.push(Asset { name: name.to_owned(), held, near: None, watched: false, decl });
         self
     }
@@ -188,7 +188,7 @@ impl<O: Op<W>, W: World> Books<O, W> {
             let a = w.as_ref().account(&of);
             a.map_or(0, |a| a.amount.saturating_add(a.locked).as_yoctonear())
         };
-        let (name, held, near) = (name.to_owned(), Rc::new(held), Some(id));
+        let (name, held, near) = (name.to_owned(), amount(held), Some(id));
         self.assets.push(Asset { name, held, near, watched, decl });
         self
     }
@@ -302,7 +302,7 @@ impl<O: Op<W>, W: World> Books<O, W> {
     /// the tolerance. A holder the reader misses fails it, where it would
     /// otherwise read only as kept, owed to no one.
     pub fn supply(mut self, liability: &str, supply: impl Fn(&W) -> u128 + 'static) -> Self {
-        self.supplies.push((liability.to_owned(), Rc::new(supply)));
+        self.supplies.push((liability.to_owned(), amount(supply)));
         self
     }
 
@@ -339,6 +339,10 @@ impl<O: Op<W>, W: World> Harness<O, W> {
     /// lists them. Each reader runs on the fixture first, and the backing
     /// checks run there with the liability one unit past the asset: a
     /// reader that panics, or a check that doesn't fire then, panics here.
+    /// In a case's at-rest judgments each reader reads each world once,
+    /// its checks sharing the value: the world before an op once in the
+    /// case, the case's world once per judgment. A reader reads only the
+    /// world it is given.
     pub fn books(mut self, books: Books<O, W>) -> Self {
         let (fixture, b) = (self.fixture.clone(), books);
         let (liabilities, assets, backs, prices, tolerances) =
@@ -600,6 +604,118 @@ impl<O: Op<W>, W: World> Harness<O, W> {
         self.serial = Some(Rc::new(serial));
         self
     }
+}
+
+/// What the books' readers read in one case's at-rest judgments
+/// ([`judging`](Self::judging)), by reader and world: each runs once per
+/// world it reads there, its value shared by the checks that read it.
+/// The world before an op ([`OpDone::before`]) never changes in its case:
+/// its readings last the case, by the op's index. The case's world
+/// changes: each judgment forgets what it read there. A reader runs as
+/// before on any other world, and outside a judgment.
+#[derive(Default)]
+pub(crate) struct Reads {
+    holders: Table<BTreeMap<String, u128>>,
+    amounts: Table<u128>,
+}
+
+/// Readings by reader and world (an op's index, or [`NOW`]).
+type Table<V> = RefCell<HashMap<(usize, usize), V>>;
+
+/// The world a reading is of: an op's index for the world before it, or
+/// [`NOW`] for the case's.
+const NOW: usize = usize::MAX;
+
+/// The judgment's [`Reads`], and each world it judges by address: [`NOW`]
+/// or an op's index.
+type Judging = (Rc<Reads>, HashMap<usize, usize>);
+
+thread_local! {
+    static JUDGING: RefCell<Option<Judging>> = const { RefCell::new(None) };
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The books' readers run on this thread: [`Reads`]' hits, unseen.
+    pub(crate) static READ: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// A judgment reads as before [`Reads`]: the differential tests'
+    /// reference.
+    pub(crate) static UNREAD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+impl Reads {
+    /// Runs `judge`, at-rest checks on `now`, the case's world, with
+    /// `before` the worlds before its ops, by index: each reader reads each
+    /// of them once, in this judgment and, for `before`, in the case's
+    /// later ones.
+    pub(crate) fn judging<'w, W: 'w, T>(
+        self: &Rc<Self>,
+        now: &W,
+        before: impl IntoIterator<Item = Option<&'w W>>,
+        judge: impl FnOnce() -> T,
+    ) -> T {
+        #[cfg(test)]
+        if UNREAD.get() {
+            return judge();
+        }
+        self.holders.borrow_mut().retain(|k, _| k.1 != NOW);
+        self.amounts.borrow_mut().retain(|k, _| k.1 != NOW);
+        let mut worlds: HashMap<usize, usize> =
+            (before.into_iter().enumerate()).filter_map(|(i, w)| Some((address(w?), i))).collect();
+        worlds.insert(address(now), NOW);
+        let outer = JUDGING.replace(Some((self.clone(), worlds)));
+        let judged = judge();
+        JUDGING.set(outer);
+        judged
+    }
+}
+
+fn address<W>(w: &W) -> usize {
+    std::ptr::from_ref(w).addr()
+}
+
+/// `read` of `w`, as reader `reader` read it in this judgment's
+/// [`Reads`] (`table` of them), else read and kept there.
+fn read_once<V: Clone, W>(
+    table: fn(&Reads) -> &Table<V>,
+    reader: usize,
+    w: &W,
+    read: impl FnOnce() -> V,
+) -> V {
+    let at = JUDGING.with_borrow(|j| {
+        let (reads, worlds) = j.as_ref()?;
+        Some((reads.clone(), *worlds.get(&address(w))?))
+    });
+    let key = at.map(|(reads, world)| (reads, (reader, world)));
+    if let Some(v) = key.as_ref().and_then(|(r, k)| table(r).borrow().get(k).cloned()) {
+        return v;
+    }
+    #[cfg(test)]
+    READ.set(READ.get() + 1);
+    let v = read();
+    if let Some((r, k)) = key {
+        table(&r).borrow_mut().insert(k, v.clone());
+    }
+    v
+}
+
+/// A reader's identity in [`Reads`]: one per reader declared.
+fn reader_id() -> usize {
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+/// A liability's reader, read once per world in a judgment ([`Reads`]).
+fn holders<W: 'static>(read: impl Fn(&W) -> BTreeMap<String, u128> + 'static) -> Read<W> {
+    let id = reader_id();
+    Rc::new(move |w: &W| read_once(|r| &r.holders, id, w, || read(w)))
+}
+
+/// An asset's or a supply's reader, read once per world in a judgment
+/// ([`Reads`]).
+fn amount<W: 'static>(held: impl Fn(&W) -> u128 + 'static) -> Held<W> {
+    let id = reader_id();
+    Rc::new(move |w: &W| read_once(|r| &r.amounts, id, w, || held(w)))
 }
 
 /// What [`builtin::SERIALIZABLE`](super::builtin::SERIALIZABLE) reads: the

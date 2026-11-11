@@ -827,6 +827,8 @@ struct Case<'h, O, W> {
     /// outcomes and effects, and what of the world they read ([`Live`]);
     /// the log they read otherwise only grows.
     finished: HashMap<usize, (Live, (Vec<TxOutcome>, Effects))>,
+    /// The books' readings its at-rest judgments took.
+    reads: std::rc::Rc<super::books::Reads>,
 }
 
 /// What a complete transaction's outcome reads of the world as it stands,
@@ -867,6 +869,7 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
             overlapped: 0,
             rest_key: None,
             finished: HashMap::new(),
+            reads: Default::default(),
         }
     }
 
@@ -1291,14 +1294,17 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
             .filter_map(|(&i, f)| self.ops[i].done(&f.0, &f.1, &self.world, &shared))
             .collect();
         let ops: Vec<OpDone<'_, O, W>> = dones.iter().filter(|d| d.op.is_some()).cloned().collect();
-        (checks.into_iter())
-            .map(|(k, c)| match &c.check {
-                RestFn::World(check) => (k, judge(|| check(&self.world))),
-                RestFn::Ops(check) => {
-                    (k, judge(|| check(&self.world, [&ops, &dones][usize::from(c.calls)])))
-                }
-            })
-            .collect()
+        let before = self.ops.iter().map(|o| o.before.as_ref());
+        self.reads.judging(&self.world, before, || {
+            (checks.into_iter())
+                .map(|(k, c)| match &c.check {
+                    RestFn::World(check) => (k, judge(|| check(&self.world))),
+                    RestFn::Ops(check) => {
+                        (k, judge(|| check(&self.world, [&ops, &dones][usize::from(c.calls)])))
+                    }
+                })
+                .collect()
+        })
     }
 
     /// The built-in checks' failures since the last checkpoint, each at
