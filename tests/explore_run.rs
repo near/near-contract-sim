@@ -1471,7 +1471,7 @@ fn an_op_with_no_transaction_breaks_at_its_checkpoint() {
     let h = Harness::new(fixture()).at_rest("x is never written", absent(b"x"));
     let ops = |plan: Plan<Edit>| -> Vec<String> {
         let audit = h.scan(&[plan]).faults(Faults::none()).run();
-        let f = audit.assert_found("x is never written", "world").unwrap_here();
+        let f = audit.assert_found("x is never written", "world");
         let path = f.replay.as_ref().unwrap_or_else(|| panic!("no replay: {audit}"));
         let saved: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
@@ -1502,7 +1502,7 @@ fn a_per_op_finding_on_an_op_with_no_transaction_names_it() {
         Plan::new().op(Edit::Other).op(Edit::Mark),
     ] {
         let audit = h.scan(&[plan]).faults(Faults::none()).run();
-        let f = audit.assert_found(CHECK, "Mark").unwrap_here();
+        let f = audit.assert_found(CHECK, "Mark");
         let path = f.replay.as_ref().unwrap_or_else(|| panic!("no replay: {audit}"));
         let saved: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();

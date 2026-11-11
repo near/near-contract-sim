@@ -107,7 +107,7 @@ fn a_budget_unpaid_along_two_axes_is_found_by_margin() {
         let limit = row.limit as i128;
         assert!(worst * 100 >= 25 * limit, "{worst} of {limit} alone: {row}");
     }
-    let row = audit.assert_found("gas margin", ON_PUT).unwrap_here();
+    let row = audit.assert_found("gas margin", ON_PUT);
     // Its own kind: nothing failed.
     let report = audit.report();
     let kinds: Vec<&str> = report
@@ -255,7 +255,7 @@ fn a_growing_cost_on_a_flat_budget_is_labeled_with_its_projection() {
     h.run(&witness).assert_clean();
     let audit = h.curves(&[witness]).run();
     eprintln!("{audit}");
-    let row = audit.assert_found("gas margin", "keep.near::on_keep").unwrap_here();
+    let row = audit.assert_found("gas margin", "keep.near::on_keep");
     let message = &row.finding.message;
     assert!(message.contains("its cost growing faster than its budget"), "{message}");
     assert!(!message.contains("Tgas, under"), "{message}");
@@ -376,7 +376,7 @@ mod registry {
         assert!(alone < clean && alone >= 25, "shaped {alone}%, clean {clean}%");
         eprintln!("the shaper alone: resolve keeps {alone}%, {clean}% on a clean trie");
         // Together: under 25%, and only with the shaper.
-        let f = audit.assert_found("gas margin", RESOLVE).unwrap_here();
+        let f = audit.assert_found("gas margin", RESOLVE);
         let (head, tail) = f.finding.message.split_once("% with a clean trie, ").unwrap();
         let number = |t: &str| t.parse::<u64>().unwrap();
         let clean = number(head.rsplit(|c: char| !c.is_ascii_digit()).next().unwrap());
@@ -481,7 +481,7 @@ mod book {
         };
         assert!(!back.is_empty() && back.iter().all(falls), "{audit}");
         assert!(!keeps.is_empty() && !keeps.iter().any(falls), "{audit}");
-        let f = audit.assert_found("gas margin", RESOLVE).unwrap_here();
+        let f = audit.assert_found("gas margin", RESOLVE);
         let step = &f.run.plan().steps[0];
         let near_contract_sim::explore::Act::Op(op) = &step.act else { panic!("{step:?}") };
         let mut ids = op.ids.clone();
@@ -581,7 +581,7 @@ fn an_ascent_climbs_no_more_copies_than_the_ladder() {
     let h = counter(COUNT);
     let audit = h.curves(&[Plan::new().op(Count {})]).run();
     eprintln!("{audit}");
-    let message = &audit.assert_found("gas margin", ON_COUNT).unwrap_here().finding.message;
+    let message = &audit.assert_found("gas margin", ON_COUNT).finding.message;
     let values = combined(message);
     assert!(!values.is_empty() && values.iter().all(|&v| v <= 64), "{message}");
     assert!(message.contains("unpaid along [repeat Count (step 0)]"), "{message}");
@@ -602,7 +602,7 @@ fn a_margin_no_axis_moves_names_no_unpaid_axis() {
     h.run(&Plan::new().op(Count {})).assert_clean();
     let audit = h.curves(&[Plan::new().op(Count {})]).run();
     eprintln!("{audit}");
-    let message = &audit.assert_found("gas margin", ON_COUNT).unwrap_here().finding.message;
+    let message = &audit.assert_found("gas margin", ON_COUNT).finding.message;
     assert!(message.contains("under 25%"), "{message}");
     assert!(!message.contains("unpaid along []") && !message.contains("combined []"), "{message}");
     assert!(!message.contains("siblings"), "{message}");

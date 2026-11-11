@@ -33,7 +33,7 @@ fn a_scan_finds_the_forgetful_payout_deterministically() {
             .run()
     };
     let audit = scan();
-    let found = audit.assert_found("withdraw delivers what it debits", "Withdraw").unwrap_here();
+    let found = audit.assert_found("withdraw delivers what it debits", "Withdraw");
     assert!(found.finding.injected, "{audit}");
     assert_eq!(
         found.label,
@@ -86,7 +86,7 @@ fn a_label_copied_from_the_tree_names_the_receipt_everywhere() {
         audit.found().iter().map(|f| &f.label).filter(|l| matches!(l, Label::Forced(_))).collect();
     let unique = forced.iter().enumerate().all(|(i, l)| !forced[..i].contains(l));
     assert!(unique, "a forced label's findings fold into one row: {audit}");
-    let row = audit.assert_found("withdraw delivers what it debits", "Withdraw").unwrap_here();
+    let row = audit.assert_found("withdraw delivers what it debits", "Withdraw");
     // The world check the same forced fault broke folded in.
     let folded = row.also.iter().any(|a| a.starts_with("the vault holds what it owes"));
     assert!(folded, "{audit}");
@@ -156,7 +156,7 @@ fn the_least_caller_gas_starves_a_settlement_with_nothing_forced() {
     let witness = Plan::new().op(Call::new("alice.near", "pay.near", "pay"));
     harness.run(&witness).assert_clean();
     let audit = harness.scan(&[witness]).faults(Faults::edges()).run();
-    let found = audit.assert_found(builtin::UNHANDLED_FAILURE, "pay.near::on_pay").unwrap_here();
+    let found = audit.assert_found(builtin::UNHANDLED_FAILURE, "pay.near::on_pay");
     assert_eq!(found.label, Label::ShownAt("step 0, caller gas least + 0 gas".into()), "{audit}");
     assert!(!found.finding.injected, "{audit}");
 }
@@ -202,7 +202,7 @@ fn a_starved_must_not_fail_receipt_is_a_forced_finding() {
     let harness = Harness::new(world).must_not_fail("on_issued");
     harness.run(&witness).assert_clean();
     let audit = harness.scan(&[witness]).run();
-    let found = audit.assert_found(builtin::MUST_NOT_FAIL, "desk.near::on_issued").unwrap_here();
+    let found = audit.assert_found(builtin::MUST_NOT_FAIL, "desk.near::on_issued");
     assert_eq!(found.label, Label::Forced("OutOfGas at desk.near::on_issued".into()), "{audit}");
 }
 
@@ -601,7 +601,7 @@ fn reorder_runs_each_pair_of_unrelated_receipts_the_other_way() {
     let plan = Plan::new().op(Race);
     let audit = h.scan(std::slice::from_ref(&plan)).faults(Faults::reorder()).run();
     assert_eq!(audit.cases(), 3, "the witness and two reorders: {audit}");
-    let f = audit.assert_found("x before late", "Race").unwrap_here();
+    let f = audit.assert_found("x before late", "Race");
     assert!(matches!(&f.label, Label::Forced(l) if l.contains("HoldUntil")), "{audit}");
     assert_eq!(audit.found().len(), 1, "{audit}");
     let none = h.scan(&[plan]).faults(Faults::none()).run();
@@ -739,7 +739,7 @@ fn a_resumed_scan_is_clean_only_if_its_saved_part_is() {
     };
     assert!(in_saved("anything", "c.near") && in_saved("folded in", "world"), "{found}");
     assert!(found.found_at("anything", "world").is_none(), "{found}");
-    assert_eq!(found.assert_found("folded in", "world").here().map(|f| f.cases), None);
+    assert_eq!(found.found_at("folded in", "world").and_then(Shown::here).map(|f| f.cases), None);
     let error = resumed(1, &|v| v["errors"] = json!(["planted: a harness error"]));
     assert!(error.errors().is_empty() && error.to_string().contains("planted"), "{error}");
     assert!(!error.is_clean(), "a saved error: {error}");
@@ -764,7 +764,8 @@ fn a_resumed_scan_is_clean_only_if_its_saved_part_is() {
 
 /// A scan resumed with nothing left to run finds what its saved part
 /// found, as its summary prints it: `found_at` gives the saved row, which
-/// keeps no case. Before, `found_at` read only the resumed run's own
+/// keeps no case, and `assert_found`, which hands back a case, panics
+/// naming the row. Before, `found_at` read only the resumed run's own
 /// part, and `found_at(..).is_none()` passed on a finding the summary
 /// listed.
 ///
@@ -787,8 +788,9 @@ fn a_resumed_scan_finds_its_saved_part_s_findings() {
     let plan = Plan::new().op(Few { n: 1 });
     let scan = || h.scan(std::slice::from_ref(&plan)).faults(Faults::edges()).saves(&path, 1);
     let whole = scan().run();
-    let here = whole.assert_found("never bad", "world").here();
+    let here = whole.found_at("never bad", "world").and_then(Shown::here);
     assert!(here.is_some_and(|f| f.finding.message == "wrote bad"), "{whole}");
+    assert!(here.is_some_and(|f| std::ptr::eq(f, whole.assert_found("never bad", "world"))));
     let resumed = scan().run();
     assert!(resumed.found().is_empty() && resumed.cases() == 0, "{resumed}");
     let Some(Shown::Saved(row)) = resumed.found_at("never bad", "world") else {
@@ -796,5 +798,18 @@ fn a_resumed_scan_finds_its_saved_part_s_findings() {
     };
     assert_eq!(row.message, "wrote bad", "{resumed}");
     assert!(!resumed.is_clean(), "{resumed}");
+    // `assert_found` hands back a case, which a saved row doesn't keep:
+    // it panics, naming the row and its replay, and pointing to `found_at`.
+    let panics = |check: &'static str| {
+        let assert = || resumed.assert_found(check, "world").cases;
+        let err = std::panic::catch_unwind(std::panic::AssertUnwindSafe(assert)).unwrap_err();
+        err.downcast_ref::<String>().cloned().unwrap_or_default()
+    };
+    let why = panics("never bad");
+    let replay = format!("its replay: {:?}", row.replay);
+    assert!(row.replay.is_some() && why.contains(&replay), "{why}");
+    let saved = "never bad at world is the saved part's row, which keeps no case";
+    assert!(why.starts_with(saved) && why.ends_with("; read it with `found_at`"), "{why}");
+    assert!(panics("never good").starts_with("no finding of \"never good\""));
     let _ = std::fs::remove_dir_all(&dir);
 }

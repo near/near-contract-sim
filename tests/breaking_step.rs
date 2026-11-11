@@ -92,7 +92,7 @@ fn the_cause_is_the_first_step_after_which_the_check_fails() {
     run.assert_found("counters agree", "world");
     assert!(run.trees().contains("boom"), "{}", run.trees());
     let audit = harness.scan(&[plan]).faults(Faults::none()).run();
-    let row = audit.assert_found("counters agree", "world").unwrap_here();
+    let row = audit.assert_found("counters agree", "world");
     assert_eq!(row.broke.as_deref(), Some("breaking step 2 of 3: Skew"), "{audit}");
 }
 

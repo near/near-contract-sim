@@ -147,12 +147,17 @@ impl<'a, O> Shown<'a, O> {
     pub fn unwrap_here(self) -> &'a Found<O> {
         match self {
             Shown::Here(x) => x,
-            Shown::Saved(r) => panic!(
-                "{} at {} is the saved part's row, which keeps no case; its replay: {:?}",
-                r.check, r.site, r.replay
-            ),
+            Shown::Saved(r) => panic!("{}", saved_row(r)),
         }
     }
+}
+
+/// Why a saved part's row `r` has no [`Found`]: what it is and its replay.
+fn saved_row(r: &super::Row) -> String {
+    let (check, site, replay) = (&r.check, &r.site, &r.replay);
+    format!(
+        "{check} at {site} is the saved part's row, which keeps no case; its replay: {replay:?}"
+    )
 }
 
 /// How a finding's case was shrunk.
@@ -606,14 +611,14 @@ impl<O> Audit<O> {
     /// every finding folded into another's row has no row of its own: to
     /// assert a check never fired at `at`, use
     /// [`found_at`](Self::found_at)`(check, at).is_none()`; at any site,
-    /// read each row's `finding` and `folded`. This run's alone, not a resumed campaign's saved part's:
-    /// [`report`](Self::report)`.findings` holds both.
+    /// read each row's `finding` and `folded`. This run's alone, not a resumed
+    /// campaign's saved part's: [`report`](Self::report)`.findings` holds both.
     pub fn found(&self) -> &[Found<O>] {
         &self.found
     }
 
-    /// The cases it ran. This run's alone, not a resumed campaign's saved part's:
-    /// [`report`](Self::report)`.cases` counts both.
+    /// The cases it ran. This run's alone, not a resumed campaign's saved
+    /// part's: [`report`](Self::report)`.cases` counts both.
     pub fn cases(&self) -> u32 {
         self.r.cases
     }
@@ -622,13 +627,15 @@ impl<O> Audit<O> {
     /// among them), each with its family, `op, axis`, and why: a family
     /// is one open `incomplete:<family>` item. A case several checks
     /// didn't judge is here once per check, its family each check.
-    /// This run's alone, not a resumed campaign's saved part's: [`report`](Self::report)`.incomplete` holds both.
+    /// This run's alone, not a resumed campaign's saved part's:
+    /// [`report`](Self::report)`.incomplete` holds both.
     pub fn incomplete(&self) -> &[(String, String)] {
         &self.incomplete
     }
 
-    /// The cases the harness, a plan or an op got wrong. This run's alone, not a resumed campaign's saved part's:
-    /// [`todo`](Self::todo)'s `errors` item counts both.
+    /// The cases the harness, a plan or an op got wrong. This run's alone, not
+    /// a resumed campaign's saved part's: [`todo`](Self::todo)'s `errors` item
+    /// counts both.
     pub fn errors(&self) -> &[String] {
         &self.r.errors
     }
@@ -653,7 +660,8 @@ impl<O> Audit<O> {
 
     /// [`reached`](Self::reached) at least once, or by an audit this one
     /// was run [`with`](super::Curves::with); else a panic listing what was.
-    /// This run's alone, not a resumed campaign's saved part's: [`todo`](Self::todo)'s `unreached:` items cover both.
+    /// This run's alone, not a resumed campaign's saved part's:
+    /// [`todo`](Self::todo)'s `unreached:` items cover both.
     #[track_caller]
     pub fn assert_reached(&self, site: &str) {
         let all: Vec<&String> = self.r.reached.keys().chain(&self.r.covered_sites).collect();
@@ -665,13 +673,15 @@ impl<O> Audit<O> {
     }
 
     /// Curves' rows, every one, [`Reach::NoEffect`](super::Reach::NoEffect) included.
-    /// This run's alone, not a resumed campaign's saved part's: [`report`](Self::report)`.curves` holds both.
+    /// This run's alone, not a resumed campaign's saved part's:
+    /// [`report`](Self::report)`.curves` holds both.
     pub fn curves(&self) -> &[CurveRow<O>] {
         &self.curves
     }
 
     /// The row of `resource` at `site` along the axis named `axis` (or
-    /// whose pointer ends in `/axis`), if any. This run's alone, not a resumed campaign's saved part's.
+    /// whose pointer ends in `/axis`), if any. This run's alone, not a resumed
+    /// campaign's saved part's.
     pub fn curve(&self, site: &str, resource: Resource, axis: &str) -> Option<&CurveRow<O>> {
         self.curves.iter().find(|r| {
             r.site == site
@@ -697,7 +707,8 @@ impl<O> Audit<O> {
     }
 
     /// A search's seeds: `NEAR_SIM_SEED` set to the first repeats it.
-    /// This run's alone, not a resumed campaign's saved part's: [`report`](Self::report)`.seeds` holds both.
+    /// This run's alone, not a resumed campaign's saved part's:
+    /// [`report`](Self::report)`.seeds` holds both.
     pub fn seeds(&self) -> &[u64] {
         &self.r.seeds
     }
@@ -741,16 +752,20 @@ impl<O> Audit<O> {
         here.map(Shown::Here).or_else(|| saved().map(Shown::Saved))
     }
 
-    /// [`found_at`](Self::found_at), or a panic printing the audit.
+    /// This run's row that [`found_at`](Self::found_at) finds, or a panic
+    /// printing the audit. A resumed campaign's finding that only its
+    /// saved part holds panics too, naming the row: a saved row keeps no
+    /// case to hand back, so read it with `found_at`.
     #[track_caller]
-    pub fn assert_found(&self, check: &str, at: &str) -> Shown<'_, O>
+    pub fn assert_found(&self, check: &str, at: &str) -> &Found<O>
     where
         O: fmt::Debug,
     {
-        let Some(x) = self.found_at(check, at) else {
-            panic!("no finding of {check:?} at {at:?}:\n{self}")
-        };
-        x
+        match self.found_at(check, at) {
+            Some(Shown::Here(x)) => x,
+            Some(Shown::Saved(r)) => panic!("{}; read it with `found_at`", saved_row(r)),
+            None => panic!("no finding of {check:?} at {at:?}:\n{self}"),
+        }
     }
 }
 

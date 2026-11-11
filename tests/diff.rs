@@ -38,7 +38,7 @@ fn harness_on(world: Sim) -> Harness<VaultOp> {
 fn the_forgetful_vault_differs_only_where_it_forgets() {
     let (fixed, forgetful) = (harness("vault.wasm"), harness("vault_forgetful.wasm"));
     let found = forgetful.scan(&[deposit_then_withdraw()]).faults(Faults::tolerable()).run();
-    let kept = found.assert_found(KEPT, "world").unwrap_here().run.plan().clone();
+    let kept = found.assert_found(KEPT, "world").run.plan().clone();
 
     let diff = fixed.diff(&forgetful, &[deposit_then_withdraw(), kept]);
     assert_eq!(diff.plans.len(), 1, "{diff}");

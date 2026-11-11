@@ -483,7 +483,7 @@ fn starving_on_withdraw_breaks_even_the_fixed_vault() {
     let flow = Plan::new().op(VaultOp::Withdraw { who: User::Alice, amount: Amount::Exact(40) });
     vault.run(&flow).assert_clean();
     let report = vault.scan(&[flow]).faults(Faults::default()).run();
-    let found = report.assert_found("withdraw delivers what it debits", "Withdraw").unwrap_here();
+    let found = report.assert_found("withdraw delivers what it debits", "Withdraw");
     assert!(
         matches!(&found.label, Label::Forced(how) if how.contains("OutOfGas at vault.near::on_withdraw")),
         "{report}"

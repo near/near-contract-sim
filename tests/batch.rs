@@ -127,8 +127,7 @@ fn a_crossing_is_a_finding_only_where_a_check_fired() {
     let judged = harness().must_not_fail(WORK).curves(&[batches(&[1])]).run();
     let row = judged.assert_curve(WORK, Resource::ReceiptGas, "/Batch");
     assert_eq!(row.reach, Reach::Crossed { at: 8 }, "{row}");
-    let found =
-        judged.assert_found(near_contract_sim::explore::builtin::MUST_NOT_FAIL, WORK).unwrap_here();
+    let found = judged.assert_found(near_contract_sim::explore::builtin::MUST_NOT_FAIL, WORK);
     assert!(row.replay.is_some() && row.replay == found.replay, "{judged}");
     assert!(!row.to_string().contains("harmless"), "{row}");
 }

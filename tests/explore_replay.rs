@@ -29,7 +29,7 @@ fn temp_dir(name: &str) -> PathBuf {
 fn forgetful_replay(dir: &PathBuf) -> PathBuf {
     let harness = vault_on("vault_forgetful.wasm").store(dir);
     let audit = harness.scan(&[deposit_then_withdraw()]).faults(Faults::tolerable()).run();
-    let found = audit.assert_found(PAYOUT, "Withdraw").unwrap_here();
+    let found = audit.assert_found(PAYOUT, "Withdraw");
     found.replay.clone().unwrap_or_else(|| panic!("no replay saved:\n{audit}"))
 }
 
@@ -136,7 +136,7 @@ fn another_harness_s_replays_are_neither_regressions_nor_stale() {
     let extra = |h: Harness<VaultOp>| h.at_rest("an extra check", fails_after_ops("by design"));
     let theirs = extra(vault_on("vault_forgetful.wasm")).store(&dir);
     let audit = theirs.scan(&[deposit_then_withdraw()]).faults(Faults::tolerable()).run();
-    let path = audit.assert_found(PAYOUT, "Withdraw").unwrap_here().replay.clone().expect("saved");
+    let path = audit.assert_found(PAYOUT, "Withdraw").replay.clone().expect("saved");
     audit.assert_found("an extra check", "world");
     let files = std::fs::read_dir(&dir).unwrap().count();
     assert_eq!(theirs.clone().store(&dir).regressions().len(), files);
@@ -228,7 +228,7 @@ fn a_search_leaves_one_replay_per_row() {
         .faults(Faults::new(Receipts::all(), [Fault::Hold(1)]).per_case(0.5));
     let audit =
         Harness::new(sim).store(&dir).search(strategy).seed(4).cases(16).saves(&saves, 2).run();
-    let found = audit.assert_found(builtin::UNHANDLED_FAILURE, "missing.near::run").unwrap_here();
+    let found = audit.assert_found(builtin::UNHANDLED_FAILURE, "missing.near::run");
     assert!(found.replay.as_ref().is_some_and(|p| p.exists()), "{audit}");
     // Its sites are its own receipt's, and a call to no code reaches none:
     // not contract.near::run, which ran before it.
@@ -274,7 +274,7 @@ fn a_run_saves_nothing_and_two_builds_keep_their_replays() {
         .scan(&[deposit_then_withdraw()])
         .faults(Faults::tolerable())
         .run();
-    let plan = audit.assert_found(PAYOUT, "Withdraw").unwrap_here().run.plan().clone();
+    let plan = audit.assert_found(PAYOUT, "Withdraw").run.plan().clone();
     let run = vault_on("vault_forgetful.wasm").store(&dir).run(&plan);
     assert!(run.findings().iter().any(|f| f.check == PAYOUT), "{run}");
     assert!(!dir.exists(), "a run saved");
@@ -791,7 +791,7 @@ fn a_replay_that_cant_be_written_is_open() {
         .scan(&[deposit_then_withdraw()])
         .faults(Faults::tolerable())
         .run();
-    let found = audit.assert_found(PAYOUT, "Withdraw").unwrap_here();
+    let found = audit.assert_found(PAYOUT, "Withdraw");
     assert!(found.replay.is_none(), "{audit}");
     let id = format!("replays:{}", dir.display());
     assert!(audit.todo().iter().any(|t| t.id == id), "{:#?}", audit.todo());

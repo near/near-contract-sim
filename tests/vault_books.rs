@@ -37,7 +37,7 @@ fn the_forgetful_vault_keeps_tokens_owed_to_no_one() {
             .run()
     };
     let forgetful = scan("vault_forgetful.wasm");
-    let found = forgetful.assert_found(KEPT, "world").unwrap_here();
+    let found = forgetful.assert_found(KEPT, "world");
     assert!(found.finding.message.contains("40 kept"), "{forgetful}");
     let fixed = scan("vault.wasm");
     assert!(fixed.found_at(KEPT, "world").is_none(), "{fixed}");
@@ -86,13 +86,13 @@ fn one_forced_fault_breaking_two_checks_is_one_finding() {
         .faults(Faults::new(Receipts::callback("on_withdraw"), [Fault::OutOfGas]))
         .run();
     assert_eq!(audit.found().len(), 1, "{audit}");
-    let row = audit.assert_found("vault tokens is kept, owed to no one", "world").unwrap_here();
+    let row = audit.assert_found("vault tokens is kept, owed to no one", "world");
     assert_eq!(row.also, ["must not fail at vault.near::on_withdraw (Withdraw)"], "{audit}");
     let folded = audit.assert_found(
         near_contract_sim::explore::builtin::MUST_NOT_FAIL,
         "vault.near::on_withdraw",
     );
-    assert!(std::ptr::eq(row, folded.unwrap_here()), "{audit}");
+    assert!(std::ptr::eq(row, folded), "{audit}");
     assert!(audit.to_string().contains("(+1 folded in)"), "{audit}");
 }
 

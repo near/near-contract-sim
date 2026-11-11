@@ -990,8 +990,7 @@ fn killed_search_child() {
 fn a_killed_search_resumes_to_the_same_report_and_its_findings_shrink() {
     let h = ledger_books();
     let whole = ledger_search(&h).run();
-    let owned =
-        whole.assert_found("credit falls only for its holder", "receiver.near").unwrap_here();
+    let owned = whole.assert_found("credit falls only for its holder", "receiver.near");
     assert!(matches!(owned.shrink, Shrink::Done(_)), "{:?}", owned.shrink);
     let steps = &owned.run.plan().steps;
     assert!(steps.len() <= 2, "shrunk to its cause: {steps:?}");
