@@ -3,17 +3,17 @@ name = "drivers"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "Drivers specimen for near-contract-sim: a settling callback with a fixed per-item gas budget whose cost grows with the entries one holder holds"
+description = "Drivers specimen for near-contract-sim: a pledge whose recording callback has a per-id gas budget"
 repository = "https://github.com/near/near-contract-sim"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [features]
-# drivers_funded.wasm: `settle` takes amounts and debits their sum from
-# the caller's funds (`fund`), up to 64 ids, with a smaller per-id budget.
+# drivers_funded.wasm: `pledge` takes issued ids and amounts, up to 64 ids,
+# and refuses when their sum passes the caller's funds (`fund`).
 funded = []
-# drivers_capped.wasm: `funded`, and `settle` refuses 8 ids or more.
+# drivers_capped.wasm: `funded`, and `pledge` refuses 32 ids or more.
 capped = ["funded"]
 
 [dependencies]

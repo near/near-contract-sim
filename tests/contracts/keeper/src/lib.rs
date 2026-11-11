@@ -365,9 +365,4 @@ impl Keeper {
             })
             .collect()
     }
-
-    /// How many entries `account` holds.
-    pub fn count(&self, account: AccountId) -> u32 {
-        len_of(account.as_str())
-    }
 }

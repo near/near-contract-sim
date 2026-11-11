@@ -13,12 +13,11 @@
 //!
 //! - `put(id, bytes)`: appends `bytes` (at most [`MAX_CHUNK`]) to the
 //!   entry `id`, creating it at the end of the list if new.
-//! - `remove(id)`: removes the entry. The last entry moves into its place,
-//!   so its whole record is rewritten.
 //! - `settle(ids)`: asks the ledger to `record` the entries, then removes
 //!   them in `on_settled`, with a gas budget of its own:
 //!   [`BASE_GAS`] + [`ITEM_GAS`] per id (weight 0: no leftovers).
-//! - `on_settled(ids)`: if the ledger recorded them, removes each entry and
+//! - `on_settled(ids)`: if the ledger recorded them, removes each entry (the
+//!   last entry moves into its place, so its whole record is rewritten) and
 //!   counts it settled; if not, leaves them.
 //!
 //! # Why `on_settled` must not fail
@@ -65,6 +64,7 @@ pub fn on_settled_gas(n: usize) -> Gas {
 pub struct Journal {
     ledger: AccountId,
     entries: IterableMap<String, Vec<u8>>,
+    /// Counts the settled entries; no view reads it, but each settle writes it.
     settled: u64,
 }
 
@@ -85,11 +85,6 @@ impl Journal {
                 self.entries.insert(id, bytes.into_bytes());
             }
         }
-    }
-
-    /// Removes the entry `id`.
-    pub fn remove(&mut self, id: String) {
-        require!(self.entries.remove(&id).is_some(), "no such entry");
     }
 
     /// Asks the ledger to record `ids`; `on_settled` removes them.
@@ -128,20 +123,5 @@ impl Journal {
                 self.settled += 1;
             }
         }
-    }
-
-    /// Every id, in list order.
-    pub fn ids(&self) -> Vec<String> {
-        self.entries.keys().cloned().collect()
-    }
-
-    /// The size of the entry `id`'s record, 0 if none.
-    pub fn size_of(&self, id: String) -> u64 {
-        self.entries.get(&id).map_or(0, |r| r.len() as u64)
-    }
-
-    /// How many entries were settled.
-    pub fn settled(&self) -> u64 {
-        self.settled
     }
 }

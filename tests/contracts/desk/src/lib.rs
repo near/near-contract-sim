@@ -43,6 +43,11 @@
 //! [`RELEASE_ROUNDS`] rounds of hashing, then clears the pending amount.
 //! Between the guard and the least gas the transaction succeeds at,
 //! `deliver` runs and `release` runs out: the amount stays pending.
+//!
+//! The band build differs from the base only where the band needs it:
+//! the guard, `deliver` and `release` in place of `issue` and `on_issued`.
+//! It checks tickets as the base does. It still exports `on_issued`, which
+//! its `redeem` never schedules: the base's, left as it is.
 
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::json;
@@ -133,6 +138,7 @@ impl Desk {
             !tickets.is_empty() && tickets.len() <= MAX_TICKETS,
             "ticket count out of range"
         );
+        require!(tickets.iter().all(|t| t.len() <= MAX_TICKET_LEN), "ticket too long");
         let amount = amount.0;
         require!(amount > 0, "redeem must be positive");
         let who = env::predecessor_account_id();

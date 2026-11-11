@@ -8,6 +8,12 @@ credited in [NOTICE.md](NOTICE.md). `intents/` holds near/intents'
 contracts ([intents/README.md](intents/README.md)) and `mpc/` near/mpc's
 ([mpc/README.md](mpc/README.md)).
 
+The wasm built from `tests/contracts` reproduces byte for byte with the
+`build.sh` scripts on macOS (arm64) with Rust 1.95.0 and cargo-near 0.22,
+where they were built. A Linux build with the same versions gives
+different bytes (the vault pair differs), so rebuild a fixture on macOS
+and check that the ones you didn't change come out identical.
+
 "Used by" names the test files (under `tests/`, or in `src/` for unit
 tests) that load each one, directly or through a helper.
 
@@ -24,9 +30,9 @@ tests) that load each one, directly or through a helper.
 | `custody_gas_bug.wasm` | custody.wasm with its `bug_gas` feature: `resolve_deposit` gets a flat gas budget, so many positions starve it and leave credit unbacked. | `curves.rs`, `intents_like.rs`, `report.rs` |
 | `custody_log_bug.wasm` | custody.wasm with its `bug_log` feature: the refund log isn't size-checked, so long ids or memos pass 16 KiB and trap the resolver. | `curves.rs`, `intents_like.rs` |
 | `desk.wasm` | A ticket desk ([tests/contracts/desk](../contracts/desk)): `redeem` calls the issuer's `issue`, then `on_issued`, whose budget is sized to the event bytes. | `explore_scan.rs`, `report.rs` |
-| `desk_band.wasm` | desk.wasm with its `band` feature: inside a band of caller gas, `release` runs out and the pending amount stays locked. | `curves.rs` |
+| `desk_band.wasm` | desk.wasm with its `band` feature: `redeem` sends the issuer's `deliver` and its own `release` instead of `issue` and `on_issued` (still exported, never scheduled); inside a band of caller gas, `release` runs out and the pending amount stays locked. | `curves.rs` |
 | `drivers_capped.wasm` | drivers_funded.wasm with `capped`: `pledge` refuses 32 or more ids. | `curves.rs` |
-| `drivers_funded.wasm` | A holdings contract ([tests/contracts/drivers](../contracts/drivers)): `settle` then `on_settled`, whose cost per id grows with the entries after it; `fund`, `issue`, `pledge`. | `curves.rs` |
+| `drivers_funded.wasm` | A holdings contract ([tests/contracts/drivers](../contracts/drivers)): `fund`, `issue`, and `pledge` then `on_pledged`, whose budget is 5 Tgas plus 10 Tgas an id. | `curves.rs` |
 | `failure_probe.wat` | `hello`, `write`, `write_then_panic` ("boom"), and `send_to_missing`, which sends 1 NEAR to a missing account and logs the callback's result. | `accounts.rs`, `calls.rs`, `chain.rs`, `color.rs`, `effects.rs` and 2 more |
 | `flight_lock.wat` | `start` sets a busy flag until `finish`; `sync` panics and `try_sync` returns false while busy; `work` always ends in a failing call; epoch checks. | `src/explore/enumerate.rs`, `src/explore/memo_tests.rs`, `explore_enumerate.rs`, `explore_run.rs` |
 | `floor.wasm` | floor.wat compiled (a test checks they match); the specimen of audit.md's first harness. | `first_harness.rs`, `floor.rs` |
@@ -36,7 +42,7 @@ tests) that load each one, directly or through a helper.
 | `fungible_token.wasm` | near-sdk 5.29.0's fungible-token example, an NEP-141 token with storage management ([NOTICE.md](NOTICE.md)). | `src/explore/memo_tests.rs`, `src/fixture.rs`, `calls.rs`, `curves.rs`, `effects.rs` and 10 more |
 | `fuzz_contract.wasm` | A programmable contract ([tests/contracts/fuzz-contract](../contracts/fuzz-contract)): `run` executes a borsh list of storage, env, log and promise ops; a `digest` view. | `chain.rs`, `congestion.rs`, `delegate.rs`, `differential.rs`, `differential/` and 12 more |
 | `gas_split.wat` | `split` keeps a reserve and gives a detached `child` a quarter of the rest; it fails only in a 4-gas window where the child would get 0. | `gas_edges.rs` |
-| `gasmax.wasm` | A journal ([tests/contracts/gasmax](../contracts/gasmax)): `put`, `remove`, and `settle` then `on_settled`, whose cost depends on the last entry's size. | `curves.rs` |
+| `gasmax.wasm` | A journal ([tests/contracts/gasmax](../contracts/gasmax)): `put`, and `settle` then `on_settled`, whose cost depends on the last entry's size. | `curves.rs` |
 | `guestbook.wat` | `sign` stores a raw message under the caller's id with no deposit, so the contract pays for the storage; `sign_paid` asks for about 0.01 NEAR. | `curves.rs`, `docs.rs` |
 | `holder_counter.wat` | A staking pool's holder count: `stake`, `unstake`, `transfer`, a `holders` view; every partial unstake lowers the count, which underflows. | `holder_counter.rs` |
 | `host_probe.wat` | Views that call host functions directly: `keccak256`, `ecrecover`, `ed25519_verify`, `bls12381_p1_sum`, `alt_bn128_g1_sum`. | `docs.rs` |
