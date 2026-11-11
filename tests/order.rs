@@ -913,8 +913,7 @@ fn a_receipt_held_until_one_held_behind_it_goes_when_nothing_else_can() {
         .inject(Receipts::index(0), Fault::HoldUntil(Receipts::index(2)))
         .inject(Receipts::index(1), Fault::Hold(1))
         .submit();
-    let err = catch_unwind(AssertUnwindSafe(|| sim.settle())).unwrap_err();
-    let msg = err.downcast_ref::<String>().cloned().unwrap_or_default();
+    let msg = panic_message(catch_unwind(AssertUnwindSafe(|| sim.settle())));
     let why = "nothing it waits for left a block, and nothing else is in flight but the 1 held \
                behind it, which can't leave before it (holds go out first in, first out)";
     assert!(msg.ends_with(why), "{msg}");

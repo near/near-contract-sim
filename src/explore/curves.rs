@@ -794,7 +794,7 @@ impl<O: Op<W>, W: World> Curves<'_, O, W> {
     fn witness_caller(&self, c: &Climb<O>, run: &Run<O>, value: u128, site: &str) -> String {
         let step = at_step(&c.axis, c.step, value);
         let receipts = run.step_txs(step).flat_map(|tx| &tx.receipts);
-        let from = receipts.filter(|r| !r.is_refund()).find(|r| self::site(r) == site);
+        let from = receipts.filter(|r| !r.is_refund()).find(|r| r.site() == site);
         from.map_or(String::new(), |r| format!(", the witness's from {}", r.predecessor_id))
     }
 
@@ -1075,7 +1075,7 @@ fn tally<O: Op<W>, W: World>(
         let failed = run.step_txs(j).find_map(|tx| Some((tx, tx.receipts.first()?.failure()?)));
         if let Some((tx, f)) = failed {
             let entry = &tx.receipts[0];
-            let (site, why, k) = (site(entry), f.to_string(), k + 1);
+            let (site, why, k) = (entry.site(), f.to_string(), k + 1);
             let caller = entry.predecessor_id.to_string();
             point.refused = Some(Refusal::Copy { site, why, k, caller, receipt: entry.receipt_id });
             point.whole = whole(j);
@@ -1110,7 +1110,7 @@ fn tally<O: Op<W>, W: World>(
                 } else if let Some(f) = entry.failure()
                     && point.refused.is_none()
                 {
-                    let (site, why, receipt) = (site(entry), f.to_string(), entry.receipt_id);
+                    let (site, why, receipt) = (entry.site(), f.to_string(), entry.receipt_id);
                     point.refused = Some(Refusal::Entry { site, why, receipt });
                     point.whole = whole(j);
                 }
@@ -1122,7 +1122,7 @@ fn tally<O: Op<W>, W: World>(
                 .saturating_sub(entry.prepaid_exec_fees);
             let used = Use::new(burnt.as_gas().into(), ceiling, false);
             let entry_failed = entry.failure().is_some();
-            point.add(site(entry), Resource::PrepaidGas, used, false);
+            point.add(entry.site(), Resource::PrepaidGas, used, false);
             for r in tx.receipts.iter().filter(|r| !r.is_refund() && !r.method_names.is_empty()) {
                 // A refused entry crosses nothing: it is the axis's stop.
                 let natural = !(entry_failed && std::ptr::eq(r, entry));
@@ -1137,7 +1137,7 @@ impl Tally {
     /// Adds receipt `r` of `tx`: its outcome's class, what C1 compares,
     /// and its uses, crossing nothing unless `natural`.
     fn receipt(&mut self, sim: &crate::Sim, tx: &TxOutcome, r: &ReceiptOutcome, natural: bool) {
-        let s = site(r);
+        let s = r.site();
         let failure = r.failure();
         let class = failure.as_ref().map_or("ok".to_owned(), |f| failure_class(&f.to_string()));
         self.classes.insert((s.clone(), class));
@@ -1213,11 +1213,6 @@ pub(crate) fn callers_storage<'a>(
     let deposited: u128 = into.map(|e| e.deposit.as_yoctonear()).sum();
     let staked = sim.storage_cost(u64::try_from(bytes(best)).unwrap_or(0)).as_yoctonear();
     Some((best, bytes(best), staked.saturating_sub(deposited), paid + deposited))
-}
-
-/// `receiver::method`.
-fn site(r: &ReceiptOutcome) -> String {
-    format!("{}::{}", r.receiver_id, r.method().unwrap_or_default())
 }
 
 /// The first line of a failure, with its numbers dropped: the outcome's
