@@ -542,4 +542,57 @@ mod tests {
         assert_eq!(share(10 * m, 20, Duration::ZERO), 30 * s);
         assert_eq!(share(30 * s, 1, m), 30 * s);
     }
+
+    /// An op that sleeps past the harness's timeout on call number `slow`
+    /// (counted from 0 in `CALLS[test]`) and is quick on the others.
+    #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+    struct Nap {
+        test: usize,
+        slow: usize,
+    }
+
+    static CALLS: [std::sync::atomic::AtomicUsize; 2] =
+        [std::sync::atomic::AtomicUsize::new(0), std::sync::atomic::AtomicUsize::new(0)];
+
+    impl Op for Nap {
+        fn submit(&self, sim: &mut crate::Sim) -> Result<(), super::super::Skip> {
+            let call = CALLS[self.test].fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if call == self.slow {
+                std::thread::sleep(Duration::from_millis(300));
+            }
+            sim.call("alice.near", "s.near", "m").submit();
+            Ok(())
+        }
+    }
+
+    /// A search runs case 0 twice to catch nondeterminism. A run that
+    /// ran past the case timeout stopped at whatever block it reached, so
+    /// when only one of the two does, or they stop at different blocks,
+    /// that is load, not the code under test: the search goes on.
+    fn naps_once(test: usize, slow: usize) -> crate::explore::Audit<Nap> {
+        let sim = crate::Fixture::new()
+            .account("alice.near", crate::Balance::from_near(1))
+            .stub("s.near", crate::Stub::new().on("m", crate::Reply::json(())))
+            .build();
+        let mut h = Harness::new(sim);
+        h.timeout = Duration::from_millis(100);
+        let plan = Plan::new().op(Nap { test, slow });
+        let audit = h.search(proptest::strategy::Just(plan)).seed(1).cases(3).run();
+        assert!(CALLS[test].load(std::sync::atomic::Ordering::SeqCst) >= 2, "{audit}");
+        audit
+    }
+
+    #[test]
+    fn a_first_run_that_timed_out_is_not_a_nondeterministic_world() {
+        let audit = naps_once(0, 0);
+        assert!(audit.errors().is_empty(), "{audit}");
+        assert_eq!(audit.cases(), 3, "{audit}");
+    }
+
+    #[test]
+    fn a_second_run_that_timed_out_is_not_a_nondeterministic_world() {
+        let audit = naps_once(1, 1);
+        assert!(audit.errors().is_empty(), "{audit}");
+        assert_eq!(audit.cases(), 3, "{audit}");
+    }
 }
