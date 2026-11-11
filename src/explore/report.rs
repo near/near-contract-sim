@@ -1191,6 +1191,31 @@ mod tests {
         a
     }
 
+    /// A saved part's incomplete cases count in a resumed audit, however
+    /// many runs the part holds: a campaign whose every case was
+    /// incomplete, resumed with nothing left to run, is not clean; one
+    /// with a complete case is.
+    #[test]
+    fn a_saved_part_s_incomplete_cases_count_in_a_resume() {
+        let part = |incomplete: u32, prior: Option<Report>| {
+            let mut a = Audit::<u8>::new("a campaign".into());
+            (a.r.cases, a.incomplete_cases, a.prior) = (1, incomplete, prior.map(Box::new));
+            a
+        };
+        let resumed = |saved: Report| part(0, Some(saved)).report();
+        let clean = |saved: Report| {
+            let mut a = Audit::<u8>::new("a campaign".into());
+            a.prior = Some(Box::new(saved));
+            a.is_clean()
+        };
+        assert!(!clean(part(1, None).report()), "one part, incomplete");
+        // A saves file a resumed run wrote: the union of its two runs.
+        let twice = part(1, Some(part(1, None).report())).report();
+        assert_eq!(twice.incomplete_cases, 2);
+        assert!(!clean(twice), "two runs, both incomplete");
+        assert!(clean(resumed(part(1, None).report())), "a complete case of its own");
+    }
+
     /// A resumed campaign's to-do list is in the order of a fresh run's
     /// of the same items, wherever each came from: every kind in its
     /// place, a part's items in case order. Before, a union listed the
