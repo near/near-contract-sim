@@ -762,6 +762,57 @@ fn a_resumed_scan_is_clean_only_if_its_saved_part_is() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A resumed scan is judged by its own harness's excuses: an excuse the
+/// saved part's harness had and this one dropped closes nothing, so the
+/// resumed audit has a fresh run's open items; one it added closes a
+/// saved item. Before, the saved part's excuses still applied, and the
+/// resumed audit was done where a fresh one wasn't.
+///
+/// Verification boundary: actual runs, resumed from the saves file the
+/// scan wrote, with an excused item planted in it.
+#[test]
+fn a_resumed_scan_is_judged_by_its_own_excuses() {
+    let dir = std::env::temp_dir().join(format!("resumed-excuses-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let sim = Fixture::new()
+        .account("alice.near", Balance::from_near(10))
+        .contract("c.near", wat::parse_str(GOES).unwrap())
+        .build();
+    let h = Harness::<Few>::new(sim).at_rest("anything", |_: &Sim| Ok::<(), String>(()));
+    let plan = Plan::new().op(Few { n: 2 });
+    let path = dir.join("scan.json");
+    let scan = |h: &Harness<Few>| {
+        h.scan(std::slice::from_ref(&plan)).faults(Faults::edges()).saves(&path, 1).run()
+    };
+    let ids = |todo: Vec<near_contract_sim::explore::Todo>| {
+        todo.into_iter().map(|t| t.id).collect::<Vec<_>>()
+    };
+    let fresh = h.scan(std::slice::from_ref(&plan)).faults(Faults::edges()).run();
+    let open = ids(fresh.todo());
+    assert!(!open.is_empty() && open.iter().all(|id| id.starts_with("incomplete:Few")), "{fresh}");
+    let excused = scan(&h.clone().excuse("incomplete:Few*", "n is 1 to 3 by design"));
+    assert!(excused.done().is_ok(), "{excused}");
+    // The excuse dropped: nothing left to run, and the saved part's items open.
+    let resumed = scan(&h);
+    assert_eq!(resumed.cases(), 0, "{resumed}");
+    assert_eq!(ids(resumed.todo()), open, "{resumed}");
+    // A union holding the saved part judges by the resumed report's excuses.
+    let union = h.union(&[excused.report(), resumed.report()]);
+    assert_eq!(ids(union.todo), open, "{:?}", union.excused);
+    // An item the saved part excused, planted: open here, with why.
+    let mut saved: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    saved["excused"] = json!([["planted:*", "a guard", ["planted:x"]]]);
+    std::fs::write(&path, saved.to_string()).unwrap();
+    let planted = scan(&h).todo().into_iter().find(|t| t.id == "planted:x");
+    let planted = planted.unwrap_or_else(|| panic!("open: {:?}", ids(scan(&h).todo())));
+    assert!(planted.why.contains("a guard") && !planted.close.is_empty(), "{planted:?}");
+    // Excused here, it is closed.
+    let again = scan(&h.clone().excuse("planted:*", "a guard").excuse("incomplete:Few*", "n"));
+    assert!(again.done().is_ok(), "{again}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// A resumed scan's `assert_reached` counts the methods its saved part
 /// reached, or was covered for, as its summary does; `reached` stays its
 /// own run's. Before, `assert_reached` read only the resumed run's own

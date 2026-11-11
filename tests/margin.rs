@@ -266,6 +266,83 @@ fn a_growing_cost_on_a_flat_budget_is_labeled_with_its_projection() {
     );
 }
 
+/// `batch.near::put(n)` sends one receipt that calls `on_keep` (a flat
+/// 100 Tgas, `n` keys written) and then `noop`: [`KEEP`] with its
+/// callback in a batch, site `batch.near::on_keep,noop`.
+const BATCH: &str = r#"(module
+  (import "env" "input" (func $input (param i64)))
+  (import "env" "read_register" (func $read (param i64 i64)))
+  (import "env" "promise_batch_create" (func $create (param i64 i64) (result i64)))
+  (import "env" "promise_batch_action_function_call"
+    (func $call (param i64 i64 i64 i64 i64 i64 i64)))
+  (import "env" "storage_write" (func $write (param i64 i64 i64 i64 i64) (result i64)))
+  (memory 1)
+  (export "memory" (memory 0))
+  (data (i32.const 0) "on_keep")
+  (data (i32.const 16) "noop")
+  (data (i32.const 32) "batch.near")
+  (func (export "put") (local $p i64)
+    (call $input (i64.const 0))
+    (call $read (i64.const 0) (i64.const 1024))
+    (local.set $p (call $create (i64.const 10) (i64.const 32)))
+    (call $call (local.get $p) (i64.const 7) (i64.const 0) (i64.const 1) (i64.const 1024)
+      (i64.const 2000) (i64.const 100000000000000))
+    (call $call (local.get $p) (i64.const 4) (i64.const 16) (i64.const 0) (i64.const 0)
+      (i64.const 2000) (i64.const 5000000000000)))
+  (func (export "noop"))
+  (func (export "on_keep") (local $i i64)
+    (call $input (i64.const 0))
+    (call $read (i64.const 0) (i64.const 1024))
+    (block $done (loop $more
+      (br_if $done (i64.ge_u (local.get $i) (i64.load8_u (i32.const 1024))))
+      (i64.store8 (i32.const 600) (local.get $i))
+      (drop (call $write (i64.const 1) (i64.const 600) (i64.const 8) (i64.const 1024)
+                         (i64.const 2)))
+      (local.set $i (i64.add (local.get $i) (i64.const 1)))
+      (br $more)))))"#;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+enum BatchOp {
+    Put { n: u8 },
+}
+
+impl Op for BatchOp {
+    fn submit(&self, sim: &mut Sim) -> Result<(), Skip> {
+        let BatchOp::Put { n } = self;
+        sim.call("alice.near", "batch.near", "put").args(vec![*n]).submit();
+        Ok(())
+    }
+}
+
+/// A receipt that batches calls is measured as a whole, as its curve
+/// rows name it (`batch.near::on_keep,noop`): `must_not_fail` naming one
+/// of its methods, or a pattern matching it, makes it a margin target,
+/// as it makes its failure a finding. Before, the margin read one method
+/// at a time and measured no batch, and a method named alone made no
+/// batch a target.
+#[test]
+fn a_batch_receipts_margin_is_measured() {
+    const SITE: &str = "batch.near::on_keep,noop";
+    let world = Fixture::new()
+        .account("alice.near", Balance::from_near(100))
+        .contract("batch.near", wat::parse_str(BATCH).unwrap())
+        .build();
+    let h = Harness::<BatchOp>::new(world);
+    let witness = Plan::new().op(BatchOp::Put { n: 2 });
+    let margins = |h: Harness<BatchOp>| {
+        h.run(&witness).assert_clean();
+        let audit = h.curves(std::slice::from_ref(&witness)).run();
+        eprintln!("{audit}");
+        audit.assert_curve(SITE, Resource::ReceiptGas, "/Put/n");
+        let found = audit.found().iter().filter(|x| x.finding.check == "gas margin");
+        found.map(|x| x.finding.site.to_string()).collect::<Vec<_>>()
+    };
+    let batch = vec![format!("{SITE} (Put)")];
+    assert_eq!(margins(h.clone().must_not_fail("on_keep")), batch, "one method of the batch");
+    assert_eq!(margins(h.clone().must_not_fail("batch.near::on_*")), batch, "a pattern");
+    assert_eq!(margins(h), Vec::<String>::new(), "nothing declared, nothing awaited");
+}
+
 /// `margin_registry.wat`: `resolve` gets 3 Tgas + 1 Tgas an id and writes
 /// "e" + each queued id, its own and those queued while it waited. The
 /// trie shaper plants keys forking the trie along each key it writes.

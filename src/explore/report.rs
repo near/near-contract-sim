@@ -188,7 +188,8 @@ impl From<&Report> for Report {
 /// points.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Curve {
-    /// `receiver::method`.
+    /// The receipt's site: `receiver::method`, `receiver::f,g` for a
+    /// batch, the receiver alone for one that calls nothing.
     pub site: String,
     /// What it uses.
     pub resource: super::Resource,
@@ -325,7 +326,7 @@ impl<O: Op<W>, W: World> Harness<O, W> {
             let path = std::path::Path::new(path);
             path.exists() && super::Store::unjudgeable(self, path).is_some()
         };
-        let mut out = union(&self.excused, reports);
+        let mut out = union(&self.excused, reports, true);
         // A saves file's replays are its campaign's to write.
         out.findings.iter_mut().for_each(|row| row.saved.clear());
         let gone: Vec<String> =
@@ -353,10 +354,12 @@ fn older_or_newer(format: u32) -> Option<String> {
         })
 }
 
-/// [`Harness::union`] with these excuses, every report's stale items kept.
-/// One finding (its identity) in several reports is one row, its first,
-/// counting their cases.
-pub(crate) fn union(excused: &[(String, String)], reports: &[Report]) -> Report {
+/// The reports as one, judged by these `excused` and, if `theirs`, each
+/// report's ([`Harness::union`]; a resumed campaign is judged by its
+/// harness's alone), every report's stale items kept. One finding (its
+/// identity) in several reports is one row, its first, counting their
+/// cases.
+pub(crate) fn union(excused: &[(String, String)], reports: &[Report], theirs: bool) -> Report {
     // A report whose runs another holds is in that one already.
     let holds = |a: &Report, b: &Report| b.parts.iter().all(|p| a.parts.contains(p));
     let reports: Vec<&Report> = (reports.iter().enumerate())
@@ -441,7 +444,10 @@ pub(crate) fn union(excused: &[(String, String)], reports: &[Report]) -> Report 
     let mut items: Vec<Todo> = errors_item(&out.errors).into_iter().collect();
     for r in &reports {
         let closed = r.excused.iter().flat_map(|e| e.2.iter().map(move |id| (id, &e.1)));
-        let excused = closed.map(|(id, why)| Todo::new(id.clone(), format!("excused: {why}"), ""));
+        let excused = closed.map(|(id, why)| {
+            let why = format!("excused by the saved part's harness only: {why}");
+            Todo::new(id.clone(), why, "Harness::excuse, as the saved part's did")
+        });
         for t in r.todo.iter().cloned().chain(excused).filter(|t| !coverage(&t.id)) {
             if !items.iter().any(|x| x.id == t.id) {
                 items.push(t);
@@ -454,12 +460,12 @@ pub(crate) fn union(excused: &[(String, String)], reports: &[Report]) -> Report 
     items.extend(out.paths.unreached.iter().map(|s| unreached_item(s)));
     items.extend(incomplete_items(&out.incomplete));
     items.sort_by_key(|t| rank(&t.id));
-    // This harness's excuses, then each report's.
+    // These excuses, then each report's: an item goes to the first that
+    // closes it.
     let mut patterns: Vec<(String, String)> = excused.to_vec();
-    for (p, why, _) in reports.iter().flat_map(|r| &r.excused) {
-        if !patterns.iter().any(|x| x.0 == *p) {
-            patterns.push((p.clone(), why.clone()));
-        }
+    if theirs {
+        let each = reports.iter().flat_map(|r| &r.excused);
+        patterns.extend(each.map(|(p, why, _)| (p.clone(), why.clone())));
     }
     (out.todo, out.excused) = split(&patterns, items);
     out.excused.retain(|e| !e.2.is_empty());
@@ -772,7 +778,7 @@ impl<O: fmt::Debug> Audit<O> {
         };
         own.timings.sort_by(|a, b| b.1.total_cmp(&a.1));
         match &self.prior {
-            Some(p) => union(&self.excused, &[(**p).clone(), own]),
+            Some(p) => union(&self.excused, &[(**p).clone(), own], false),
             None => own,
         }
     }
@@ -1147,12 +1153,12 @@ mod tests {
             ran_curves: true,
             ..Report::default()
         };
-        let u = union(&[], &[a.clone(), b]);
+        let u = union(&[], &[a.clone(), b], true);
         assert_eq!(u.fixed, ["memo", "note", "tag"]);
         assert_eq!(u.bands, ["a band", "another"]);
         assert_eq!(u.timings, [("scan".to_owned(), 2.0), ("curves".to_owned(), 1.0)]);
         assert!(u.ran_curves);
-        assert!(!union(&[], &[a]).ran_curves);
+        assert!(!union(&[], &[a], true).ran_curves);
     }
 
     /// An audit whose `cases` hold to-do items of every kind, each one

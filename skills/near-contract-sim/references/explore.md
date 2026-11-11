@@ -286,7 +286,7 @@ message) for the `axis:` ones a copy stopped, with a glob closing them.
 | `replays:<dir>` | replays couldn't be written there |
 | `truncated:depth N`, `unexplored:depth N` | an enumeration's `.cases` ran out at depth N, or never reached it (its notes say what it didn't vary); `unexplored:epoch boundaries` (and `... placed late`): boundary offsets it didn't try |
 | `length:<op>:<list>` | a search sent this list at one length in every case: a bug needing another length went untried |
-| `timeout:<variant>` | a case ran past a minute and was stopped: nothing after was judged (an op that bounds the size closes it) |
+| `timeout:<variant>` | a case ran past the case timeout (`NEAR_SIM_CASE_TIMEOUT`) and was stopped: nothing after was judged (an op that bounds the size closes it) |
 | `incomplete:<op>, <axis>` | cases not tried to their end, one item an op and axis (an op skipped at its edges): count, first case and why; `incomplete:<op>*` closes an op's, but a blanket `incomplete:*` hides those skips. Where checks not judging were a case's only gap, the family is the check: `incomplete:<check> not judged (overlapped)` (read `effects()`, or judge in `at_rest_ops`), or `incomplete:<check> not judged` |
 | `errors` | harness errors, an op's `submit` panic among them (its message printed) |
 

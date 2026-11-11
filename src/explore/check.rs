@@ -326,9 +326,13 @@ impl<O: Op<W>, W: World> Harness<O, W> {
         self.anyone.iter().any(|p| site_matches(p, site))
     }
 
-    /// Whether `site` (`receiver::method`) is one that must not fail.
+    /// Whether `site` (`receiver::method`, a batch's `receiver::f,g`) is
+    /// one that must not fail: a batch is if one of its calls is, as a
+    /// failure there is a finding.
     pub(crate) fn must_not_fail_at(&self, site: &str) -> bool {
-        self.must_not_fail.iter().any(|p| site_matches(p, site))
+        let calls = site.rsplit_once("::").into_iter();
+        let mut calls = calls.flat_map(|(r, m)| m.split(',').map(move |m| format!("{r}::{m}")));
+        calls.any(|call| self.must_not_fail.iter().any(|p| site_matches(p, &call)))
     }
 
     /// Every check's name, the built-ins' first.

@@ -109,7 +109,8 @@ pub enum Reach {
 /// One site's use of one resource along one axis of one witness step.
 #[derive(Clone, Debug)]
 pub struct CurveRow<O> {
-    /// `receiver::method`.
+    /// The receipt's site: `receiver::method`, `receiver::f,g` for a
+    /// batch, the receiver alone for one that calls nothing.
     pub site: String,
     /// What it uses.
     pub resource: Resource,
