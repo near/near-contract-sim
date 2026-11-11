@@ -12,6 +12,9 @@ sim_toolchain=$(sed -n 's/^channel = "\(.*\)"/\1/p' "$root/rust-toolchain.toml")
 # The dependencies' opt-level of this repo's own test build: 0, or what CI
 # sets in the environment, so the consumers share that target dir's nearcore.
 deps_opt=$(printenv 'CARGO_PROFILE_DEV_PACKAGE_*_OPT_LEVEL' || echo 0)
+# Cargo.toml raises the signature crates to 2 whatever that is; same here.
+crypto_opts=(--config 'profile.dev.package.curve25519-dalek.opt-level=2'
+             --config 'profile.dev.package.sha2.opt-level=2')
 
 # Every rust block of quickstart.md and the whole first harness of audit.md
 # (tests/first_harness.rs), under the quickstart's own [dev-dependencies],
@@ -46,7 +49,7 @@ cp "$root"/tests/res/{fungible_token,vault,floor}.wasm "$pages/tests/res/"
     cd "$pages"
     # The page's opt-level = 2 is for speed; the gate builds nearcore as
     # this repo's tests do, so the two share a target dir's artifacts.
-    cargo +"$sim_toolchain" test --config "profile.dev.package.\"*\".opt-level=$deps_opt"
+    cargo +"$sim_toolchain" test --config "profile.dev.package.\"*\".opt-level=$deps_opt" "${crypto_opts[@]}"
 )
 
 # The README's layout: auction/ is cargo near new's exact template inputs,
@@ -63,7 +66,8 @@ for file in Cargo.template.toml rust-toolchain.toml src/lib.rs; do
 done
 sed -i.bak 's/cargo-near-new-project-name/auction/' "$work/auction/Cargo.toml"
 rm "$work/auction/Cargo.toml.bak"
-printf '[profile.dev.package."*"]\nopt-level = %s\n' "$deps_opt" > "$work/.cargo/config.toml"
+printf '[profile.dev.package."*"]\nopt-level = %s\n[profile.dev.package.curve25519-dalek]\nopt-level = 2\n[profile.dev.package.sha2]\nopt-level = 2\n' \
+    "$deps_opt" > "$work/.cargo/config.toml"
 python3 -I - "$root" "$work/auction-tests" <<'PY'
 from pathlib import Path
 import re

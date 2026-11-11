@@ -116,3 +116,18 @@ tokio = { version = "1", features = ["rt", "time", "macros", "test-util"] }
 # compile cache can reuse rocksdb and what links it. This crate keeps its own.
 [profile.dev.package."*"]
 debug = false
+
+# Every block a test runs verifies its transactions' ed25519 signatures in
+# nearcore, and unoptimized that was a third of the suite's CPU (the AVX2
+# field math, and sha2 under it, are thousands of tiny intrinsic calls at
+# opt-level 0). Level 2 is what ci.yml already sets for every dependency, so
+# CI builds are unchanged; this gives a plain local `cargo test` the same
+# speed for the two crates that matter, at ~2 s of extra compile CPU. Only
+# this workspace root's profiles apply: Cargo ignores the profile settings
+# of a dependency's manifest, so a crate that depends on this one is unaffected.
+# tests/consumer/run.sh sets the same two levels, to share this build.
+[profile.dev.package.curve25519-dalek]
+opt-level = 2
+
+[profile.dev.package.sha2]
+opt-level = 2

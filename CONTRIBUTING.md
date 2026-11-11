@@ -50,7 +50,9 @@ assertions (see the `Test` job), the differential test against a sandbox
 (`tests/differential/run.sh` starts one in Docker), and a check that no
 tracked file, binaries included, holds a path from the build machine. The
 suite is CPU-bound: the opt-levels in CI's `env` block cut its CPU time to
-about a quarter, and work the same locally.
+about a quarter, and work the same locally. A plain local build gets part of
+that already: `Cargo.toml` builds the signature crates (`curve25519-dalek`,
+`sha2`) at opt-level 2, which cut about a third of the test CPU.
 
 ## When the public API changes
 
