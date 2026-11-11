@@ -43,6 +43,13 @@ pub(crate) const SMALL: u128 = 8;
 pub(crate) const RUNGS: u32 = 12;
 /// Runs refinement takes per axis, at most.
 const REFINES: u32 = 8;
+/// The most runs curves take along one axis of `rungs` rungs: its
+/// ladder's (`rungs / 2 + 1`), one where the last two project the limit,
+/// [`REFINES`], and three judging where it stopped (its trap named, a
+/// list of plain copies, the control).
+pub(crate) const fn runs_per_axis(rungs: u32) -> u32 {
+    rungs / 2 + 1 + 1 + REFINES + 3
+}
 /// A repeat or a tail climbs no higher than this.
 const COPIES: u128 = 64;
 /// yoctoNEAR a byte of storage stakes.
@@ -162,7 +169,7 @@ impl<O> CurveRow<O> {
             Reach::Stopped(why) => {
                 Some(format!("{} stopped at {}: {why}", self.axis, self.moved_to))
             }
-            Reach::Below if self.moved_to < SMALL => {
+            Reach::Below if self.moved_to <= SMALL => {
                 Some(format!("{} moved only to {}", self.axis, self.moved_to))
             }
             _ => None,
@@ -535,10 +542,12 @@ impl<O: Op<W>, W: World> Curves<'_, O, W> {
                     }
                     runs.extend(emptying(h, &runs));
                 }
+                let witness =
+                    u32::try_from(runs.len()).ok().and_then(|n| started.elapsed().checked_div(n));
+                let witness = witness.unwrap_or_default();
                 let work = self.work(&runs, done == 0, &mut audit);
                 drop(phase);
-                let each = self.rungs / 2 + REFINES + 2;
-                let witness = started.elapsed() / self.plans.len().max(1) as u32;
+                let each = runs_per_axis(self.rungs);
                 eprintln!(
                     "{what}: {} axes, at most {each} runs each, {witness:?} a witness run; a \
                      run's time grows along its axis, so the time left, from the mean axis \
@@ -670,9 +679,15 @@ impl<O: Op<W>, W: World> Curves<'_, O, W> {
             .find_map(|(n, p)| Some((n, p.t.refused.as_ref()?)));
         let stop = refused.map(|(n, r)| self.judge_stop(c, &points, n, r));
         let points = &points[..refused.map_or(points.len(), |(n, _)| n + 1)];
-        // Every rung is a case: what a check found there is a finding.
-        for (j, p) in points.iter().enumerate() {
-            if j > 0 || crossed(p) || p.run.overlapped_only {
+        // Every rung is a case but the witness itself, already one: a rung
+        // whose plan is the witness's, as a run is its plan's. A rung at any
+        // other value, or at the ceiling's gas, is a case even where it ran
+        // the witness's transactions: a check may read the op or the world.
+        let witness = serde_json::to_value(c.plan).ok();
+        for p in points {
+            let plan = serde_json::to_value(&p.run.plan).ok();
+            let again = witness.is_some() && plan == witness;
+            if !again || crossed(p) || p.run.overlapped_only {
                 let at = format!("step {i}, {} = {}", axis.name, p.value);
                 audit.add(&p.run, Some((&at, &axis.name)));
             } else {
@@ -1404,6 +1419,25 @@ mod tests {
     fn a_row_prints_its_largest_use() {
         let row = row("c::m", vec![(1, 90), (4, 10)], 100, Reach::Below);
         assert!(row.to_string().ends_with(", at most 90 (at 1) of 100"), "{row}");
+    }
+
+    /// C4: a row whose axis moved no further than [`SMALL`] is open, one
+    /// that moved past it is closed.
+    #[test]
+    fn a_row_that_moved_no_further_than_small_is_open() {
+        let moved = |to: u128| row("c::m", vec![(2, 10), (to, 10)], 100, Reach::Below).open();
+        assert!(moved(SMALL).is_some_and(|why| why.contains("moved only to 8")));
+        assert!(moved(4).is_some());
+        assert_eq!(moved(SMALL + 1), None);
+    }
+
+    /// The skill's cost section gives the most runs an axis takes, at the
+    /// default rungs, as the code counts them.
+    #[test]
+    fn the_skill_gives_the_runs_an_axis_takes() {
+        let doc = include_str!("../../skills/near-contract-sim/references/explore.md");
+        let says = format!("curves at most {} runs per axis", runs_per_axis(RUNGS));
+        assert!(doc.contains(&says), "{says}");
     }
 
     /// The summary cuts a curve line at 200 characters: a row with long
