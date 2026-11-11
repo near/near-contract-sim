@@ -91,9 +91,10 @@ impl<O: Op<W>, W: World> Search<'_, O, W> {
     }
 
     /// Shrinks each finding until its run limits alone stop it, with no
-    /// wall-clock budget: a report that doesn't depend on the machine's
-    /// speed or load, for a test that asserts how a finding shrank. Each
-    /// shrink's runs stay bounded; its time doesn't.
+    /// wall-clock budget, for a test that asserts how a finding shrank.
+    /// Each shrink's runs stay bounded; its time doesn't. Each candidate
+    /// run still stops at the case timeout: with `NEAR_SIM_CASE_TIMEOUT=0`
+    /// the report doesn't depend on the machine's speed or load.
     pub fn shrink_untimed(mut self) -> Self {
         self.untimed = true;
         self

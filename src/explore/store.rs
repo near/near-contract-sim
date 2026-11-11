@@ -103,7 +103,7 @@ struct Saved<P> {
     /// last block before it.
     #[serde(default)]
     sites: BTreeSet<String>,
-    /// The checks of the harness that saved it: none in an older file.
+    /// The checks of the harness that saved it.
     #[serde(default)]
     checks: Vec<String>,
     /// The finding's identity (its cause, breaking ops, failed receipt and

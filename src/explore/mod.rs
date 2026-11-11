@@ -587,11 +587,6 @@ impl<W: AsMut<Sim>> Op<W> for Call {
     fn name(&self) -> String {
         self.method.clone()
     }
-
-    /// Every argument, but not its args as written (`args_text`).
-    fn axes(&self) -> Axes {
-        Axes::auto().except("/args_text")
-    }
 }
 
 #[cfg(test)]
@@ -695,6 +690,42 @@ mod tests {
             (axes.into_iter().map(|a| a.name).collect::<Vec<_>>(), fixed)
         };
         assert_eq!(names(r#"{"s":"x", "n":1}"#), names(r#"{"n":1,"s":"x"}"#));
+    }
+
+    /// Nor is it in an op that wraps a call, whose args' JSON stays an
+    /// axis; an op's own `args_text`, beside no call's args, is one.
+    #[test]
+    fn a_wrapped_calls_written_args_are_no_axis() {
+        #[derive(Clone, Debug, Serialize, Deserialize)]
+        enum Wrap {
+            Raw(Call),
+        }
+        impl Op for Wrap {
+            fn submit(&self, sim: &mut Sim) -> Result<(), Skip> {
+                let Wrap::Raw(call) = self;
+                call.send(sim);
+                Ok(())
+            }
+        }
+        let names = |args: &str| {
+            let op = Wrap::Raw(Call::new("a.near", "b.near", "m").args(args));
+            let (axes, _) = axes::args::<Wrap, Sim>(&Act::Op(op));
+            axes.into_iter().map(|a| a.name).collect::<Vec<_>>()
+        };
+        let written = names(r#"{"s":"x", "n":1}"#);
+        assert_eq!(written, names(r#"{"n":1,"s":"x"}"#));
+        assert!(written.iter().any(|n| n == "/Raw/args/json/n"), "{written:?}");
+        #[derive(Clone, Debug, Serialize, Deserialize)]
+        struct Own {
+            args_text: String,
+        }
+        impl Op for Own {
+            fn submit(&self, _: &mut Sim) -> Result<(), Skip> {
+                Ok(())
+            }
+        }
+        let (axes, _) = axes::args::<Own, Sim>(&Act::Op(Own { args_text: "x".into() }));
+        assert!(axes.iter().any(|a| a.name == "/args_text"), "{axes:?}");
     }
 
     /// `Fail::all` flattens the failures of a nested one, passes over what

@@ -158,8 +158,6 @@ impl<O: Op<W>, W: World> Harness<O, W> {
 pub struct Axes {
     only: Option<Vec<String>>,
     floors: Vec<(String, Gas)>,
-    /// Leaves that are never axes.
-    except: Vec<&'static str>,
 }
 
 /// One leaf of an op's JSON that is an axis, as the witness has it.
@@ -193,12 +191,6 @@ impl Axes {
         Axes { only, ..Axes::default() }
     }
 
-    /// Leaves the leaf at `pointer` out.
-    pub(crate) fn except(mut self, pointer: &'static str) -> Self {
-        self.except.push(pointer);
-        self
-    }
-
     /// The number at `pointer` is a gas value compared against `floor`, a
     /// documented floor that isn't a constant of the wasm: a scan tries
     /// the floor and 1 gas either side, and the wasm's gas constants from
@@ -224,7 +216,7 @@ impl Axes {
                 })
             })
         };
-        out.retain(|(name, _)| wanted(name) && !self.except.contains(&name.as_str()));
+        out.retain(|(name, _)| wanted(name));
         out
     }
 
@@ -262,7 +254,10 @@ fn walk(v: &Value, path: &mut String, out: &mut Vec<(String, Leaf)>) {
             if map.len() == 1 && !path.is_empty() {
                 push(Leaf::Tagged);
             }
-            for (k, item) in map {
+            // A saved call's copy of its JSON args as written: an edit
+            // only sends the JSON as serde_json writes it.
+            let call = map.get("args").and_then(|a| a.get("json")).is_some();
+            for (k, item) in map.iter().filter(|(k, _)| !(call && *k == "args_text")) {
                 let len = path.len();
                 path.push('/');
                 path.push_str(&pointer_key(k));

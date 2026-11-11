@@ -32,10 +32,11 @@ pub(crate) struct Margin {
     pub why: String,
 }
 
-/// What `r`, if it runs at `site`, keeps of its attached gas ([`left`];
-/// -1 where it ran out), and that gas.
+/// What `r`, if it is at `site` (its [`site`](ReceiptOutcome::site), a
+/// batch's every call), keeps of its attached gas ([`left`]; -1 where it
+/// ran out), and that gas.
 pub(crate) fn kept(r: &ReceiptOutcome, site: &str) -> Option<(i128, i128)> {
-    r.method_names.iter().any(|m| format!("{}::{m}", r.receiver_id) == site).then_some(())?;
+    (r.site() == site).then_some(())?;
     let (attached, fw) = (r.attached_gas.as_gas().into(), r.forwarded.as_gas().into());
     let own = r.gas_burnt.saturating_sub(r.prepaid_exec_fees).as_gas().into();
     let out = matches!(r.failure(), Some(Failure::OutOfGas | Failure::GasLimitExceeded));

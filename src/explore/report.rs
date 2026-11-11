@@ -188,7 +188,8 @@ impl From<&Report> for Report {
 /// points.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Curve {
-    /// `receiver::method`.
+    /// The receipt's site: `receiver::method`, `receiver::f,g` for a
+    /// batch.
     pub site: String,
     /// What it uses.
     pub resource: super::Resource,
@@ -325,7 +326,12 @@ impl<O: Op<W>, W: World> Harness<O, W> {
             let path = std::path::Path::new(path);
             path.exists() && super::Store::unjudgeable(self, path).is_some()
         };
-        let mut out = union(&self.excused, reports);
+        // This harness's excuses, then each report's: an item goes to the
+        // first that closes it.
+        let theirs =
+            reports.iter().flat_map(|r| &r.excused).map(|(p, why, _)| (p.clone(), why.clone()));
+        let patterns: Vec<(String, String)> = self.excused.iter().cloned().chain(theirs).collect();
+        let mut out = union(&patterns, reports);
         // A saves file's replays are its campaign's to write.
         out.findings.iter_mut().for_each(|row| row.saved.clear());
         let gone: Vec<String> =
@@ -353,9 +359,10 @@ fn older_or_newer(format: u32) -> Option<String> {
         })
 }
 
-/// [`Harness::union`] with these excuses, every report's stale items kept.
-/// One finding (its identity) in several reports is one row, its first,
-/// counting their cases.
+/// The reports as one, judged by these `excused` alone (a resumed
+/// campaign's harness's; [`Harness::union`] adds its reports'), every
+/// report's stale items kept. One finding (its identity) in several
+/// reports is one row, its first, counting their cases.
 pub(crate) fn union(excused: &[(String, String)], reports: &[Report]) -> Report {
     // A report whose runs another holds is in that one already.
     let holds = |a: &Report, b: &Report| b.parts.iter().all(|p| a.parts.contains(p));
@@ -441,7 +448,10 @@ pub(crate) fn union(excused: &[(String, String)], reports: &[Report]) -> Report 
     let mut items: Vec<Todo> = errors_item(&out.errors).into_iter().collect();
     for r in &reports {
         let closed = r.excused.iter().flat_map(|e| e.2.iter().map(move |id| (id, &e.1)));
-        let excused = closed.map(|(id, why)| Todo::new(id.clone(), format!("excused: {why}"), ""));
+        let excused = closed.map(|(id, why)| {
+            let why = format!("excused by the saved part's harness only: {why}");
+            Todo::new(id.clone(), why, "Harness::excuse, as the saved part's did")
+        });
         for t in r.todo.iter().cloned().chain(excused).filter(|t| !coverage(&t.id)) {
             if !items.iter().any(|x| x.id == t.id) {
                 items.push(t);
@@ -454,14 +464,7 @@ pub(crate) fn union(excused: &[(String, String)], reports: &[Report]) -> Report 
     items.extend(out.paths.unreached.iter().map(|s| unreached_item(s)));
     items.extend(incomplete_items(&out.incomplete));
     items.sort_by_key(|t| rank(&t.id));
-    // This harness's excuses, then each report's.
-    let mut patterns: Vec<(String, String)> = excused.to_vec();
-    for (p, why, _) in reports.iter().flat_map(|r| &r.excused) {
-        if !patterns.iter().any(|x| x.0 == *p) {
-            patterns.push((p.clone(), why.clone()));
-        }
-    }
-    (out.todo, out.excused) = split(&patterns, items);
+    (out.todo, out.excused) = split(excused, items);
     out.excused.retain(|e| !e.2.is_empty());
     out
 }

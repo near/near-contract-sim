@@ -21,6 +21,6 @@ exclude_re = [
     # Equivalent: `false` is the default's body.
     'replace Op::refused -> bool with false',
     # Equivalent but for a nondeterministic op: a case's rerun has the same receipts.
-    'run.rs:461:60: replace && with \|\| in Harness<O, W>::name_traps',
-    'run.rs:463:21: replace && with \|\| in Harness<O, W>::name_traps',
+    'run.rs:466:60: replace && with \|\| in Harness<O, W>::name_traps',
+    'run.rs:468:21: replace && with \|\| in Harness<O, W>::name_traps',
 ]
