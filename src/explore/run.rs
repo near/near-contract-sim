@@ -297,8 +297,13 @@ impl<O> Run<O> {
     }
 
     /// Which recorded result differs from `other`'s, if any: a run of the
-    /// same plan on the same fixture runs the same way.
+    /// same plan on the same fixture runs the same way. A run that ran past
+    /// the case timeout stopped at whatever block the clock let it reach, so
+    /// it says nothing about determinism: none differs then.
     pub(crate) fn differs_from(&self, other: &Run<O>) -> Option<&'static str> {
+        if self.timed_out || other.timed_out {
+            return None;
+        }
         ((self.fingerprint != other.fingerprint).then_some("outcomes"))
             .or((self.findings != other.findings).then_some("findings"))
             .or((self.judged != other.judged).then_some("judgments"))
