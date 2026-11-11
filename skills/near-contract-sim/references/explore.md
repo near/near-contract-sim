@@ -304,7 +304,7 @@ Each verb prints its case count and the time left (`Report::timings`
 per variant), and each phase outside the count as it starts. A case
 takes milliseconds on a WAT specimen, up to a second on near-sdk
 contracts with tokens. A scan runs a few dozen variants per witness
-step; curves at most 38 runs per axis. Narrow curves with `curve(..)`
+step; curves at most 19 runs per axis. Narrow curves with `curve(..)`
 or `Axes::only` before you cut seeds.
 
 - A case past a minute stops and is a `timeout:` to-do item. A costly
