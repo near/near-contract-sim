@@ -51,7 +51,8 @@ pub struct Harness<O, W = Sim> {
     pub(crate) serial: Option<Rc<super::books::Serial<W>>>,
     /// Each fixture contract's exports, read once ([`misnamed`](super::run::misnamed)).
     pub(crate) exports: std::cell::OnceCell<Vec<(String, Vec<String>)>>,
-    /// The longest a case runs: [`CASE_TIMEOUT`], shorter in unit tests.
+    /// The longest a case runs: [`CASE_TIMEOUT`] unless
+    /// `NEAR_SIM_CASE_TIMEOUT` says ([`case_timeout`]), shorter in unit tests.
     pub(crate) timeout: std::time::Duration,
     /// What settling each finding's row learned by running ([`Settled`](super::audit::Settled)),
     /// shared by the harness's clones.
@@ -85,6 +86,20 @@ impl<W> Memo<W> {
 /// incomplete, and an audit lists it once as a to-do item
 /// (`timeout:<variant>`); the campaign goes on.
 pub(crate) const CASE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// A case's timeout from `NEAR_SIM_CASE_TIMEOUT`'s value `var`: whole
+/// seconds, 0 for none (a report that doesn't depend on the machine's
+/// load); unset, [`CASE_TIMEOUT`].
+fn case_timeout(var: Option<&str>) -> Result<std::time::Duration, String> {
+    match var.map(str::trim) {
+        None => Ok(CASE_TIMEOUT),
+        Some(v) => match v.parse() {
+            Ok(0) => Ok(std::time::Duration::MAX),
+            Ok(s) => Ok(std::time::Duration::from_secs(s)),
+            Err(_) => Err(format!("NEAR_SIM_CASE_TIMEOUT={v:?} is not a whole number of seconds")),
+        },
+    }
+}
 
 type CheckFn<W> = Rc<dyn Fn(&W) -> Result<(), Fail>>;
 
@@ -143,7 +158,8 @@ pub(crate) struct PerOp<O, W> {
 
 impl<O: Op<W>, W: World> Harness<O, W> {
     /// A harness on `fixture`, cloned for every case. Settle it first: a
-    /// case must start with nothing queued or in flight.
+    /// case must start with nothing queued or in flight. Panics if
+    /// `NEAR_SIM_CASE_TIMEOUT` is set to other than whole seconds.
     pub fn new(fixture: W) -> Self {
         Harness {
             fixture,
@@ -160,7 +176,8 @@ impl<O: Op<W>, W: World> Harness<O, W> {
             serial: None,
             memo: None,
             exports: Default::default(),
-            timeout: CASE_TIMEOUT,
+            timeout: case_timeout(std::env::var("NEAR_SIM_CASE_TIMEOUT").ok().as_deref())
+                .unwrap_or_else(|why| panic!("{why}")),
             settled: Default::default(),
         }
     }
@@ -592,6 +609,18 @@ pub(crate) fn site_is(site: &Site, at: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_case_timeout_is_whole_seconds_and_0_is_none() {
+        let s = std::time::Duration::from_secs;
+        assert_eq!(case_timeout(None), Ok(CASE_TIMEOUT));
+        assert_eq!(case_timeout(Some(" 0 ")), Ok(std::time::Duration::MAX));
+        assert_eq!(case_timeout(Some("1")), Ok(s(1)));
+        assert_eq!(case_timeout(Some("600")), Ok(s(600)));
+        let why = "NEAR_SIM_CASE_TIMEOUT=\"1.5\" is not a whole number of seconds";
+        assert_eq!(case_timeout(Some("1.5")), Err(why.into()));
+        assert!(case_timeout(Some("off")).is_err());
+    }
 
     #[test]
     fn site_patterns_match_methods_and_sites() {
