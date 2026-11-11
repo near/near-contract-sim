@@ -706,7 +706,7 @@ impl<O: fmt::Debug> Audit<O> {
             push(unjudged_item(j, self.r.cases));
         }
         for at in &self.timeouts {
-            let why = "ran past the one-minute case timeout, so nothing past it was judged".into();
+            let why = "ran past the case timeout, so nothing past it was judged".into();
             push(Todo::new(format!("timeout:{at}"), why, "an op that bounds the size"));
         }
         incomplete_items(&self.incomplete).into_iter().for_each(&mut push);
