@@ -155,8 +155,8 @@ writes nearcore `StateRecord`s, and `state_records(ids)` reads them back.
 
 ## Environment and CI
 
-`NO_COLOR` turns off color in receipt trees; `NEAR_SIM_PROGRESS=0` mutes a
-campaign's progress; `NEAR_SIM_GAS_LIMITS` is the simulator's, the rest a
-search's ([explore.md](explore.md)). In CI, run `cargo test --locked` in
-the test crate, after building any `tests/res/` wasm with the contract's
-toolchain.
+`NO_COLOR` turns off color in receipt trees; `NEAR_SIM_GAS_LIMITS` is the
+simulator's; `NEAR_SIM_PROGRESS=0`, `NEAR_SIM_CASE_TIMEOUT` and
+`NEAR_SIM_FOUND_DIR` are every campaign's, `NEAR_SIM_SEED` and
+`NEAR_SIM_CASES` a search's ([explore.md](explore.md)). In CI, build any
+`tests/res/` wasm with the contract's toolchain, then `cargo test --locked`.

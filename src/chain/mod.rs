@@ -420,11 +420,7 @@ impl Chain {
         let before = self.replies.get(&h).map_or(&[][..], Vec::as_slice);
         // A refused one is fresh, its replies replaced as `queue` replaces
         // its injections and delivery.
-        let refused = matches!(
-            self.log.status(&h),
-            Some(ExecutionStatus::Failure(TxExecutionError::InvalidTxError(_)))
-        );
-        if self.log.txs.contains_key(&h) && !refused {
+        if self.log.txs.contains_key(&h) && !self.log.refused(&h) {
             resubmitted(&h, before == replies.as_slice(), "with other stub replies");
         }
         let h = self.queue(tx, results, injections);
@@ -679,7 +675,7 @@ fn note_unrewarded(epoch: u64) {
 
 #[cfg(test)]
 mod tests {
-    use crate::sim::tests::{park, probe_sim, stale};
+    use crate::sim::tests::{park, probe_sim, probe_wasm, stale};
     use crate::{AccountId, Balance, Failure, Sim, builtin};
     use near_primitives::types::StateChangeCause;
 
@@ -737,7 +733,7 @@ mod tests {
         assert!(sim.yields().is_empty() && !sim.is_idle());
         let setups = std::cell::Cell::new(0);
         let cached = || {
-            crate::Sim::cached("a stale head", || {
+            crate::Sim::cached(("a stale head", probe_wasm()), || {
                 setups.set(setups.get() + 1);
                 sim.clone()
             })

@@ -360,7 +360,8 @@ fn a_rotated_key_is_named_not_refused_by_the_runtime() {
 
 /// NEAR's balances are `u128`s: one above `i128::MAX` yoctoNEAR (about
 /// 1.7e14 NEAR) is counted exactly, as is a ledger that destroys and
-/// recreates it, and RPC's block header reports the total.
+/// recreates it. (RPC's block header reports the total too:
+/// `tests/transport.rs`.)
 #[test]
 fn a_balance_above_i128_max_is_conserved() {
     let mut sim = sim_with_users();

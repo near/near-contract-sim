@@ -156,10 +156,10 @@ would join them: the `testing_env!` idiom ([migrating.md](migrating.md)
 has an example). It runs with the contract as predecessor, so
 `#[private]` passes. The signer must be another account: a call to its
 own signer runs before it could be rewritten, and `promise_results`
-panics saying so. The deposit comes from the signer. Its failure is the
-transaction's result, so `sim.findings()` doesn't flag it: assert on the
-outcome. To fail a real callee inside the whole flow, use `Tx::inject`
-([faults.md](faults.md)).
+panics saying so. A failed callback's deposit (the signer's) is refunded
+to the contract. Its failure is the transaction's result, unflagged by
+`sim.findings()`: assert on the outcome. To fail a real callee inside
+the whole flow, use `Tx::inject` ([faults.md](faults.md)).
 
 ## A call from another predecessor
 

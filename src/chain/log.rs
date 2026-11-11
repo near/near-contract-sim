@@ -270,14 +270,19 @@ impl Log {
         (self.unhandled.len(), self.failed_callbacks.len())
     }
 
+    /// Whether `tx`'s conversion was refused (an `InvalidTxError`).
+    pub(crate) fn refused(&self, tx: &CryptoHash) -> bool {
+        matches!(
+            self.status(tx),
+            Some(ExecutionStatus::Failure(TxExecutionError::InvalidTxError(_)))
+        )
+    }
+
     /// Forgets `tx`'s outcome if its conversion was refused, and says whether
     /// it was: nearcore keeps nothing of a refused transaction, so the same one
     /// can be sent again.
     pub(crate) fn forget_refusal(&mut self, tx: &CryptoHash) -> bool {
-        let refused = matches!(
-            self.status(tx),
-            Some(ExecutionStatus::Failure(TxExecutionError::InvalidTxError(_)))
-        );
+        let refused = self.refused(tx);
         if refused {
             self.index.remove(tx);
         }

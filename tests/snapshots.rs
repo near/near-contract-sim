@@ -1,9 +1,10 @@
 //! `Sim::cached`: setup once per test binary, loaded from disk after that.
 //!
-//! The keys are constant, so a run leaves no new files: a test compares a
-//! setup built afresh with the second of two calls, which loads, whether the
-//! first one ran the setup or loaded too. Concurrent misses are a unit test
-//! of `src/cache.rs`, over a file of its own.
+//! The keys are constant plus the wasm their setups read, so a run leaves no
+//! new files: a test compares a setup built afresh with the second of two
+//! calls, which loads, whether the first one ran the setup or loaded too.
+//! Concurrent misses are a unit test of `src/cache.rs`, over a file of its
+//! own.
 
 mod common;
 use common::*;
@@ -64,7 +65,7 @@ fn tail(mut sim: Sim) -> String {
 fn a_loaded_snapshot_continues_like_the_original() {
     let mut runs = 0;
     let mut cached = || {
-        Sim::cached("continues", || {
+        Sim::cached(("continues", probe_wasm(), yield_wasm(), tip_jar_wasm()), || {
             runs += 1;
             setup()
         })
@@ -184,7 +185,7 @@ fn wide_tail(mut sim: Sim) -> String {
 fn a_loaded_snapshot_keeps_signers_gas_keys_globals_delegates_and_settings() {
     let mut runs = 0;
     let mut cached = || {
-        Sim::cached("wide", || {
+        Sim::cached(("wide", status_wasm()), || {
             runs += 1;
             wide_setup()
         })

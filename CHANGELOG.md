@@ -24,6 +24,7 @@ its changes follow the same rules.
 ### Added
 
 - explore: Run per-step edges on new enumerate steps placed at rest ([#5](https://github.com/near/near-contract-sim/pull/5))
+- explore: `NEAR_SIM_CASE_TIMEOUT` sets a case's wall-clock timeout in whole seconds (0: none; unset: a minute) ([#19](https://github.com/near/near-contract-sim/pull/19))
 
 ### Fixed
 

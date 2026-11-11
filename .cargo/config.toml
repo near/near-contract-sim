@@ -1,5 +1,5 @@
 # The suite's tests assert what a campaign ran and left open, so a case's
 # wall-clock timeout (60 s by default) must not cut one short on a loaded
-# machine: no case timeout here. `run.rs`'s unit tests set their own.
+# machine: no case timeout here. Explore's unit tests set their own.
 [env]
 NEAR_SIM_CASE_TIMEOUT = "0"

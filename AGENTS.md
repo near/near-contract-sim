@@ -79,6 +79,8 @@ before finishing.
   bounded campaign proves a contract correct, or that a forced fault or
   hold can happen on the real network.
 - **Conventional Commits.** Commit messages and pull request titles are
-  `type(scope): summary` (`feat`, `fix`, `docs`, `test`, `ci`,
+  `type(scope): summary` (`feat`, `fix`, `perf`, `docs`, `test`, `ci`,
   `refactor`, `chore`); `!` after the type marks a breaking API change.
-  release-plz builds the CHANGELOG and the version from them.
+  release-plz builds the CHANGELOG and the version from them. It lists
+  only `feat`, `fix` and `!` titles, so a change a user can see takes one
+  of those, not `test`, `perf`, `ci` or `docs`.
