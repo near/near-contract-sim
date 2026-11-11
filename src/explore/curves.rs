@@ -110,7 +110,7 @@ pub enum Reach {
 #[derive(Clone, Debug)]
 pub struct CurveRow<O> {
     /// The receipt's site: `receiver::method`, `receiver::f,g` for a
-    /// batch.
+    /// batch, the receiver alone for one that calls nothing.
     pub site: String,
     /// What it uses.
     pub resource: Resource,

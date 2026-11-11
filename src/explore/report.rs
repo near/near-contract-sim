@@ -189,7 +189,7 @@ impl From<&Report> for Report {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Curve {
     /// The receipt's site: `receiver::method`, `receiver::f,g` for a
-    /// batch.
+    /// batch, the receiver alone for one that calls nothing.
     pub site: String,
     /// What it uses.
     pub resource: super::Resource,
@@ -326,12 +326,7 @@ impl<O: Op<W>, W: World> Harness<O, W> {
             let path = std::path::Path::new(path);
             path.exists() && super::Store::unjudgeable(self, path).is_some()
         };
-        // This harness's excuses, then each report's: an item goes to the
-        // first that closes it.
-        let theirs =
-            reports.iter().flat_map(|r| &r.excused).map(|(p, why, _)| (p.clone(), why.clone()));
-        let patterns: Vec<(String, String)> = self.excused.iter().cloned().chain(theirs).collect();
-        let mut out = union(&patterns, reports);
+        let mut out = union(&self.excused, reports, true);
         // A saves file's replays are its campaign's to write.
         out.findings.iter_mut().for_each(|row| row.saved.clear());
         let gone: Vec<String> =
@@ -359,11 +354,12 @@ fn older_or_newer(format: u32) -> Option<String> {
         })
 }
 
-/// The reports as one, judged by these `excused` alone (a resumed
-/// campaign's harness's; [`Harness::union`] adds its reports'), every
-/// report's stale items kept. One finding (its identity) in several
-/// reports is one row, its first, counting their cases.
-pub(crate) fn union(excused: &[(String, String)], reports: &[Report]) -> Report {
+/// The reports as one, judged by these `excused` and, if `theirs`, each
+/// report's ([`Harness::union`]; a resumed campaign is judged by its
+/// harness's alone), every report's stale items kept. One finding (its
+/// identity) in several reports is one row, its first, counting their
+/// cases.
+pub(crate) fn union(excused: &[(String, String)], reports: &[Report], theirs: bool) -> Report {
     // A report whose runs another holds is in that one already.
     let holds = |a: &Report, b: &Report| b.parts.iter().all(|p| a.parts.contains(p));
     let reports: Vec<&Report> = (reports.iter().enumerate())
@@ -464,7 +460,14 @@ pub(crate) fn union(excused: &[(String, String)], reports: &[Report]) -> Report 
     items.extend(out.paths.unreached.iter().map(|s| unreached_item(s)));
     items.extend(incomplete_items(&out.incomplete));
     items.sort_by_key(|t| rank(&t.id));
-    (out.todo, out.excused) = split(excused, items);
+    // These excuses, then each report's: an item goes to the first that
+    // closes it.
+    let mut patterns: Vec<(String, String)> = excused.to_vec();
+    if theirs {
+        let each = reports.iter().flat_map(|r| &r.excused);
+        patterns.extend(each.map(|(p, why, _)| (p.clone(), why.clone())));
+    }
+    (out.todo, out.excused) = split(&patterns, items);
     out.excused.retain(|e| !e.2.is_empty());
     out
 }
@@ -775,7 +778,7 @@ impl<O: fmt::Debug> Audit<O> {
         };
         own.timings.sort_by(|a, b| b.1.total_cmp(&a.1));
         match &self.prior {
-            Some(p) => union(&self.excused, &[(**p).clone(), own]),
+            Some(p) => union(&self.excused, &[(**p).clone(), own], false),
             None => own,
         }
     }
@@ -1150,12 +1153,12 @@ mod tests {
             ran_curves: true,
             ..Report::default()
         };
-        let u = union(&[], &[a.clone(), b]);
+        let u = union(&[], &[a.clone(), b], true);
         assert_eq!(u.fixed, ["memo", "note", "tag"]);
         assert_eq!(u.bands, ["a band", "another"]);
         assert_eq!(u.timings, [("scan".to_owned(), 2.0), ("curves".to_owned(), 1.0)]);
         assert!(u.ran_curves);
-        assert!(!union(&[], &[a]).ran_curves);
+        assert!(!union(&[], &[a], true).ran_curves);
     }
 
     /// An audit whose `cases` hold to-do items of every kind, each one

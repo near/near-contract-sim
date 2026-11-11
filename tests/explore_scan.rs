@@ -796,6 +796,9 @@ fn a_resumed_scan_is_judged_by_its_own_excuses() {
     let resumed = scan(&h);
     assert_eq!(resumed.cases(), 0, "{resumed}");
     assert_eq!(ids(resumed.todo()), open, "{resumed}");
+    // A union holding the saved part judges by the resumed report's excuses.
+    let union = h.union(&[excused.report(), resumed.report()]);
+    assert_eq!(ids(union.todo), open, "{:?}", union.excused);
     // An item the saved part excused, planted: open here, with why.
     let mut saved: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
