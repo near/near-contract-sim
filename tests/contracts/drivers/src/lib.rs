@@ -55,17 +55,13 @@ fn set_funds(account: &str, n: u128) {
 
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
-pub struct Holdings {
-    /// The ledger `new` was given; nothing calls it since `settle` went.
-    #[allow(dead_code)]
-    ledger: AccountId,
-}
+pub struct Holdings {}
 
 #[near]
 impl Holdings {
     #[init]
-    pub fn new(ledger: AccountId) -> Self {
-        Self { ledger }
+    pub fn new() -> Self {
+        Self {}
     }
 
     /// Sets what `account` may pledge in one call.

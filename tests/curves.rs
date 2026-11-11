@@ -31,10 +31,8 @@ mod drivers {
     fn harness(wasm: &str) -> Harness<Pledge> {
         let f = Fixture::new()
             .account(ALICE, Balance::from_near(1000))
-            .stub("ledger.near", Stub::new().on("record", Reply::json("ok")))
             .contract(HOLDINGS, res(wasm))
             .init("new")
-            .args_json(json!({ "ledger": "ledger.near" }))
             .call(ALICE, HOLDINGS, "fund")
             .args_json(json!({ "account": ALICE, "amount": "100" }))
             .call(ALICE, HOLDINGS, "issue")

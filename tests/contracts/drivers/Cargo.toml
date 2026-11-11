@@ -10,6 +10,8 @@ repository = "https://github.com/near/near-contract-sim"
 crate-type = ["cdylib", "rlib"]
 
 [features]
+# Without `funded` the contract exports only `new` and warns of unused
+# imports; nothing builds it that way.
 # drivers_funded.wasm: `pledge` takes issued ids and amounts, up to 64 ids,
 # and refuses when their sum passes the caller's funds (`fund`).
 funded = []
