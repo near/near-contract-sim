@@ -142,6 +142,9 @@ pub struct Report {
     /// one `incomplete:<family>` item a family ([`Audit::incomplete`]).
     #[serde(default)]
     pub incomplete: Vec<(String, String)>,
+    /// The cases not tried to their end, each once.
+    #[serde(default)]
+    pub(crate) incomplete_cases: u32,
     /// The repeats and tails an op's [`Axes::only`](super::Axes::only)
     /// left out: not climbed.
     #[serde(default)]
@@ -381,6 +384,7 @@ pub(crate) fn union(excused: &[(String, String)], reports: &[Report]) -> Report 
         ran_curves: reports.iter().any(|r| r.ran_curves),
         errors: reports.iter().flat_map(|r| r.errors.clone()).collect(),
         incomplete: reports.iter().flat_map(|r| r.incomplete.clone()).collect(),
+        incomplete_cases: reports.iter().map(|r| r.incomplete_cases).sum(),
         faults: reports.iter().fold((0, 0), |a, r| (a.0 + r.faults.0, a.1 + r.faults.1)),
         ..Report::default()
     };
@@ -445,6 +449,7 @@ pub(crate) fn union(excused: &[(String, String)], reports: &[Report]) -> Report 
     items.extend(unjudged.map(|j| unjudged_item(j, cases)));
     items.extend(out.paths.unreached.iter().map(|s| unreached_item(s)));
     items.extend(incomplete_items(&out.incomplete));
+    items.sort_by_key(|t| rank(&t.id));
     // This harness's excuses, then each report's.
     let mut patterns: Vec<(String, String)> = excused.to_vec();
     for (p, why, _) in reports.iter().flat_map(|r| &r.excused) {
@@ -455,6 +460,18 @@ pub(crate) fn union(excused: &[(String, String)], reports: &[Report]) -> Report 
     (out.todo, out.excused) = split(&patterns, items);
     out.excused.retain(|e| !e.2.is_empty());
     out
+}
+
+/// Where an item of `id` stands in a to-do list, as [`Audit::todo`]
+/// lists them: errors and what the world or an op lacks (any other id)
+/// first, then stopped axes, unjudged checks, timeouts, incomplete cases,
+/// stale replays, unsaved ones and unreached methods. A union lists its
+/// reports' items so, whichever report each came from: a resumed
+/// campaign's in a fresh one's order.
+fn rank(id: &str) -> usize {
+    const AFTER: [&str; 7] =
+        ["axis:", "unjudged:", "timeout:", "incomplete:", "stale:", "replays:", "unreached:"];
+    AFTER.iter().position(|p| id.starts_with(p)).map_or(0, |k| k + 1)
 }
 
 /// An excuse's id or glob, why, and the items it closed.
@@ -740,6 +757,7 @@ impl<O: fmt::Debug> Audit<O> {
             excused,
             fixed: self.fixed.iter().cloned().collect(),
             incomplete: self.incomplete.clone(),
+            incomplete_cases: self.incomplete_cases,
             ran_curves: !self.curves.is_empty(),
             parts: vec![self.part.clone()],
             ..self.r.clone()
@@ -1127,6 +1145,72 @@ mod tests {
         assert_eq!(u.timings, [("scan".to_owned(), 2.0), ("curves".to_owned(), 1.0)]);
         assert!(u.ran_curves);
         assert!(!union(&[], &[a]).ran_curves);
+    }
+
+    /// An audit whose `cases` hold to-do items of every kind, each one
+    /// `tagged`: what the world lacks, a stopped axis, an unjudged check,
+    /// a timeout, an incomplete case, a stale replay, replays not saved
+    /// and an unreached method; with `error`, a harness error too.
+    fn of_every_kind(tags: &[&str], cases: u32, error: bool) -> Audit<u8> {
+        use super::super::axes::{Axis, AxisKind, How};
+        let mut a = Audit::new("a campaign".into());
+        a.r.cases = cases;
+        a.r.errors.extend(error.then(|| "a harness error".to_owned()));
+        let idle = super::super::Judged { check: "idle".into(), idle: cases, ..Default::default() };
+        a.r.judged.insert("idle".into(), idle);
+        a.r.paths.unreached.push("c.near::never".into());
+        for tag in tags {
+            a.unmoved.push(Todo::new(format!("length:{tag}"), "one length".into(), ""));
+            let how = How::Arg { pointer: format!("/{tag}"), string: false };
+            let axis = Axis { name: format!("/{tag}"), kind: AxisKind::Number, at: 1, how };
+            a.curves.push(CurveRow {
+                site: "c.near::m".into(),
+                resource: super::super::Resource::ReceiptGas,
+                step: 0,
+                axis,
+                points: vec![(1, 1)],
+                forwarded: vec![],
+                limit: 2,
+                limits: vec![2],
+                slope: 0.0,
+                reach: Reach::Stopped("refused".into()),
+                moved_to: 1,
+                elsewhere: vec![],
+                plan: super::super::Plan::new(),
+                replay: None,
+                steps: vec![],
+                case: Default::default(),
+                fired: vec![],
+                stop: None,
+            });
+            a.timeouts.push(format!("step 0, {tag}"));
+            a.incomplete.push((format!("Op, /{tag}"), "skipped".into()));
+            a.stale.push((format!("{tag}.json"), "gone".into()));
+            a.unsaved.push((format!("{tag}/"), "read-only".into()));
+        }
+        a
+    }
+
+    /// A resumed campaign's to-do list is in the order of a fresh run's
+    /// of the same items, wherever each came from: every kind in its
+    /// place, a part's items in case order. Before, a union listed the
+    /// reports' items one report after another, then the unjudged,
+    /// unreached and incomplete ones: a saved `timeout:` item came before
+    /// an `unjudged:` one, which a fresh run lists first.
+    #[test]
+    fn a_resumed_report_lists_its_items_as_a_fresh_one_does() {
+        let ids = |a: &Audit<u8>| a.report().todo.into_iter().map(|t| t.id).collect::<Vec<_>>();
+        let fresh = of_every_kind(&["a", "b"], 2, true);
+        assert_eq!(ids(&fresh).len(), 15, "{:#?}", fresh.todo());
+        // Resumed with nothing left to run.
+        let mut done = of_every_kind(&[], 0, false);
+        done.r.judged.clear();
+        done.prior = Some(Box::new(fresh.report()));
+        assert_eq!(ids(&done), ids(&fresh));
+        // Resumed half way: `a` the saved part's, `b` its own.
+        let mut half = of_every_kind(&["b"], 1, false);
+        half.prior = Some(Box::new(of_every_kind(&["a"], 1, true).report()));
+        assert_eq!(ids(&half), ids(&fresh));
     }
 
     fn n(k: usize, what: &str) -> Vec<String> {

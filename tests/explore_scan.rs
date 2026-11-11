@@ -634,3 +634,97 @@ fn reorder_holds_nothing_on_a_chain_of_callbacks() {
     assert_eq!(audit.cases(), 1, "{audit}");
     assert!(audit.errors().is_empty(), "{audit}");
 }
+
+/// An edge whose op skipped is no complete case: at `n = 0` (or past 3)
+/// one op skips and the other runs, which the check judges, while it
+/// can't judge any case of two calls or more, or of a call the sweep
+/// sends from `axis.near`. Every case but those edges is incomplete, so
+/// nothing was tried to its end: not clean.
+/// Before, those edges counted as complete cases and the audit read
+/// clean.
+///
+/// Verification boundary: the scan's verdict over actual runs.
+#[test]
+fn a_scan_whose_only_judged_cases_are_skipped_edges_is_not_clean() {
+    let sim = Fixture::new()
+        .account("alice.near", Balance::from_near(10))
+        .contract("c.near", wat::parse_str(GOES).unwrap())
+        .build();
+    let fixture = sim.txs().len();
+    // Judged after one call of alice's at most, and none sent from elsewhere.
+    let h = Harness::<Few>::new(sim).at_rest("one call of alice's", move |s: &Sim| {
+        let signer = |tx| s.outcome(tx).receipts.first().map(|r| r.predecessor_id.to_string());
+        let signers: Vec<_> = s.txs()[fixture..].iter().map(signer).collect();
+        if signers.len() <= 1 && signers.iter().flatten().all(|a| a == "alice.near") {
+            Ok(())
+        } else {
+            Err(Fail::not_judged(format!("signed by {signers:?}")))
+        }
+    });
+    let plan = Plan::new().op(Few { n: 1 }).op(Few { n: 1 });
+    let audit = h.scan(&[plan]).faults(Faults::edges()).run();
+    let skipped = audit.incomplete().iter().filter(|e| e.1.contains("edge not tried"));
+    assert!(skipped.count() > 0, "{:#?}\n{audit}", audit.incomplete());
+    assert!(audit.found().is_empty() && audit.errors().is_empty(), "{audit}");
+    assert!(!audit.is_clean(), "no case tried to its end: {:#?}\n{audit}", audit.incomplete());
+}
+
+/// A resumed scan is clean as the whole campaign is: a saved part's
+/// finding or harness error makes it not clean, as its summary says, and
+/// a saved part whose every case was incomplete has no complete case. A
+/// resume that runs no case of its own is clean if the saved part is.
+/// Before, `is_clean` read only the resumed run's own part: a saved
+/// finding or error read clean, and a clean campaign resumed with
+/// nothing left to run read not clean.
+///
+/// Verification boundary: the scan's verdict over actual runs, resumed
+/// from saves files this scan wrote, some with a planted finding, error
+/// or count.
+#[test]
+fn a_resumed_scan_is_clean_only_if_its_saved_part_is() {
+    let dir = std::env::temp_dir().join(format!("resumed-clean-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let sim = Fixture::new()
+        .account("alice.near", Balance::from_near(10))
+        .contract("c.near", wat::parse_str(GOES).unwrap())
+        .build();
+    let h = Harness::<Few>::new(sim).store(dir.join("found"));
+    let h = h.at_rest("anything", |_: &Sim| Ok::<(), String>(()));
+    let plan = Plan::new().op(Few { n: 2 });
+    let path = dir.join("scan.json");
+    let scan = || h.scan(std::slice::from_ref(&plan)).faults(Faults::edges()).saves(&path, 1);
+    let whole = scan().run();
+    assert!(whole.is_clean() && whole.cases() > 1, "{whole}");
+    let saved: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let done = saved["done"].as_u64().unwrap();
+    assert!(done > 1, "{saved}");
+    // The saves file, `plant`ed, resumed with `left` variants to run.
+    let resumed = |left: u64, plant: &dyn Fn(&mut serde_json::Value)| {
+        let mut v = saved.clone();
+        v["done"] = json!(done - left);
+        plant(&mut v);
+        std::fs::write(&path, v.to_string()).unwrap();
+        scan().run()
+    };
+    let none = |_: &mut serde_json::Value| {};
+    let ran = resumed(1, &none);
+    assert!(ran.is_clean() && ran.cases() == 1, "one variant run, clean: {ran}");
+    let all_done = resumed(0, &none);
+    assert!(all_done.is_clean() && all_done.cases() == 0, "nothing left to run: {all_done}");
+    let row = json!({
+        "kind": "check", "check": "anything", "site": "c.near", "label": "shown",
+        "message": "planted", "cases": 1, "steps": [], "replay": null, "id": "planted",
+    });
+    let found = resumed(1, &|v| v["findings"] = json!([row]));
+    assert!(found.found().is_empty(), "the finding is the saved part's: {found}");
+    assert!(found.to_string().contains("1 finding(s)"), "{found}");
+    assert!(!found.is_clean(), "a saved finding: {found}");
+    let error = resumed(1, &|v| v["errors"] = json!(["planted: a harness error"]));
+    assert!(error.errors().is_empty() && error.to_string().contains("planted"), "{error}");
+    assert!(!error.is_clean(), "a saved error: {error}");
+    let cases = saved["cases"].clone();
+    let incomplete = resumed(0, &|v| v["incomplete_cases"] = cases.clone());
+    assert!(!incomplete.is_clean(), "no complete case in the saved part: {incomplete}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

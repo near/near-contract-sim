@@ -434,7 +434,8 @@ pub(crate) fn step_edges<O: Op<W>, W: World>(
 /// variant, into `audit`: the gas bands it measured, the case itself,
 /// and, for an edge whose op `step` skipped, an open `incomplete:` item
 /// naming it (`whose`, the witness or case it varies): an edge not tried
-/// is never a pass. A later op skipping is what the edge did.
+/// is never a pass, nor a complete case. A later op skipping is what the
+/// edge did.
 pub(crate) fn take_in<O: Clone + std::fmt::Debug>(
     audit: &mut Audit<O>,
     run: &Run<O>,
@@ -462,6 +463,7 @@ pub(crate) fn take_in<O: Clone + std::fmt::Debug>(
         && run.verdict != Verdict::Incomplete
     {
         let family = super::audit::family(Some(op), Some(axis));
+        audit.incomplete_cases += 1;
         audit.incomplete.push((
             family,
             format!("{whose}, {at}: edge not tried: op skipped: {op} (step {step}): {why}"),

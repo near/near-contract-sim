@@ -651,11 +651,16 @@ impl<O> Audit<O> {
     }
 
     /// Nothing found, nothing wrong, and some case complete (its verdict
-    /// not incomplete): no check failed in what was tried (not that none
-    /// can). What wasn't tried is open: [`incomplete`](Self::incomplete),
-    /// [`todo`](Self::todo).
+    /// not incomplete, nor a scan's edge whose op skipped): no check
+    /// failed in what was tried (not that none can). A resumed campaign's
+    /// saved part counts as its own. What wasn't tried is open:
+    /// [`incomplete`](Self::incomplete), [`todo`](Self::todo).
     pub fn is_clean(&self) -> bool {
-        self.found.is_empty() && self.r.errors.is_empty() && self.incomplete_cases < self.r.cases
+        let saved = self.prior.as_deref();
+        let (found, errors) = saved.map_or((0, 0), |p| (p.findings.len(), p.errors.len()));
+        let (cases, incomplete) = saved.map_or((0, 0), |p| (p.cases, p.incomplete_cases));
+        (self.found.is_empty() && found == 0 && self.r.errors.is_empty() && errors == 0)
+            && self.incomplete_cases + incomplete < self.r.cases + cases
     }
 
     /// [`is_clean`](Self::is_clean), or a panic printing the audit.
