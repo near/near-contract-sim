@@ -482,15 +482,12 @@ pub(crate) fn fault_injects<O>(
     let mut out = vec![];
     let Some(txs) = witness.spawned.get(i) else { return out };
     let outcomes: Vec<&crate::TxOutcome> = witness.step_txs(i).collect();
-    // A plan's injection names its transaction by a `u8`: those past the
-    // 256th get none, rather than one meant for another.
-    for (tx, (spawned, buffered)) in txs.iter().enumerate().take(usize::from(u8::MAX) + 1) {
+    for (tx, (spawned, buffered)) in txs.iter().enumerate() {
         let mut tried = vec![];
         let mut push = |n: usize, fault: Fault| {
             let (at, site) = (address(spawned, n, &fault), spawned[n].site());
             let meant = Meant { step: i, tx, n, site };
-            let tx = u8::try_from(tx).expect("at most 256 transactions");
-            out.push((Inject { tx, at, fault }, meant));
+            out.push((Inject { tx: tx as u32, at, fault }, meant));
         };
         for arm in faults.arms() {
             for fault in &arm.faults {
@@ -752,8 +749,7 @@ mod tests {
     }
 
     /// Each injection names the transaction its receipt is in, past the
-    /// 256th too: those get none, since a step's injection names its
-    /// transaction by a `u8`, and none lands on another transaction.
+    /// 256th too: each of 258 gets its own.
     #[test]
     fn a_fault_is_meant_for_the_transaction_it_names() {
         let h = Harness::<Raw>::new(purse());
@@ -779,9 +775,16 @@ mod tests {
                 fault_injects(&faults, &run, 0)
             })
         });
-        assert_eq!(injects.len(), 256);
+        // The last goes to its transaction, past the 256th, and no other.
+        let mut hook = super::super::Hook::new(None, vec![injects[257].0.clone()], vec![]);
+        let got: Vec<usize> = (0..300)
+            .filter(|_| !hook.prepare(&mut [], &[], Gas::from_teragas(300)).is_empty())
+            .collect();
+        assert_eq!(got, [257]);
+        let txs: Vec<usize> = injects.iter().map(|(_, meant)| meant.tx).collect();
+        assert_eq!(txs, (0..258).collect::<Vec<_>>());
         for (inject, meant) in &injects {
-            assert_eq!(usize::from(inject.tx), meant.tx, "{inject}");
+            assert_eq!(inject.tx as usize, meant.tx, "{inject}");
         }
     }
 

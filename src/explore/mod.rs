@@ -176,7 +176,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
 
 /// The version of the JSON files exploration writes; none reads as 0.
-pub(crate) const FORMAT: u32 = 3;
+pub(crate) const FORMAT: u32 = 4;
 
 /// What a harness clones per case: a [`Sim`], or a struct of your own
 /// around one.
@@ -409,17 +409,15 @@ impl From<Unobserved> for Fail {
 /// unpinned, so a plan step's gas reaches it. Any plan can hold one
 /// ([`Plan::call`]).
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(into = "args::Saved", from = "args::Saved")]
 pub struct Call {
     pub(crate) signer: AccountId,
     pub(crate) receiver: AccountId,
     pub(crate) method: String,
-    #[serde(with = "args")]
     pub(crate) args: Vec<u8>,
     pub(crate) deposit: Balance,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) gas: Option<Gas>,
     /// The op a repeat or a tail copies this call from, if it does.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) copies: Option<Box<Copied>>,
 }
 
@@ -459,30 +457,70 @@ impl Debug for Call {
     }
 }
 
-/// A call's args in a plan file: JSON when they are (an axis edits them),
-/// else bytes.
+/// A call in a plan file. Its args are JSON when they are (an axis edits
+/// them), else bytes; JSON args other than serde_json writes them (keys
+/// unsorted, spaces) are also kept as sent, in `args_text` beside them
+/// (where no axis reads), and sent while the JSON is unedited.
 mod args {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use super::{AccountId, Balance, Call, Copied, Gas};
+    use serde::{Deserialize, Serialize};
+    use serde_json::Value;
 
     #[derive(Serialize, Deserialize)]
     #[serde(untagged)]
     enum Args {
-        Json { json: serde_json::Value },
+        Json { json: Value },
         Bytes { bytes: Vec<u8> },
     }
 
-    pub(super) fn serialize<S: Serializer>(args: &[u8], s: S) -> Result<S::Ok, S::Error> {
-        match serde_json::from_slice::<serde_json::Value>(args) {
-            Ok(json) if !args.is_empty() => Args::Json { json }.serialize(s),
-            _ => Args::Bytes { bytes: args.to_vec() }.serialize(s),
+    #[derive(Serialize, Deserialize)]
+    pub(super) struct Saved {
+        signer: AccountId,
+        receiver: AccountId,
+        method: String,
+        args: Args,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        args_text: Option<String>,
+        deposit: Balance,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        gas: Option<Gas>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        copies: Option<Box<Copied>>,
+    }
+
+    impl From<Call> for Saved {
+        fn from(c: Call) -> Self {
+            let json = serde_json::from_slice::<Value>(&c.args).ok().filter(|_| !c.args.is_empty());
+            let (args, args_text) = match json {
+                Some(json) => {
+                    let canonical = serde_json::to_vec(&json).expect("JSON serializes");
+                    let text =
+                        String::from_utf8(c.args).ok().filter(|t| *t.as_bytes() != canonical);
+                    (Args::Json { json }, text)
+                }
+                None => (Args::Bytes { bytes: c.args }, None),
+            };
+            let Call { signer, receiver, method, deposit, gas, copies, .. } = c;
+            Saved { signer, receiver, method, args, args_text, deposit, gas, copies }
         }
     }
 
-    pub(super) fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
-        Ok(match Args::deserialize(d)? {
-            Args::Json { json } => serde_json::to_vec(&json).expect("JSON serializes"),
-            Args::Bytes { bytes } => bytes,
-        })
+    impl From<Saved> for Call {
+        fn from(s: Saved) -> Self {
+            let args = match s.args {
+                Args::Json { json } => {
+                    let unedited =
+                        |t: &String| serde_json::from_str::<Value>(t).ok().as_ref() == Some(&json);
+                    match s.args_text.filter(unedited) {
+                        Some(text) => text.into_bytes(),
+                        None => serde_json::to_vec(&json).expect("JSON serializes"),
+                    }
+                }
+                Args::Bytes { bytes } => bytes,
+            };
+            let Saved { signer, receiver, method, deposit, gas, copies, .. } = s;
+            Call { signer, receiver, method, args, deposit, gas, copies }
+        }
     }
 }
 
@@ -503,7 +541,7 @@ impl Call {
 
     /// The args as JSON, as [`Tx::args_json`](crate::Tx::args_json) does
     /// but written as a plan file writes them (an object's keys sorted),
-    /// so a saved plan sends the same bytes and a scan edits its fields.
+    /// so a plan file holds them once, as JSON a scan edits.
     #[track_caller]
     pub fn args_json(mut self, args: impl Serialize) -> Self {
         let json = serde_json::to_value(&args).and_then(|v| serde_json::to_vec(&v));
@@ -512,7 +550,7 @@ impl Call {
         self
     }
 
-    /// The args, as bytes.
+    /// The args, as bytes; a saved plan sends them as given.
     pub fn args(mut self, args: impl Into<Vec<u8>>) -> Self {
         self.args = args.into();
         self
@@ -548,6 +586,11 @@ impl<W: AsMut<Sim>> Op<W> for Call {
 
     fn name(&self) -> String {
         self.method.clone()
+    }
+
+    /// Every argument, but not its args as written (`args_text`).
+    fn axes(&self) -> Axes {
+        Axes::auto().except("/args_text")
     }
 }
 
@@ -607,6 +650,51 @@ mod tests {
         let axes = axes::arg_axes::<Call, crate::Sim>(&Act::Call(derived));
         let names: Vec<&str> = axes.iter().map(|a| a.name.as_str()).collect();
         assert!(names.contains(&"/args/json/b") && names.contains(&"/args/json/a"), "{names:?}");
+    }
+
+    /// JSON args written by hand, or copied from a receipt, come back from
+    /// a plan file as they were sent: keys unsorted, spaces, a newline, an
+    /// escape. A canonical call's file holds no copy of them.
+    #[test]
+    fn a_calls_written_args_round_trip_byte_for_byte() {
+        let call = |args: &str| Call::new("a.near", "b.near", "m").args(args);
+        let round = |c: &Call| serde_json::from_str::<Call>(&serde_json::to_string(c).unwrap());
+        for args in [r#"{"b":1,"a":2}"#, "{ \"a\": [1, 2] }\n", r#"{"a":"A"}"#, "7 "] {
+            let back = round(&call(args)).unwrap();
+            assert_eq!(String::from_utf8(back.args).unwrap(), args);
+        }
+        let canonical = serde_json::to_string(&call(r#"{"a":2,"b":1}"#)).unwrap();
+        assert!(!canonical.contains("args_text"), "{canonical}");
+        // Two calls apart only in key order are two plans, not one.
+        let plan = |args| serde_json::to_string(&Plan::<Call>::new().call(call(args))).unwrap();
+        assert_ne!(plan(r#"{"b":1,"a":2}"#), plan(r#"{"a":2,"b":1}"#));
+    }
+
+    /// An edit of the JSON (an axis's) sends the edited JSON, and text that
+    /// no longer reads as the JSON is passed over: the JSON is sent.
+    #[test]
+    fn edited_args_send_their_json() {
+        let call = Call::new("a.near", "b.near", "m").args(r#"{"b":1, "a":2}"#);
+        let json = serde_json::to_value(&call).unwrap();
+        let mut edited = json.clone();
+        edited["args"]["json"]["a"] = 5.into();
+        let back: Call = serde_json::from_value(edited).unwrap();
+        assert_eq!(back.args, br#"{"a":5,"b":1}"#);
+        let mut garbled = json;
+        garbled["args_text"] = "{".into();
+        let back: Call = serde_json::from_value(garbled).unwrap();
+        assert_eq!(back.args, br#"{"a":2,"b":1}"#);
+    }
+
+    /// A call's copy of its written args is no axis, as an op either.
+    #[test]
+    fn a_calls_written_args_are_no_axis() {
+        let names = |args: &str| {
+            let call = Call::new("a.near", "b.near", "m").args(args);
+            let (axes, fixed) = axes::args::<Call, crate::Sim>(&Act::Op(call));
+            (axes.into_iter().map(|a| a.name).collect::<Vec<_>>(), fixed)
+        };
+        assert_eq!(names(r#"{"s":"x", "n":1}"#), names(r#"{"n":1,"s":"x"}"#));
     }
 
     /// `Fail::all` flattens the failures of a nested one, passes over what

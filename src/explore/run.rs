@@ -297,8 +297,13 @@ impl<O> Run<O> {
     }
 
     /// Which recorded result differs from `other`'s, if any: a run of the
-    /// same plan on the same fixture runs the same way.
+    /// same plan on the same fixture runs the same way. A run that ran past
+    /// the case timeout stopped at whatever block the clock let it reach, so
+    /// it says nothing about determinism: none differs then.
     pub(crate) fn differs_from(&self, other: &Run<O>) -> Option<&'static str> {
+        if self.timed_out || other.timed_out {
+            return None;
+        }
         ((self.fingerprint != other.fingerprint).then_some("outcomes"))
             .or((self.findings != other.findings).then_some("findings"))
             .or((self.judged != other.judged).then_some("judgments"))
@@ -682,7 +687,7 @@ fn target<O>(
         if !plan.steps[j].inject.is_empty() || baseline.ops.get(j)?.skipped.is_some() {
             return None;
         }
-        let (spawned, buffered) = baseline.spawned.get(j)?.get(usize::from(inject.tx))?;
+        let (spawned, buffered) = baseline.spawned.get(j)?.get(inject.tx as usize)?;
         if !inject.fault.is_hold() && !buffered.is_empty() {
             return None;
         }
@@ -1742,7 +1747,7 @@ impl<'h, O: Op<W>, W: World> Case<'h, O, W> {
         let chain = &self.world.as_ref().chain;
         for (i, (step, op)) in self.plan.steps.iter().zip(&self.ops).enumerate() {
             for (k, inject) in step.inject.iter().enumerate() {
-                let tx = op.record.txs.get(usize::from(inject.tx));
+                let tx = op.record.txs.get(inject.tx as usize);
                 // Its position among the injections of its transaction.
                 let at = step.inject[..k].iter().filter(|x| x.tx == inject.tx).count();
                 let won = tx.and_then(|t| chain.won(t).iter().find(|(n, _)| *n == at));
