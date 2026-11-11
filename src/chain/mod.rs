@@ -735,15 +735,16 @@ mod tests {
         let expires_at = stale(&mut sim);
         sim.set_height(expires_at);
         assert!(sim.yields().is_empty() && !sim.is_idle());
-        let (key, setups) = (std::time::SystemTime::now(), std::cell::Cell::new(0));
+        let setups = std::cell::Cell::new(0);
         let cached = || {
-            crate::Sim::cached(key, || {
+            crate::Sim::cached("a stale head", || {
                 setups.set(setups.get() + 1);
                 sim.clone()
             })
         };
+        // The second call loads, whether the first ran the setup or loaded.
         assert!(!cached().is_idle() && !cached().is_idle());
-        assert_eq!(setups.get(), 1, "saved, then loaded");
+        assert!(setups.get() <= 1, "saved, then loaded");
         sim.findings().assert_none();
         sim.chain.log.minted += 1;
         let vs = sim.findings();

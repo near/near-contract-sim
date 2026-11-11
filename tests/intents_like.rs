@@ -648,8 +648,8 @@ fn a_search_finds_a_reentering_receiver_and_replays_it() {
         .at_rest("the custody is backed", custody_is_backed)
         .must_not_fail("resolve_deposit");
     let ops = any::<bool>().prop_map(|reenter| Notified { reenter });
-    let report =
-        harness.search(plans(ops).len(1..=3).faults(Faults::none())).seed(3).cases(32).run();
+    let strategy = plans(ops).len(1..=3).faults(Faults::none());
+    let report = harness.search(strategy).seed(3).cases(32).shrink_untimed().run();
     let found = report
         .found_at("the custody is backed", "world")
         .unwrap_or_else(|| panic!("{report}"))

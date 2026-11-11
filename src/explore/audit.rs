@@ -659,14 +659,17 @@ impl<O> Audit<O> {
     }
 
     /// [`reached`](Self::reached) at least once, or by an audit this one
-    /// was run [`with`](super::Curves::with); else a panic listing what was.
-    /// This run's alone, not a resumed campaign's saved part's:
-    /// [`todo`](Self::todo)'s `unreached:` items cover both.
+    /// was run [`with`](super::Curves::with), or, resumed, by the campaign's
+    /// saved part, as the summary counts it; else a panic listing what was.
     #[track_caller]
     pub fn assert_reached(&self, site: &str) {
-        let all: Vec<&String> = self.r.reached.keys().chain(&self.r.covered_sites).collect();
+        let saved: Vec<&String> =
+            (self.prior.iter()).flat_map(|p| p.reached.keys().chain(&p.covered_sites)).collect();
+        let by_saved = saved.iter().any(|s| super::check::site_matches(site, s));
+        let all: Vec<&String> =
+            self.r.reached.keys().chain(&self.r.covered_sites).chain(saved).collect();
         assert!(
-            self.covers(site),
+            self.covers(site) || by_saved,
             "no case of {} reached {site:?}; reached: {all:?}",
             self.r.cases
         );

@@ -307,8 +307,8 @@ contracts with tokens. A scan runs a few dozen variants per witness
 step; curves at most 19 runs per axis. Narrow curves with `curve(..)`
 or `Axes::only` before you cut seeds.
 
-- A case past a minute stops and is a `timeout:` to-do item. A costly
-  at-rest check can run once per case with `Harness::at_end` or
-  `Books::at_end()`.
+- A case past a minute (`NEAR_SIM_CASE_TIMEOUT` seconds, `0` none) stops
+  and is a `timeout:` to-do item. A costly at-rest check can run once per
+  case with `Harness::at_end` or `Books::at_end()`.
 - `.saves(path, every)` saves a report as it goes and resumes on the same fixture, checks, binary
   and enumeration ops and faults, else starts over; resumed, `found_at` gives a saved row as `Shown::Saved` (no case; `assert_found` panics on it).

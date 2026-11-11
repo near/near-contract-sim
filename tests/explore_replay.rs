@@ -226,8 +226,8 @@ fn a_search_leaves_one_replay_per_row() {
         .len(1..=2)
         .gas(gas::off())
         .faults(Faults::new(Receipts::all(), [Fault::Hold(1)]).per_case(0.5));
-    let audit =
-        Harness::new(sim).store(&dir).search(strategy).seed(4).cases(16).saves(&saves, 2).run();
+    let h = Harness::new(sim).store(&dir);
+    let audit = h.search(strategy).seed(4).cases(16).saves(&saves, 2).shrink_untimed().run();
     let found = audit.assert_found(builtin::UNHANDLED_FAILURE, "missing.near::run");
     assert!(found.replay.as_ref().is_some_and(|p| p.exists()), "{audit}");
     // Its sites are its own receipt's, and a call to no code reaches none:
