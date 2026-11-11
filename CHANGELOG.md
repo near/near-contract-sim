@@ -17,7 +17,7 @@ its changes follow the same rules.
 
 ### Fixed
 
-- Key snapshots on the wasm their setups read, correct stale docs ([#28](https://github.com/near/near-contract-sim/pull/28))
+- Docs: a failed callback's deposit is refunded to the contract (`NearKind::DepositRefund`, transactions.md); sim.md lists every `NEAR_SIM_*` variable ([#28](https://github.com/near/near-contract-sim/pull/28))
 - explore: Measure a batch receipt's gas margin, judge a resume by its own excuses, no axis on a wrapped call's written args ([#29](https://github.com/near/near-contract-sim/pull/29))
 
 ## 0.2.0 (2026-11-11)
