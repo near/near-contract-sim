@@ -2,8 +2,9 @@
 //!
 //! The keys are constant plus the wasm their setups read, so a run leaves no
 //! new files: a test compares a setup built afresh with the second of two
-//! calls, which loads, whether the first one ran the setup or loaded too. Concurrent misses are a unit test
-//! of `src/cache.rs`, over a file of its own.
+//! calls, which loads, whether the first one ran the setup or loaded too.
+//! Concurrent misses are a unit test of `src/cache.rs`, over a file of its
+//! own.
 
 mod common;
 use common::*;
