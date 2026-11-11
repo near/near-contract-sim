@@ -861,6 +861,7 @@ struct near_contract_sim::explore::Search method run = pub fn run(self) -> Audit
 struct near_contract_sim::explore::Search method saves = pub fn saves(self, path: impl Into<PathBuf>, every: usize) -> Self
 struct near_contract_sim::explore::Search method seed = pub fn seed(self, seed: u64) -> Self
 struct near_contract_sim::explore::Search method seeds = pub fn seeds(self, n: u32) -> Self
+struct near_contract_sim::explore::Search method shrink_untimed = pub fn shrink_untimed(self) -> Self
 struct near_contract_sim::explore::Skip = pub struct Skip(pub String);
 struct near_contract_sim::explore::Skip structfield 0 = 0: String
 struct near_contract_sim::explore::Todo = pub struct Todo

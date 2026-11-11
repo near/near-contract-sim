@@ -30,6 +30,8 @@ const CASES: u32 = 256;
 const SHRINK_TIME: Duration = Duration::from_secs(60);
 /// The most wall time a seed's shrinking takes in all.
 const SHRINKS: Duration = Duration::from_secs(15 * 60);
+/// An untimed shrink's deadline: far enough that only run limits stop it.
+const UNTIMED: Duration = Duration::from_secs(1 << 28);
 /// Plans a shrink meets again, judged already, before it stops.
 const REPEATS: u32 = 256;
 /// A shown row's shrink runs per value in its plan: a u128's binary
@@ -52,6 +54,7 @@ pub struct Search<'h, O, W> {
     seed: Option<u64>,
     seeds: u32,
     saves: Option<Saves>,
+    untimed: bool,
 }
 
 impl<O: Op<W>, W: World> Harness<O, W> {
@@ -61,7 +64,8 @@ impl<O: Op<W>, W: World> Harness<O, W> {
     /// as [`Found::original`](super::Found::original).
     pub fn search(&self, plans: impl Strategy<Value = Plan<O>> + 'static) -> Search<'_, O, W> {
         let plans = plans.boxed();
-        Search { harness: self, plans, cases: CASES, seed: None, seeds: 1, saves: None }
+        let (seed, saves) = (None, None);
+        Search { harness: self, plans, cases: CASES, seed, seeds: 1, saves, untimed: false }
     }
 }
 
@@ -86,6 +90,15 @@ impl<O: Op<W>, W: World> Search<'_, O, W> {
         self
     }
 
+    /// Shrinks each finding until its run limits alone stop it, with no
+    /// wall-clock budget: a report that doesn't depend on the machine's
+    /// speed or load, for a test that asserts how a finding shrank. Each
+    /// shrink's runs stay bounded; its time doesn't.
+    pub fn shrink_untimed(mut self) -> Self {
+        self.untimed = true;
+        self
+    }
+
     /// Writes the report so far to `path` every `every` cases and after
     /// each seed's shrinking, as [`Scan::saves`](super::Scan::saves) does: a
     /// search that finds the file (of this fixture) resumes after the
@@ -100,7 +113,8 @@ impl<O: Op<W>, W: World> Search<'_, O, W> {
     /// A seed's shrinking takes as long as its cases did, or a minute per
     /// shown finding if that is longer, at most 15 minutes: shown findings
     /// first, each its share of what is left and at least a minute, then
-    /// forced ones share the rest; a finding not fully shrunk says so. Its
+    /// forced ones share the rest; a finding not fully shrunk says so
+    /// ([`shrink_untimed`](Self::shrink_untimed) drops the clock). Its
     /// replays are saved ([`Harness::store`](super::Harness::store)).
     pub fn run(self) -> Audit<O> {
         // The strategy is dropped on the big stack too.
@@ -119,6 +133,12 @@ impl<O: Op<W>, W: World> Search<'_, O, W> {
             (0, None)
         });
         audit.r.what = format!("search of {cases} case(s) per seed");
+        if cases.checked_mul(self.seeds).is_none() {
+            let seeds = self.seeds;
+            let why = format!("{cases} case(s) a seed for {seeds} seeds: past {} in all", u32::MAX);
+            audit.r.errors.push(why);
+            return audit;
+        }
         if cases == 0 {
             return audit;
         }
@@ -245,8 +265,9 @@ impl<O: Op<W>, W: World> Search<'_, O, W> {
     /// what is left and at least [`SHRINK_TIME`], then forced ones and
     /// whatever turned up while they shrank (by the plan reducer) share the
     /// rest. The budget is seed `k`'s case time `took`, or [`SHRINK_TIME`]
-    /// per shown row if that is longer, at most [`SHRINKS`]. A candidate
-    /// still running at its row's deadline is cut there. Replays are
+    /// per shown row if that is longer, at most [`SHRINKS`], or no time
+    /// limit if untimed. A candidate still running at its row's deadline
+    /// is cut there. Replays are
     /// written when the search finishes; a saves file holds the rows
     /// before.
     fn shrink_all(
@@ -260,7 +281,7 @@ impl<O: Op<W>, W: World> Search<'_, O, W> {
         }
         new.sort_by_key(|(i, _)| !audit.found[*i].id.faults.is_empty());
         let shown = new.iter().filter(|(i, _)| audit.found[*i].id.faults.is_empty()).count();
-        let budget = shrink_budget(took, shown);
+        let budget = if self.untimed { UNTIMED } else { shrink_budget(took, shown) };
         let (from, end) = (audit.found.len(), Instant::now() + budget);
         let out = |i: usize, audit: &mut Audit<O>| {
             let why = format!("the search's shrink budget ({budget:.0?}) ran out first");
@@ -272,7 +293,7 @@ impl<O: Op<W>, W: World> Search<'_, O, W> {
         };
         let n = new.len();
         let what = format!("shrinking the findings of seed {} of {}", k + 1, self.seeds);
-        let phase = progress::phase(what, n as u32, Some(end));
+        let phase = progress::phase(what, n as u32, (!self.untimed).then_some(end));
         for (k, (i, case_seed)) in new.into_iter().enumerate() {
             phase.step(k as u32, (n + audit.found.len() - from) as u32);
             if Instant::now() >= end {
@@ -286,7 +307,12 @@ impl<O: Op<W>, W: World> Search<'_, O, W> {
             };
             self.shrink(audit, i, &case_seed, until);
         }
-        for i in from..audit.found.len() {
+        // Rows shown while these shrink are shrunk in turn: the length
+        // is read again each time, the deadline bounding it.
+        let mut next = from;
+        while next < audit.found.len() {
+            let i = next;
+            next += 1;
             phase.step((n + i - from) as u32, (n + audit.found.len() - from) as u32);
             if Instant::now() >= end {
                 out(i, audit);

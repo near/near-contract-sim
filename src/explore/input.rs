@@ -335,18 +335,19 @@ pub enum Shape {
 
 impl Shape {
     /// `value` as JSON in this shape. `()` is no bytes, not `null`, as in
-    /// [`Reply::json(())`](crate::Reply::json).
+    /// [`Reply::json(())`](crate::Reply::json): `Valid` is empty, `Huge`,
+    /// `Bytes` and `Limit` are only padding, `Malformed` is `{` and
+    /// `Unknown` is `{"unknown":null}`.
     #[track_caller]
     pub fn json(self, value: impl Serialize) -> String {
         let void = std::mem::size_of_val(&value) == 0;
         let value = serde_json::to_value(value).expect("a JSON value");
-        let void = void && value.is_null();
+        let valid = if void && value.is_null() { String::new() } else { value.to_string() };
         match self {
-            Shape::Valid if void => String::new(),
-            Shape::Valid => value.to_string(),
+            Shape::Valid => valid,
             Shape::Empty => String::new(),
             Shape::Malformed => {
-                let mut s = value.to_string();
+                let mut s = valid;
                 match s.len() {
                     0 | 1 => "{".into(),
                     _ => {
@@ -366,15 +367,17 @@ impl Shape {
                 }
                 other => serde_json::json!({ "unknown": other }).to_string(),
             },
-            Shape::Huge => value.to_string() + &" ".repeat(HUGE),
-            Shape::Bytes(n) => {
-                let s = value.to_string();
-                let pad = n.saturating_sub(s.len());
-                s + &" ".repeat(pad)
-            }
-            Shape::Limit => Shape::Bytes(default_limit()).json(value),
+            Shape::Huge => valid + &" ".repeat(HUGE),
+            Shape::Bytes(n) => pad_to(valid, n),
+            Shape::Limit => pad_to(valid, default_limit()),
         }
     }
+}
+
+/// `s` padded with spaces to `n` bytes, as it is if longer.
+fn pad_to(s: String, n: usize) -> String {
+    let pad = n.saturating_sub(s.len());
+    s + &" ".repeat(pad)
 }
 
 fn default_limit() -> usize {
@@ -517,17 +520,22 @@ pub(crate) fn compact(debug: &str) -> String {
     while i < chars.len() {
         match chars[i] {
             '"' => {
-                // A string literal: to the closing quote, escapes skipped.
-                let mut j = i + 1;
-                let mut len = 0;
-                while j < chars.len() && chars[j] != '"' {
-                    j += if chars[j] == '\\' { 2 } else { 1 };
-                    len += 1;
+                // A string literal: to the closing quote, its size the
+                // bytes its escapes stand for, its head whole escapes.
+                let (mut j, mut bytes, mut head) = (i + 1, 0, String::new());
+                for n in 0.. {
+                    if j >= chars.len() || chars[j] == '"' {
+                        break;
+                    }
+                    let (end, len) = debug_char(&chars, j);
+                    if n < 8 {
+                        head.extend(&chars[j..end]);
+                    }
+                    (j, bytes) = (end, bytes + len);
                 }
                 let lit: String = chars[i..=j.min(chars.len() - 1)].iter().collect();
-                if len > LONG {
-                    let head: String = chars[i + 1..].iter().take(8).collect();
-                    out.push_str(&format!("\"{head}…\" ({len} bytes)"));
+                if j - i - 1 > LONG {
+                    out.push_str(&format!("\"{head}…\" ({bytes} bytes)"));
                 } else {
                     out.push_str(&lit);
                 }
@@ -551,6 +559,22 @@ pub(crate) fn compact(debug: &str) -> String {
         }
     }
     out
+}
+
+/// The char of a `{:?}` string literal at `chars[at]`: where the next
+/// starts, and its UTF-8 size. `\u{1f}` is one byte, `é` two.
+fn debug_char(chars: &[char], at: usize) -> (usize, usize) {
+    match (chars[at], chars.get(at + 1)) {
+        ('\\', Some('u')) => {
+            let close = (at + 2..chars.len()).find(|&k| chars[k] == '}').unwrap_or(chars.len());
+            let hex: String =
+                chars[at + 2..close].iter().filter(|c| c.is_ascii_hexdigit()).collect();
+            let c = u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32);
+            ((close + 1).min(chars.len()), c.map_or(1, char::len_utf8))
+        }
+        ('\\', Some(_)) => (at + 2, 1),
+        (c, _) => (at + 1, c.len_utf8()),
+    }
 }
 
 /// The top-level items of the list opening at `chars[open]`, and its end.
@@ -748,6 +772,46 @@ mod tests {
         let nested = format!("{:?}", vec![vec![1u8; 3]; 9]);
         assert_eq!(compact(&nested), "[[1, 1, 1], [1, 1, 1], [1, 1, 1], … 9 items]");
         assert_eq!(compact("Deposit { n: 3 }"), "Deposit { n: 3 }");
+    }
+
+    /// `()` is no bytes in every shape that carries the value: padding
+    /// pads nothing, a cut one is `{`. `null` is a value.
+    #[test]
+    fn void_carries_no_null_in_any_shape() {
+        assert_eq!(Shape::Valid.json(()), "");
+        assert_eq!(Shape::Huge.json(()), " ".repeat(HUGE));
+        assert_eq!(Shape::Bytes(8).json(()), " ".repeat(8));
+        assert!(Shape::Limit.json(()).bytes().all(|b| b == b' '));
+        assert_eq!(Shape::Malformed.json(()), "{");
+        assert_eq!(Shape::Unknown.json(()), r#"{"unknown":null}"#);
+        assert_eq!(Shape::Bytes(6).json(None::<u8>), "null  ");
+        assert_eq!(Shape::Limit.json(None::<u8>).len(), default_limit());
+        assert!(Shape::Limit.json(None::<u8>).starts_with("null "));
+    }
+
+    /// A string is cut past 24 chars as printed, its quotes aside; one
+    /// cut short, unterminated, is kept as it is.
+    #[test]
+    fn a_compact_string_is_cut_past_24_chars() {
+        let op = format!("{:?}", ("a".repeat(24), "b".repeat(25)));
+        let a = "a".repeat(24);
+        assert_eq!(compact(&op), format!("(\"{a}\", \"bbbbbbbb…\" (25 bytes))"));
+        assert_eq!(compact("(\"ab"), "(\"ab");
+        assert_eq!(compact(&format!("(\"{}", "c".repeat(30))), "(\"cccccccc…\" (30 bytes)");
+    }
+
+    /// A long string's size is its bytes, not what `{:?}` prints: an
+    /// escaped control char is one byte, a multibyte char its UTF-8 size.
+    #[test]
+    fn a_compact_string_counts_the_bytes_its_escapes_stand_for() {
+        let (control, wide) = ("\u{1f}".repeat(30), "é".repeat(30));
+        let op = format!("{:?}", (&control, &wide, "\t\"".repeat(20)));
+        let head = "\\u{1f}".repeat(8);
+        let tabs = "\\t\\\"".repeat(4);
+        assert_eq!(
+            compact(&op),
+            format!("(\"{head}…\" (30 bytes), \"éééééééé…\" (60 bytes), \"{tabs}…\" (40 bytes))")
+        );
     }
 
     /// A drawn pick shrinks toward the first thing; a drawn answer toward

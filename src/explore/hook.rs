@@ -29,8 +29,8 @@ pub(crate) struct Hook {
     pub(crate) bands: Vec<(Gas, Gas, String)>,
     /// Whether to measure them.
     pub(crate) band: bool,
-    /// The args each call signed, as JSON (`null` if they aren't).
-    pub(crate) signed: Vec<serde_json::Value>,
+    /// The bytes of args its calls signed, JSON or not.
+    pub(crate) signed: usize,
     /// Its injections pass over a fault that can't apply, as a plan step's
     /// do, instead of panicking as [`Tx::inject`](crate::Tx::inject)'s do.
     pub(crate) lenient: bool,
@@ -55,7 +55,7 @@ impl Hook {
         for a in actions.iter() {
             if let Action::FunctionCall(fc) = a {
                 self.calls += 1;
-                self.signed.push(serde_json::from_slice(&fc.args).unwrap_or_default());
+                self.signed += fc.args.len();
             }
         }
         self.unpinned += unpinned.len() as u32;

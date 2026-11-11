@@ -170,8 +170,8 @@ one length in every case is a `length:` to-do item.
 
 A seed's new findings shrink, shown ones first, for as long as its cases
 ran: a minute a shown one at least, 15 in all at most (a cut shrink says
-so). One cause is one row: its other cases and checks are in its `also`,
-where `assert_found` finds them.
+so; `.shrink_untimed()` drops the clock). One cause is one row: its other
+cases and checks are in its `also`, where `assert_found` finds them.
 
 Two ops that must meet (a request and its redeem, a sign and its
 respond) pair in one of two ways. The second draws a `Pick`
