@@ -256,7 +256,7 @@ fn a_store_keeps_each_plan_of_a_finding() {
         v["plan"].clone()
     };
     let scan = h.scan(std::slice::from_ref(&forge)).faults(Faults::none()).run();
-    let cited = scan.assert_found(CHECK, "world");
+    let cited = scan.assert_found(CHECK, "world").unwrap_here();
     let path = cited.replay.clone().unwrap_or_else(|| panic!("no replay: {scan}"));
     let printed = serde_json::to_value(cited.run.plan()).unwrap();
     assert_eq!(plan_of(&path), printed);

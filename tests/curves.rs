@@ -1426,7 +1426,7 @@ fn a_first_rung_off_the_witness_is_a_case() {
     let witness = Plan::new().op(Set { n: 0 });
     h.run(&witness).assert_clean();
     let audit = h.curve(&witness, 0, "n").run();
-    let found = audit.assert_found("v is never 1", "world");
+    let found = audit.assert_found("v is never 1", "world").unwrap_here();
     assert_eq!(found.label.to_string(), "shown at step 0, /n = 1", "{audit}");
 }
 
@@ -1460,7 +1460,7 @@ fn a_first_rung_that_is_the_witness_is_no_second_case() {
         }
     });
     let audit = h.curve(&Plan::new().op(PinnedSet { n: 1 }), 0, "n").run();
-    let found = audit.assert_found("v is never 1", "world");
+    let found = audit.assert_found("v is never 1", "world").unwrap_here();
     assert_eq!((found.label.to_string().as_str(), found.cases), ("shown", 1), "{audit}");
 }
 

@@ -650,8 +650,10 @@ fn a_search_finds_a_reentering_receiver_and_replays_it() {
     let ops = any::<bool>().prop_map(|reenter| Notified { reenter });
     let report =
         harness.search(plans(ops).len(1..=3).faults(Faults::none())).seed(3).cases(32).run();
-    let found =
-        report.found_at("the custody is backed", "world").unwrap_or_else(|| panic!("{report}"));
+    let found = report
+        .found_at("the custody is backed", "world")
+        .unwrap_or_else(|| panic!("{report}"))
+        .unwrap_here();
     assert!(!found.finding.injected, "{report}");
     let steps = &found.run.plan().steps;
     assert!(steps.iter().any(|s| s.act.op().is_some_and(|o| o.reenter)), "{report}");
@@ -660,7 +662,7 @@ fn a_search_finds_a_reentering_receiver_and_replays_it() {
         near_contract_sim::explore::builtin::MUST_NOT_FAIL,
         "custody.near::resolve_deposit",
     );
-    assert!(resolver.is_some_and(|f| !f.finding.injected), "{report}");
+    assert!(resolver.is_some_and(|f| !f.unwrap_here().finding.injected), "{report}");
     let path = found.replay.as_ref().expect("saved");
     let again = harness.clone().store(path.parent().unwrap()).regressions();
     let mine = again.iter().find(|r| &r.path == path).expect("its replay");

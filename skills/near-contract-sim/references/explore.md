@@ -252,7 +252,7 @@ so an op or a check changed; regenerate it.
 ```rust
 let (fixed, forgetful) = (harness("vault.wasm"), harness("vault_forgetful.wasm"));
 let found = forgetful.scan(&[deposit_then_withdraw()]).faults(Faults::tolerable()).run();
-let kept = found.assert_found(KEPT, "world").run.plan().clone();
+let kept = found.assert_found(KEPT, "world").unwrap_here().run.plan().clone();
 
 let diff = fixed.diff(&forgetful, &[deposit_then_withdraw(), kept]);
 ```
@@ -310,5 +310,5 @@ or `Axes::only` before you cut seeds.
 - A case past a minute stops and is a `timeout:` to-do item. A costly
   at-rest check can run once per case with `Harness::at_end` or
   `Books::at_end()`.
-- `.saves(path, every)` saves a report as it goes and resumes on the same
-  fixture, checks, binary and enumeration ops and faults; else it starts over.
+- `.saves(path, every)` saves a report as it goes and resumes on the same fixture, checks, binary
+  and enumeration ops and faults, else starts over; resumed, `found_at` gives a saved row as `Shown::Saved` (no case).

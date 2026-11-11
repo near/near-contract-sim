@@ -479,7 +479,7 @@ fn enumerate_finds_the_in_flight_double_count_and_its_replay_shows_it() {
     let h = pool_harness().store(&dir);
     let alphabet = [deposit("alice.near"), deposit("bob.near")];
     let audit = h.enumerate(&alphabet).depth(2).run();
-    let f = audit.assert_found(BOOKED, "world");
+    let f = audit.assert_found(BOOKED, "world").unwrap_here();
     let steps = &f.run.plan().steps;
     assert_eq!(steps.len(), 2, "{audit}");
     assert!(
@@ -616,8 +616,9 @@ fn a_seat_price_change_inside_a_stake_s_flight_is_reached() {
 #[test]
 fn an_epoch_boundary_is_placed_at_each_block_of_a_flight() {
     let audit = Harness::new(lock()).enumerate(&[LockOp::EpochBegin]).depth(1).run();
-    let f =
-        audit.assert_found(near_contract_sim::builtin::UNHANDLED_FAILURE, "lock.near::epoch_end");
+    let f = audit
+        .assert_found(near_contract_sim::builtin::UNHANDLED_FAILURE, "lock.near::epoch_end")
+        .unwrap_here();
     assert!(matches!(f.run.plan().start, Some(Gap::EpochEdge(k)) if k < 0), "{audit}");
     // The plain case, and one boundary at each of its flight's blocks and
     // just after: 0 to the flight, each its own case.
@@ -779,7 +780,7 @@ fn an_unstake_straddling_an_epoch_boundary_is_reached() {
         sim.step();
     }
     let audit = harness(sim).enumerate(&[StakeOp::Unstake]).depth(1).run();
-    let f = audit.assert_found(ONE, "Unstake");
+    let f = audit.assert_found(ONE, "Unstake").unwrap_here();
     assert!(matches!(f.run.plan().start, Some(Gap::EpochEdge(_))), "{audit}");
 }
 
@@ -812,7 +813,7 @@ fn the_default_key_merges_states_apart_only_in_height() {
     let notes = audit.report().notes;
     assert!(notes.iter().any(|n| n.contains("leaves out the block height")), "{notes:?}");
     let with_height = h.enumerate(&alphabet).depth(2).key(|sim: &Sim| sim.height()).run();
-    let f = with_height.assert_found(SPRUNG, "Trap");
+    let f = with_height.assert_found(SPRUNG, "Trap").unwrap_here();
     assert_eq!(f.run.plan().steps[0].then, Gap::Settle, "{with_height}");
 }
 
@@ -928,7 +929,7 @@ fn a_state_seen_at_rest_is_still_extended_inside_its_flight() {
     let audit =
         lock_harness().enumerate(&[WorkOp::Start, WorkOp::Sync]).depth(2).key(storage).run();
     assert!(!audit.report().notes[1].starts_with("0 state"), "the start merged: {audit}");
-    let f = audit.assert_found(builtin::SERIALIZABLE, "world");
+    let f = audit.assert_found(builtin::SERIALIZABLE, "world").unwrap_here();
     assert!(f.finding.message.contains("succeeded in every serial order"), "{audit}");
 }
 

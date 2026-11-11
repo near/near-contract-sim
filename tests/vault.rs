@@ -437,7 +437,7 @@ fn audit_search() {
 fn audit_search_finds_the_forgetful_payout() {
     let report = vault_on("vault_forgetful.wasm").search(plans(ops())).seed(7).run();
     let found = report.found_at("withdraw delivers what it debits", "Withdraw");
-    let found = found.unwrap_or_else(|| panic!("the forgetful payout:\n{report}"));
+    let found = found.unwrap_or_else(|| panic!("the forgetful payout:\n{report}")).unwrap_here();
     assert!(found.run.plan().steps.len() <= 3, "{report}");
     assert!(found.replay.is_some(), "{report}");
 }
@@ -483,7 +483,7 @@ fn starving_on_withdraw_breaks_even_the_fixed_vault() {
     let flow = Plan::new().op(VaultOp::Withdraw { who: User::Alice, amount: Amount::Exact(40) });
     vault.run(&flow).assert_clean();
     let report = vault.scan(&[flow]).faults(Faults::default()).run();
-    let found = report.assert_found("withdraw delivers what it debits", "Withdraw");
+    let found = report.assert_found("withdraw delivers what it debits", "Withdraw").unwrap_here();
     assert!(
         matches!(&found.label, Label::Forced(how) if how.contains("OutOfGas at vault.near::on_withdraw")),
         "{report}"
@@ -605,7 +605,8 @@ fn regenerate_the_forgetful_replay() {
     let h = vault_on("vault_forgetful.wasm").store(&dir);
     let report = h.scan(&[plan]).faults(Faults::tolerable()).run();
     println!("{report}");
-    let found = report.found_at("withdraw delivers what it debits", "Withdraw").unwrap();
+    let found =
+        report.found_at("withdraw delivers what it debits", "Withdraw").unwrap().unwrap_here();
     // The vault's books break in the same case: its row folds into this
     // one, and this replay holds its identity too.
     h.run(found.run.plan()).assert_found("the vault holds what it owes", "world");

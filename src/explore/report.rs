@@ -268,6 +268,10 @@ pub struct Row {
     /// which the campaign writes to the store when it finishes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) saved: Vec<(String, String)>,
+    /// The check and site of its finding, then of each folded into it:
+    /// what [`Audit::found_at`] finds it by.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) found_by: Vec<(String, crate::Site)>,
 }
 
 impl Report {
@@ -743,6 +747,9 @@ impl<O: fmt::Debug> Audit<O> {
                 _ => String::new(),
             },
             saved: vec![],
+            found_by: (std::iter::once(&x.finding).chain(&x.folded))
+                .map(|f| (f.check.clone(), f.site.clone()))
+                .collect(),
         });
         let (todo, excused) = split(&self.excused, self.items());
         let mut own = Report {
@@ -1259,6 +1266,7 @@ mod tests {
             id: format!("{i}"),
             shrink: String::new(),
             saved: vec![],
+            found_by: vec![],
         }
     }
 

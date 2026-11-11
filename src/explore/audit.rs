@@ -112,6 +112,49 @@ pub struct Found<O> {
     pub(crate) id: Id,
 }
 
+/// A finding [`Audit::found_at`] found: a row of this run, with its
+/// case, or one a resumed campaign's saved part holds, as its report
+/// keeps it, without a case (its [`replay`](super::Row::replay) has the
+/// plan once the campaign ends).
+#[derive(Debug)]
+pub enum Shown<'a, O> {
+    /// A row of this run ([`Audit::found`]).
+    Here(&'a Found<O>),
+    /// A row of the saved part ([`Report::findings`](super::Report::findings)).
+    Saved(&'a super::Row),
+}
+
+impl<O> Clone for Shown<'_, O> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<O> Copy for Shown<'_, O> {}
+
+impl<'a, O> Shown<'a, O> {
+    /// This run's row; `None` for the saved part's.
+    pub fn here(self) -> Option<&'a Found<O>> {
+        match self {
+            Shown::Here(x) => Some(x),
+            Shown::Saved(_) => None,
+        }
+    }
+
+    /// This run's row, or a panic naming the saved part's, which keeps
+    /// no case to read: a campaign run whole has only rows of its own.
+    #[track_caller]
+    pub fn unwrap_here(self) -> &'a Found<O> {
+        match self {
+            Shown::Here(x) => x,
+            Shown::Saved(r) => panic!(
+                "{} at {} is the saved part's row, which keeps no case; its replay: {:?}",
+                r.check, r.site, r.replay
+            ),
+        }
+    }
+}
+
 /// How a finding's case was shrunk.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Shrink {
@@ -682,17 +725,25 @@ impl<O> Audit<O> {
     }
 
     /// The finding of `check` at `at` (a site as it prints, with or
-    /// without its ` (Op)`, or its op's name), if found.
+    /// without its ` (Op)`, or its op's name), if found: this run's row
+    /// first, else, resumed, the saved part's, as the summary lists both.
     /// A check folded into another's row finds that row.
-    pub fn found_at(&self, check: &str, at: &str) -> Option<&Found<O>> {
-        let is = |f: &Finding| f.check == check && super::check::site_is(&f.site, at);
-        (self.found.iter().find(|x| is(&x.finding)))
-            .or_else(|| self.found.iter().find(|x| x.folded.iter().any(is)))
+    pub fn found_at(&self, check: &str, at: &str) -> Option<Shown<'_, O>> {
+        let is = |c: &str, site: &crate::Site| c == check && super::check::site_is(site, at);
+        let finds = |f: &Finding| is(&f.check, &f.site);
+        let here = (self.found.iter().find(|x| finds(&x.finding)))
+            .or_else(|| self.found.iter().find(|x| x.folded.iter().any(finds)));
+        // A saved row is found by its own finding, then by those folded in.
+        let rows = || self.prior.iter().flat_map(|p| &p.findings);
+        let own = |r: &&super::Row| r.found_by.first().is_some_and(|(c, site)| is(c, site));
+        let folded = |r: &&super::Row| r.found_by.iter().skip(1).any(|(c, site)| is(c, site));
+        let saved = || rows().find(own).or_else(|| rows().find(folded));
+        here.map(Shown::Here).or_else(|| saved().map(Shown::Saved))
     }
 
     /// [`found_at`](Self::found_at), or a panic printing the audit.
     #[track_caller]
-    pub fn assert_found(&self, check: &str, at: &str) -> &Found<O>
+    pub fn assert_found(&self, check: &str, at: &str) -> Shown<'_, O>
     where
         O: fmt::Debug,
     {

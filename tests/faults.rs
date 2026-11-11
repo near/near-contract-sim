@@ -960,7 +960,8 @@ fn generated_faults_find_the_resolver() {
         .seed(0x5eed)
         .cases(64)
         .run();
-    let found = report.found_at("books", "world").unwrap_or_else(|| panic!("{report}"));
+    let found =
+        report.found_at("books", "world").unwrap_or_else(|| panic!("{report}")).unwrap_here();
     assert!(found.finding.injected, "{report}");
 }
 

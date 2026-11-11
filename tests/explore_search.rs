@@ -106,11 +106,12 @@ fn noisy_plans() -> impl Strategy<Value = Plan<Prog>> {
 #[test]
 fn a_harmless_failure_on_every_case_does_not_hide_a_business_finding() {
     let audit = noisy().search(noisy_plans()).seed(11).cases(16).shrink_untimed().run();
-    let business = audit.assert_found("value below 200", "world");
+    let business = audit.assert_found("value below 200", "world").unwrap_here();
     assert_eq!(values(business.run.plan()), [200], "its own minimal case: {audit}");
     assert_eq!(business.run.plan().steps[0].gas, None, "gas didn't matter: {audit}");
     assert!(matches!(business.shrink, Shrink::Done(_)), "{audit}");
-    let noise = audit.assert_found(builtin::UNHANDLED_FAILURE, "missing-a.near::run (Noisy)");
+    let noise =
+        audit.assert_found(builtin::UNHANDLED_FAILURE, "missing-a.near::run (Noisy)").unwrap_here();
     assert_eq!(noise.run.plan().steps.len(), 1, "{audit}");
     assert_eq!(noise.label, Label::Shown, "{audit}");
     assert_eq!(audit.seeds(), [11]);
@@ -144,11 +145,11 @@ fn shrinking_cannot_swap_one_finding_for_another() {
         .gas(gas::off())
         .faults(Faults::none());
     let audit = Harness::new(fixture()).search(strategy).cases(1).run();
-    let a = audit.assert_found(builtin::UNHANDLED_FAILURE, "missing-a.near::run");
+    let a = audit.assert_found(builtin::UNHANDLED_FAILURE, "missing-a.near::run").unwrap_here();
     assert_eq!(values(a.original.plan()), [255], "the original case is kept: {audit}");
     assert_eq!(values(a.run.plan()), [128], "{audit}");
     assert!(!a.incidental);
-    let b = audit.assert_found(builtin::UNHANDLED_FAILURE, "missing-b.near::run");
+    let b = audit.assert_found(builtin::UNHANDLED_FAILURE, "missing-b.near::run").unwrap_here();
     assert!(b.incidental, "{audit}");
     // The candidate that showed it is its case: no row of 0 cases.
     assert_eq!(b.cases, 1, "{audit}");
@@ -187,7 +188,7 @@ fn a_wide_number_shrinks_all_the_way() {
         .gas(gas::off())
         .faults(Faults::none());
     let audit = Harness::new(fixture()).search(strategy).seed(5).cases(1).shrink_untimed().run();
-    let f = audit.assert_found(builtin::UNHANDLED_FAILURE, "missing-a.near::run");
+    let f = audit.assert_found(builtin::UNHANDLED_FAILURE, "missing-a.near::run").unwrap_here();
     assert!(matches!(f.shrink, Shrink::Done(_)), "{audit}");
     assert_eq!(f.run.plan().steps[0].act.op(), Some(&Prog::Wide(1)), "{audit}");
 }
@@ -277,7 +278,8 @@ fn an_injected_finding_shrinks_to_a_natural_one() {
     let mut relabeled = 0;
     for seed in 0..24 {
         let audit = harness.search(strategy.clone()).seed(seed).cases(1).run();
-        let found = audit.assert_found(builtin::UNHANDLED_FAILURE, "missing-a.near::run");
+        let found =
+            audit.assert_found(builtin::UNHANDLED_FAILURE, "missing-a.near::run").unwrap_here();
         if found.original.plan().steps[0].inject.is_empty() {
             continue;
         }
@@ -372,7 +374,7 @@ fn gas_in_a_window_shrinks_to_its_top_edge_and_never_below() {
         .faults(Faults::none())
         .repeats(false);
     let audit = harness.search(strategy).seed(1).cases(48).shrink_untimed().run();
-    let found = audit.assert_found("no pending", "world");
+    let found = audit.assert_found("no pending", "world").unwrap_here();
     assert!(matches!(found.shrink, Shrink::Done(_)), "{audit}");
     let (Some(StepGas::Exactly(from)), Some(StepGas::Exactly(to))) =
         (found.original.plan().steps[0].gas, found.run.plan().steps[0].gas)
@@ -395,7 +397,7 @@ fn gas_that_doesnt_matter_shrinks_to_none() {
         .gas(gas::wide())
         .faults(Faults::none());
     let audit = Harness::new(fixture()).search(strategy).seed(3).cases(8).run();
-    let found = audit.assert_found(builtin::UNHANDLED_FAILURE, "missing-a.near::run");
+    let found = audit.assert_found(builtin::UNHANDLED_FAILURE, "missing-a.near::run").unwrap_here();
     assert!(found.original.plan().steps.iter().any(|s| s.gas.is_some()), "{audit}");
     assert!(found.run.plan().steps.iter().all(|s| s.gas.is_none()), "{audit}");
     assert_eq!(found.run.plan().steps.len(), 1, "{audit}");
@@ -692,7 +694,7 @@ fn the_default_search_finds_a_callback_that_starves_at_just_enough_gas() {
     let harness = Harness::new(pay_world());
     harness.run(&Plan::new().op(pay())).assert_clean();
     let audit = harness.search(plans(Just(pay()))).seed(1).run();
-    let found = audit.assert_found(builtin::UNHANDLED_FAILURE, "pay.near::on_pay");
+    let found = audit.assert_found(builtin::UNHANDLED_FAILURE, "pay.near::on_pay").unwrap_here();
     assert!(!found.finding.injected, "{audit}");
     let gas = found.run.plan().steps.iter().filter_map(|s| s.gas);
     assert!(gas.into_iter().any(|g| matches!(g, StepGas::LeastPlus(_))), "{audit}");
@@ -850,7 +852,7 @@ fn ledger_harness(fixed: bool) -> Harness<LedgerOp> {
 fn the_default_search_finds_a_reply_that_refunds_more_than_sent() {
     let search = |fixed| ledger_harness(fixed).search(plans(ledger_ops())).seed(1).run();
     let audit = search(false);
-    let found = audit.assert_found(RECEIVER_KEEPS, "world");
+    let found = audit.assert_found(RECEIVER_KEEPS, "world").unwrap_here();
     assert!(!found.finding.injected, "{audit}");
     assert_eq!(found.run.plan().steps.len(), 1, "{audit}");
     search(true).assert_clean();

@@ -96,7 +96,7 @@ fn self_only(audit: &Audit<DeskOp>, site: &str) -> bool {
 #[test]
 fn a_self_only_method_that_runs_for_an_outsider_fails_the_builtin() {
     let audit = jobs().scan(&[start()]).run();
-    let found = audit.assert_found(builtin::SELF_ONLY, ON_DONE);
+    let found = audit.assert_found(builtin::SELF_ONLY, ON_DONE).unwrap_here();
     let why = &found.finding.message;
     assert!(why.contains(ON_DONE) && why.contains("axis.near"), "{why}");
     assert!(why.ends_with(r#"changed jobs.near's state: storage "n""#), "{why}");
@@ -104,7 +104,7 @@ fn a_self_only_method_that_runs_for_an_outsider_fails_the_builtin() {
     assert!(!self_only(&audit, GUARDED), "{audit}");
     // `relay` writes nothing itself, but the guarded method it calls on
     // its own contract passes its guard and does.
-    let relay = audit.assert_found(builtin::SELF_ONLY, "jobs.near::relay");
+    let relay = audit.assert_found(builtin::SELF_ONLY, "jobs.near::relay").unwrap_here();
     let why = &relay.finding.message;
     assert!(why.ends_with(r#"state: storage "g" (by on_done_guarded)"#), "{why}");
     // `on_ping` runs for the outsider, but changes nothing.
@@ -166,7 +166,7 @@ fn request_then_process() -> Plan<DeskOp> {
 #[test]
 fn a_self_only_callback_is_sent_after_the_witness_s_earlier_steps() {
     let audit = pending().scan(&[request_then_process()]).run();
-    let found = audit.assert_found(builtin::SELF_ONLY, "pend.near::on_withdraw");
+    let found = audit.assert_found(builtin::SELF_ONLY, "pend.near::on_withdraw").unwrap_here();
     assert!(found.finding.message.contains(r#"storage "d""#), "{audit}");
     let at = "pend.near::on_withdraw sent directly from axis.near";
     assert_eq!(found.label, Label::ShownAt(at.to_owned()), "{audit}");
@@ -202,7 +202,7 @@ fn a_callback_without_its_promise_result_refuses_the_outsider() {
 #[test]
 fn a_call_batched_with_other_actions_is_sent_alone() {
     let audit = pending().scan(&[Plan::new().call(Call::new(ALICE, PEND, "batch"))]).run();
-    let found = audit.assert_found(builtin::SELF_ONLY, "pend.near::migrate");
+    let found = audit.assert_found(builtin::SELF_ONLY, "pend.near::migrate").unwrap_here();
     assert!(found.finding.message.ends_with(r#"state: storage "m""#), "{audit}");
     let names: Vec<String> = audit.report().timings.into_iter().map(|t| t.0).collect();
     let edge = "pend.near::migrate sent directly from axis.near: step 0, deposit = 1";
