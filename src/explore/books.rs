@@ -615,9 +615,12 @@ impl<O: Op<W>, W: World> Harness<O, W> {
 /// before on any other world, and outside a judgment.
 #[derive(Default)]
 pub(crate) struct Reads {
-    holders: RefCell<HashMap<(usize, usize), BTreeMap<String, u128>>>,
-    amounts: RefCell<HashMap<(usize, usize), u128>>,
+    holders: Table<BTreeMap<String, u128>>,
+    amounts: Table<u128>,
 }
+
+/// Readings by reader and world (an op's index, or [`NOW`]).
+type Table<V> = RefCell<HashMap<(usize, usize), V>>;
 
 /// The world a reading is of: an op's index for the world before it, or
 /// [`NOW`] for the case's.
@@ -674,7 +677,7 @@ fn address<W>(w: &W) -> usize {
 /// `read` of `w`, as reader `reader` read it in this judgment's
 /// [`Reads`] (`table` of them), else read and kept there.
 fn read_once<V: Clone, W>(
-    table: fn(&Reads) -> &RefCell<HashMap<(usize, usize), V>>,
+    table: fn(&Reads) -> &Table<V>,
     reader: usize,
     w: &W,
     read: impl FnOnce() -> V,
