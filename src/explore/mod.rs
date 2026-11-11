@@ -693,7 +693,8 @@ mod tests {
     }
 
     /// Nor is it in an op that wraps a call, whose args' JSON stays an
-    /// axis; an op's own `args_text`, beside no call's args, is one.
+    /// axis; an op's own `args_text`, beside no call's args, is one, as is
+    /// one inside a call's args.
     #[test]
     fn a_wrapped_calls_written_args_are_no_axis() {
         #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -718,14 +719,22 @@ mod tests {
         #[derive(Clone, Debug, Serialize, Deserialize)]
         struct Own {
             args_text: String,
+            args: Call,
         }
         impl Op for Own {
             fn submit(&self, _: &mut Sim) -> Result<(), Skip> {
                 Ok(())
             }
         }
-        let (axes, _) = axes::args::<Own, Sim>(&Act::Op(Own { args_text: "x".into() }));
-        assert!(axes.iter().any(|a| a.name == "/args_text"), "{axes:?}");
+        let call = Call::new("a.near", "b.near", "m").args(r#"{"n": 1}"#);
+        let (axes, _) = axes::args::<Own, Sim>(&Act::Op(Own { args_text: "x".into(), args: call }));
+        let axes: Vec<_> = axes.into_iter().map(|a| a.name).collect();
+        assert!(axes.iter().any(|n| n == "/args_text"), "{axes:?}");
+        assert!(!axes.iter().any(|n| n == "/args/args_text"), "{axes:?}");
+        // A contract's argument shaped like a saved call keeps its own.
+        let lookalike = r#"{"args":{"json":1},"args_text":"x"}"#;
+        let deep = names(&format!(r#"{{"inner":{lookalike}}}"#));
+        assert!(deep.iter().any(|n| n == "/Raw/args/json/inner/args_text"), "{deep:?}");
     }
 
     /// `Fail::all` flattens the failures of a nested one, passes over what

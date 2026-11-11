@@ -208,7 +208,7 @@ impl Axes {
     /// The axes of `json`, an op's serde form, with their witness values.
     pub(crate) fn leaves(&self, json: &Value) -> Vec<(String, Leaf)> {
         let mut out = vec![];
-        walk(json, &mut String::new(), &mut out);
+        walk(json, &mut String::new(), &mut out, true);
         let wanted = |p: &str| {
             self.only.as_ref().is_none_or(|only| {
                 only.iter().any(|o| {
@@ -227,7 +227,9 @@ impl Axes {
     }
 }
 
-fn walk(v: &Value, path: &mut String, out: &mut Vec<(String, Leaf)>) {
+/// `calls`: whether an object here may be a saved call (not inside one's
+/// args, whatever the contract's JSON holds).
+fn walk(v: &Value, path: &mut String, out: &mut Vec<(String, Leaf)>, calls: bool) {
     let mut push = |leaf| out.push((path.clone(), leaf));
     match v {
         Value::Number(n) => {
@@ -246,7 +248,7 @@ fn walk(v: &Value, path: &mut String, out: &mut Vec<(String, Leaf)>) {
             for (i, item) in items.iter().enumerate() {
                 let len = path.len();
                 path.push_str(&format!("/{i}"));
-                walk(item, path, out);
+                walk(item, path, out, calls);
                 path.truncate(len);
             }
         }
@@ -256,12 +258,12 @@ fn walk(v: &Value, path: &mut String, out: &mut Vec<(String, Leaf)>) {
             }
             // A saved call's copy of its JSON args as written: an edit
             // only sends the JSON as serde_json writes it.
-            let call = map.get("args").and_then(|a| a.get("json")).is_some();
+            let call = calls && map.get("args").and_then(|a| a.get("json")).is_some();
             for (k, item) in map.iter().filter(|(k, _)| !(call && *k == "args_text")) {
                 let len = path.len();
                 path.push('/');
                 path.push_str(&pointer_key(k));
-                walk(item, path, out);
+                walk(item, path, out, calls && !(call && k == "args"));
                 path.truncate(len);
             }
         }
