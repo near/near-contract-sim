@@ -202,7 +202,10 @@ jobs:
           --config profile.dev.package.node-runtime.debug-assertions=false
           --config profile.dev.package.near-contract-sim.debug-assertions=false
 
-      # --all-targets skips doctests.
+      # --all-targets skips doctests. Default features, as a consumer builds
+      # the crate, so a doc test that forgets a feature gate fails here; none
+      # needs `near-kit` (only items are gated on it), so `--all-features`
+      # would run the same ones. Add that run if a gated doc test appears.
       - name: Run doctests
         run: cargo test --doc
 
