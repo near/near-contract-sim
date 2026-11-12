@@ -13,6 +13,12 @@ since the last tag: **Breaking** for a `!` title, **Added** for `feat`,
 title. `explore` is experimental and changes more often than the rest;
 its changes follow the same rules.
 
+## 0.2.3 (2026-11-12)
+
+### Fixed
+
+- explore: `Audit::found_at` finds a batch receipt's finding by one of its calls ([#39](https://github.com/near/near-contract-sim/pull/39))
+
 ## 0.2.2 (2026-11-12)
 
 ### Fixed
