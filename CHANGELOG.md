@@ -13,6 +13,14 @@ since the last tag: **Breaking** for a `!` title, **Added** for `feat`,
 title. `explore` is experimental and changes more often than the rest;
 its changes follow the same rules.
 
+## 0.2.2 (2026-11-12)
+
+### Fixed
+
+- explore: Curves no longer take quadratic time over a call's long JSON lists ([#32](https://github.com/near/near-contract-sim/pull/32))
+- explore: Find an op's list axes in linear time where every item takes the edit ([#33](https://github.com/near/near-contract-sim/pull/33))
+- explore: A just-enough-gas bisection no longer runs the watched tokens' views in every probe ([#34](https://github.com/near/near-contract-sim/pull/34))
+
 ## 0.2.1 (2026-11-11)
 
 ### Fixed
