@@ -1076,6 +1076,62 @@ mod tests {
         }
     }
 
+    /// An op of each shape [`args`] tells apart.
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    struct Shapes {
+        ids: Vec<String>,
+        none: Vec<u8>,
+        pair: (u32, u32),
+        hash: near_primitives::hash::CryptoHash,
+        name: String,
+        memo: Option<String>,
+        limit: Option<crate::Balance>,
+        count: Option<u32>,
+    }
+
+    impl super::super::Op for Shapes {
+        fn submit(&self, _: &mut crate::Sim) -> Result<(), super::super::Skip> {
+            Ok(())
+        }
+    }
+
+    /// An op's leaves are axes where their edits rebuild it: a list, even
+    /// an empty one, and a string, even an empty one; not a tuple's length
+    /// nor a hash's bytes. A null is a number where 0, or else a decimal
+    /// string and no other text, rebuilds it; an optional string is none.
+    #[test]
+    fn an_ops_leaves_are_axes_where_their_edits_rebuild() {
+        let op = Shapes {
+            ids: vec!["a".into()],
+            none: vec![],
+            pair: (1, 2),
+            hash: near_primitives::hash::CryptoHash::hash_bytes(b"receipt"),
+            name: String::new(),
+            memo: None,
+            limit: None,
+            count: None,
+        };
+        let (axes, mut fixed) = args::<Shapes, crate::Sim>(&Act::Op(op));
+        let mut got: Vec<_> = axes.iter().map(|a| (a.name.as_str(), a.kind, a.at)).collect();
+        got.sort();
+        let want = [
+            ("/count", AxisKind::Number, 0),
+            ("/ids", AxisKind::Len, 1),
+            ("/ids/*", AxisKind::Bytes, 1),
+            ("/limit", AxisKind::Number, 0),
+            ("/name", AxisKind::Bytes, 0),
+            ("/none", AxisKind::Len, 0),
+            ("/pair/*", AxisKind::Number, 2),
+        ];
+        assert_eq!(got, want, "{axes:#?}");
+        let unset = |name: &str| axes.iter().find(|a| a.name == name).map(|a| a.how.clone());
+        let how = |name: &str, string| Some(How::Unset { pointer: name.into(), string });
+        assert_eq!(unset("/count"), how("/count", false));
+        assert_eq!(unset("/limit"), how("/limit", true));
+        fixed.sort();
+        assert_eq!(fixed, ["/hash", "/pair"]);
+    }
+
     fn op() -> Value {
         let ids = vec!["a".into(), "bb".into()];
         let op =
