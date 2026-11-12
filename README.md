@@ -122,7 +122,7 @@ out.assert_headroom("factorial_mult", Gas::from_teragas(1));
 
 near-contract-sim isn't on crates.io yet: it builds on nearcore's
 runtime crates, which aren't published there, so it is a git
-dependency. Releases are git tags (`v0.2.2`); pin a tag's commit with `rev`.
+dependency. Releases are git tags (`v0.2.3`); pin a tag's commit with `rev`.
 It pins nearcore 2.14.0 (protocol 88) and re-exports nearcore's types,
 in `near_contract_sim::nearcore`: a nearcore dependency of your own
 would be a second copy of every type. A test crate that also depends on
@@ -166,7 +166,7 @@ edition = "2024"
 publish = false
 
 [dev-dependencies]
-near-contract-sim = { git = "https://github.com/near/near-contract-sim", rev = "edd3dab7f01deb49a5dd7c177573ef958f5a6560" }
+near-contract-sim = { git = "https://github.com/near/near-contract-sim", rev = "3adfe183685ec9e89f847c4447858587b3233719" }
 cargo-near-build = "0.11"
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
