@@ -3,3 +3,7 @@
 # machine: no case timeout here. Explore's unit tests set their own.
 [env]
 NEAR_SIM_CASE_TIMEOUT = "0"
+# nearcore joins on rayon's global pool in every block, and its idle
+# workers spin: one thread per test process does the same work for about
+# a third less CPU, the test binaries already running side by side.
+RAYON_NUM_THREADS = "1"
