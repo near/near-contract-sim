@@ -800,7 +800,7 @@ impl<'a> Tx<'a> {
     /// succeeds on a copy of the `Sim`: run until its result path ends
     /// (or the copy is idle), not until every receipt has run.
     fn succeeds_with(&self, gas: Gas) -> bool {
-        let mut sim = self.sim.clone();
+        let mut sim = self.probe();
         let (sim, hash) = self.copy_on(&mut sim, gas).queue();
         let decided = |sim: &Sim| {
             !matches!(
@@ -818,7 +818,7 @@ impl<'a> Tx<'a> {
     /// if none fails at `from`, or one still fails at `cap`.
     fn band(&self, from: Gas, cap: Gas) -> Option<(Gas, String)> {
         let failing = |gas: u64| {
-            let mut sim = self.sim.clone();
+            let mut sim = self.probe();
             let (sim, hash) = self.copy_on(&mut sim, Gas::from_gas(gas)).queue();
             sim.settle();
             let out = sim.outcome(hash);
@@ -830,6 +830,16 @@ impl<'a> Tx<'a> {
             return None;
         }
         Some((Gas::from_gas(bisect(from.as_gas(), cap.as_gas(), |g| failing(g).is_none())), site))
+    }
+
+    /// A copy of the `Sim` for a run whose outcome only its statuses are
+    /// read of: it watches no token, since the views a watch runs change
+    /// no state, status or receipt, and each would run in every probe of a
+    /// bisection.
+    fn probe(&self) -> Sim {
+        let mut sim = self.sim.clone();
+        sim.chain.unwatch();
+        sim
     }
 
     /// This transaction on `sim` (a copy of its own, outside any explored
@@ -1306,6 +1316,35 @@ fn kind(failure: &Failure) -> String {
 mod tests {
     use super::*;
     use crate::edges::Sample;
+
+    /// A probe of the bisections watches no token, nor discovers one again:
+    /// a write whose event names a watched id runs no view there, where
+    /// the `Sim` it copies measures the id.
+    #[test]
+    fn a_probe_runs_no_watch_views() {
+        use crate::{Fixture, Token};
+        use serde_json::json;
+        let (mt, issuer) = ("mt.near", "issuer.near");
+        let wasm = crate::sim::tests::manifest_dir().join("tests/res/mtoken_events.wasm");
+        let mut sim = Fixture::new()
+            .account(issuer, Balance::from_near(100))
+            .contract(mt, std::fs::read(wasm).unwrap())
+            .init("new")
+            .args_json(json!({ "owner": issuer, "ids": [] }))
+            .token(Token::nep245_ids(mt, Vec::<String>::new()).discover())
+            .build();
+        let create = sim.call(issuer, mt, "create").args_json(json!({ "id": "id0" }));
+        create.transact().assert_success();
+        let views = |sim: &mut Sim, id: &str| {
+            let before = sim.chain.log().watch_views();
+            let give = json!({ "to": "ghost.near", "id": id, "amount": "5" });
+            sim.call(issuer, mt, "give").args_json(give).transact().assert_success();
+            sim.chain.log().watch_views() - before
+        };
+        let mut probe = sim.call(issuer, mt, "give").probe();
+        assert!(views(&mut sim, "id0") > 0);
+        assert_eq!(views(&mut probe, "id0"), 0);
+    }
 
     /// Pinned gas: the calls not unpinned, and the calls inside either
     /// kind of delegate, as nearcore's `total_prepaid_gas` sums them.
