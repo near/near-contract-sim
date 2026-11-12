@@ -301,11 +301,14 @@ pub(crate) fn arg_axes<O: Op<W>, W: World>(act: &Act<O>) -> Vec<Axis> {
 pub(crate) fn args<O: Op<W>, W: World>(act: &Act<O>) -> (Vec<Axis>, Vec<String>) {
     let Some((json, axes)) = act_json::<O, W>(act) else { return (vec![], vec![]) };
     // A call's JSON args are any JSON value, so an edit inside them always
-    // rebuilds: no need to deserialize the whole call per leaf.
+    // rebuilds: no need to make it (a copy of the whole call per leaf,
+    // quadratic in a long list) or deserialize it.
     let any = |at: &str| {
         matches!(act, Act::Call(_)) && (at == "/args/json" || at.starts_with("/args/json/"))
     };
-    let builds = |at: &str, j: Option<Value>| j.is_some_and(|j| any(at) || act.rebuild(j).is_ok());
+    let builds = |at: &str, edit: &dyn Fn() -> Option<Value>| {
+        any(at) || edit().is_some_and(|j| act.rebuild(j).is_ok())
+    };
     let (mut out, mut fixed): (Vec<Axis>, Vec<String>) = (vec![], vec![]);
     for (at, leaf) in axes.leaves(&json) {
         let name = starred(&json, &at);
@@ -314,12 +317,12 @@ pub(crate) fn args<O: Op<W>, W: World>(act: &Act<O>) -> (Vec<Axis>, Vec<String>)
             Leaf::Number { value, string } => (AxisKind::Number, value, arg(string)),
             // A tuple's length is fixed: one item more, on it alone,
             // doesn't rebuild.
-            Leaf::Len(n) if n > 0 && !builds(&at, longer(&json, &at)) => {
+            Leaf::Len(n) if n > 0 && !builds(&at, &|| longer(&json, &at)) => {
                 fixed.push(name);
                 continue;
             }
             Leaf::Len(n) => (AxisKind::Len, n as u128, arg(false)),
-            Leaf::Bytes(n) if builds(&at, with_bytes(&json, &at, n + 1)) => {
+            Leaf::Bytes(n) if builds(&at, &|| with_bytes(&json, &at, n + 1)) => {
                 (AxisKind::Bytes, n as u128, arg(false))
             }
             Leaf::Bytes(_) | Leaf::Tagged => {
@@ -345,9 +348,9 @@ pub(crate) fn args<O: Op<W>, W: World>(act: &Act<O>) -> (Vec<Axis>, Vec<String>)
                     *j.pointer_mut(&at)? = Value::String(t.into());
                     Some(j)
                 };
-                let string = if builds(&at, Some(with_number(&json, &at, 0, false))) {
+                let string = if builds(&at, &|| Some(with_number(&json, &at, 0, false))) {
                     false
-                } else if builds(&at, text("0")) && !builds(&at, text("x")) {
+                } else if builds(&at, &|| text("0")) && !builds(&at, &|| text("x")) {
                     true
                 } else {
                     continue;
@@ -1071,6 +1074,62 @@ mod tests {
                 assert!(rebuild::<Call>(j.clone()).is_some(), "{at}: {j}");
             }
         }
+    }
+
+    /// An op of each shape [`args`] tells apart.
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    struct Shapes {
+        ids: Vec<String>,
+        none: Vec<u8>,
+        pair: (u32, u32),
+        hash: near_primitives::hash::CryptoHash,
+        name: String,
+        memo: Option<String>,
+        limit: Option<crate::Balance>,
+        count: Option<u32>,
+    }
+
+    impl super::super::Op for Shapes {
+        fn submit(&self, _: &mut crate::Sim) -> Result<(), super::super::Skip> {
+            Ok(())
+        }
+    }
+
+    /// An op's leaves are axes where their edits rebuild it: a list, even
+    /// an empty one, and a string, even an empty one; not a tuple's length
+    /// nor a hash's bytes. A null is a number where 0, or else a decimal
+    /// string and no other text, rebuilds it; an optional string is none.
+    #[test]
+    fn an_ops_leaves_are_axes_where_their_edits_rebuild() {
+        let op = Shapes {
+            ids: vec!["a".into()],
+            none: vec![],
+            pair: (1, 2),
+            hash: near_primitives::hash::CryptoHash::hash_bytes(b"receipt"),
+            name: String::new(),
+            memo: None,
+            limit: None,
+            count: None,
+        };
+        let (axes, mut fixed) = args::<Shapes, crate::Sim>(&Act::Op(op));
+        let mut got: Vec<_> = axes.iter().map(|a| (a.name.as_str(), a.kind, a.at)).collect();
+        got.sort();
+        let want = [
+            ("/count", AxisKind::Number, 0),
+            ("/ids", AxisKind::Len, 1),
+            ("/ids/*", AxisKind::Bytes, 1),
+            ("/limit", AxisKind::Number, 0),
+            ("/name", AxisKind::Bytes, 0),
+            ("/none", AxisKind::Len, 0),
+            ("/pair/*", AxisKind::Number, 2),
+        ];
+        assert_eq!(got, want, "{axes:#?}");
+        let unset = |name: &str| axes.iter().find(|a| a.name == name).map(|a| a.how.clone());
+        let how = |name: &str, string| Some(How::Unset { pointer: name.into(), string });
+        assert_eq!(unset("/count"), how("/count", false));
+        assert_eq!(unset("/limit"), how("/limit", true));
+        fixed.sort();
+        assert_eq!(fixed, ["/hash", "/pair"]);
     }
 
     fn op() -> Value {
