@@ -188,11 +188,13 @@ targets = ["wasm32-unknown-unknown"]
 ```
 
 `auction-tests/.cargo/config.toml`. nearcore's VM allows 1000 wasm
-instances per process, so cap the test threads:
+instances per process, so cap the test threads; its rayon pool's idle
+workers spin, so one does the same work for about a third less CPU:
 
 ```toml
 [env]
 RUST_TEST_THREADS = "4"
+RAYON_NUM_THREADS = "1"
 ```
 
 `tests/sim.rs` builds the wasm with cargo-near's library, as
