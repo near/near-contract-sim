@@ -96,6 +96,13 @@ impl Chain {
         }
     }
 
+    /// Watches nothing from the next block on, nor discovers: for a copy
+    /// whose token moves no one reads. What it measured stays.
+    pub(crate) fn unwatch(&mut self) {
+        self.log.watch.tokens.clear();
+        self.log.watch.discover.clear();
+    }
+
     /// The block hook: notes the accounts contracts created, then measures
     /// each receipt that changed a watched token's storage. `prev` is the
     /// state root the block applied on; `res` is not committed yet, and is
