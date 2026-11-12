@@ -13,7 +13,7 @@ tokio's `test-util` gives tests a paused clock:
 
 ```toml
 [dev-dependencies]
-near-contract-sim = { git = "https://github.com/near/near-contract-sim", rev = "22f5c66cabf2106750a72ea068f6dc7caefca9e0", features = ["near-kit"] }
+near-contract-sim = { git = "https://github.com/near/near-contract-sim", rev = "edd3dab7f01deb49a5dd7c177573ef958f5a6560", features = ["near-kit"] }
 near-kit = "0.18.3"
 tokio = { version = "1", features = ["macros", "rt", "test-util"] }
 ```
