@@ -301,11 +301,14 @@ pub(crate) fn arg_axes<O: Op<W>, W: World>(act: &Act<O>) -> Vec<Axis> {
 pub(crate) fn args<O: Op<W>, W: World>(act: &Act<O>) -> (Vec<Axis>, Vec<String>) {
     let Some((json, axes)) = act_json::<O, W>(act) else { return (vec![], vec![]) };
     // A call's JSON args are any JSON value, so an edit inside them always
-    // rebuilds: no need to deserialize the whole call per leaf.
+    // rebuilds: no need to make it (a copy of the whole call per leaf,
+    // quadratic in a long list) or deserialize it.
     let any = |at: &str| {
         matches!(act, Act::Call(_)) && (at == "/args/json" || at.starts_with("/args/json/"))
     };
-    let builds = |at: &str, j: Option<Value>| j.is_some_and(|j| any(at) || act.rebuild(j).is_ok());
+    let builds = |at: &str, edit: &dyn Fn() -> Option<Value>| {
+        any(at) || edit().is_some_and(|j| act.rebuild(j).is_ok())
+    };
     let (mut out, mut fixed): (Vec<Axis>, Vec<String>) = (vec![], vec![]);
     for (at, leaf) in axes.leaves(&json) {
         let name = starred(&json, &at);
@@ -314,12 +317,12 @@ pub(crate) fn args<O: Op<W>, W: World>(act: &Act<O>) -> (Vec<Axis>, Vec<String>)
             Leaf::Number { value, string } => (AxisKind::Number, value, arg(string)),
             // A tuple's length is fixed: one item more, on it alone,
             // doesn't rebuild.
-            Leaf::Len(n) if n > 0 && !builds(&at, longer(&json, &at)) => {
+            Leaf::Len(n) if n > 0 && !builds(&at, &|| longer(&json, &at)) => {
                 fixed.push(name);
                 continue;
             }
             Leaf::Len(n) => (AxisKind::Len, n as u128, arg(false)),
-            Leaf::Bytes(n) if builds(&at, with_bytes(&json, &at, n + 1)) => {
+            Leaf::Bytes(n) if builds(&at, &|| with_bytes(&json, &at, n + 1)) => {
                 (AxisKind::Bytes, n as u128, arg(false))
             }
             Leaf::Bytes(_) | Leaf::Tagged => {
@@ -345,9 +348,9 @@ pub(crate) fn args<O: Op<W>, W: World>(act: &Act<O>) -> (Vec<Axis>, Vec<String>)
                     *j.pointer_mut(&at)? = Value::String(t.into());
                     Some(j)
                 };
-                let string = if builds(&at, Some(with_number(&json, &at, 0, false))) {
+                let string = if builds(&at, &|| Some(with_number(&json, &at, 0, false))) {
                     false
-                } else if builds(&at, text("0")) && !builds(&at, text("x")) {
+                } else if builds(&at, &|| text("0")) && !builds(&at, &|| text("x")) {
                     true
                 } else {
                     continue;
