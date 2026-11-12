@@ -13,6 +13,7 @@ since the last tag: **Breaking** for a `!` title, **Added** for `feat`,
 title. `explore` is experimental and changes more often than the rest;
 its changes follow the same rules.
 
+
 ## 0.2.3 (2026-11-12)
 
 ### Fixed
