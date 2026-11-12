@@ -594,16 +594,19 @@ pub(crate) fn glob(pattern: &[u8], text: &[u8]) -> bool {
 }
 
 /// Whether `site` answers to `at`: its whole print, its print without
-/// ` (Op)`, or its op's name alone.
+/// ` (Op)` (for a batch's receipt, `receiver::f,g`, or one of its calls,
+/// `receiver::f`), or its op's name alone.
 pub(crate) fn site_is(site: &Site, at: &str) -> bool {
     if site.to_string() == at {
         return true;
     }
     match site {
         Site::Receipt { receiver, method, op } => {
-            let method = method.clone();
-            let bare = Site::Receipt { receiver: receiver.clone(), method, op: None };
-            op.as_deref() == Some(at) || bare.to_string() == at
+            let bare = |method| Site::Receipt { receiver: receiver.clone(), method, op: None };
+            let mut calls = method.iter().flat_map(|m| m.split(','));
+            op.as_deref() == Some(at)
+                || bare(method.clone()).to_string() == at
+                || calls.any(|m| bare(Some(m.to_owned())).to_string() == at)
         }
         Site::Key { key, op } => key == at || op.as_deref() == Some(at),
         _ => false,
@@ -650,6 +653,17 @@ mod tests {
             assert!(site_is(site, bare), "{site}");
             assert!(site_is(site, "Withdraw"), "{site}");
             assert!(!site_is(site, "Deposit"), "{site}");
+        }
+        let batch = Site::Receipt {
+            receiver: Some("v.near".parse().unwrap()),
+            method: Some("on_keep,noop".into()),
+            op: Some("Put".into()),
+        };
+        for at in ["v.near::on_keep,noop", "v.near::on_keep", "v.near::noop", "Put"] {
+            assert!(site_is(&batch, at), "{at}");
+        }
+        for at in ["v.near::on_keep,", "v.near::on_ke", "w.near::noop", "on_keep"] {
+            assert!(!site_is(&batch, at), "{at}");
         }
     }
 }

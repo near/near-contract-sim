@@ -339,6 +339,9 @@ fn a_batch_receipts_margin_is_measured() {
     };
     let batch = vec![format!("{SITE} (Put)")];
     assert_eq!(margins(h.clone().must_not_fail("on_keep")), batch, "one method of the batch");
+    // Found by one of its calls too, as `must_not_fail` named it.
+    let audit = h.clone().must_not_fail("on_keep").curves(std::slice::from_ref(&witness)).run();
+    assert!(audit.found_at("gas margin", "batch.near::on_keep").is_some(), "{audit}");
     assert_eq!(margins(h.clone().must_not_fail("batch.near::on_*")), batch, "a pattern");
     assert_eq!(margins(h), Vec::<String>::new(), "nothing declared, nothing awaited");
 }
