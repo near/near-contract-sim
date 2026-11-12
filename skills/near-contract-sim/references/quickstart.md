@@ -50,18 +50,18 @@ published), so it is a git dependency: pin `rev` to the commit of a release
 tag (`v0.2.2`'s is shown), and keep it pinned. Set the profile before the
 first build: unoptimized nearcore can take a minute for one large call.
 
-nearcore's VM has 1000 wasm instances per process: cap the test threads
-in `.cargo/config.toml`, where no one has to remember it:
+nearcore's VM has 1000 wasm instances per process, and its idle rayon
+workers spin: cap both in `.cargo/config.toml`, where no one has to remember it:
 
 ```toml
 [env]
 RUST_TEST_THREADS = "4"
+RAYON_NUM_THREADS = "1"  # a third less CPU, no slower
 ```
 
-Then, in `contract-tests/`, start the first build in the background. It
-compiles about 500 crates in 10 to 30 minutes, longer than most tool
-timeouts, and fills several GB; point every test crate at one
-`CARGO_TARGET_DIR` to build nearcore once.
+Then, in `contract-tests/`, start the first build in the background: about
+500 crates, 10 to 30 minutes (past most tool timeouts) and several GB. Point
+every test crate at one `CARGO_TARGET_DIR` to build nearcore once.
 
 ```sh
 cargo test --no-run    # in the background; then cargo test, and commit Cargo.lock
