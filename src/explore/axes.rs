@@ -298,6 +298,14 @@ pub(crate) fn arg_axes<O: Op<W>, W: World>(act: &Act<O>) -> Vec<Axis> {
 
 /// [`arg_axes`], and the strings that aren't axes: changed, they don't
 /// deserialize, and no other value is found for them.
+///
+/// A list's items move together, so an edit is tried first on every leaf
+/// of a starred name at once (`/ids/*`: each id a byte longer), as the
+/// axis moves them. If that rebuilds, each leaf is taken to rebuild with
+/// the edit alone, which holds wherever the op's type reads a list's items
+/// one by one; else each is tried alone. A check across the items (no two
+/// alike) is judged on them all edited. One deserialization per name, not
+/// per item: per item is quadratic in a long list's length.
 pub(crate) fn args<O: Op<W>, W: World>(act: &Act<O>) -> (Vec<Axis>, Vec<String>) {
     let Some((json, axes)) = act_json::<O, W>(act) else { return (vec![], vec![]) };
     // A call's JSON args are any JSON value, so an edit inside them always
@@ -306,29 +314,41 @@ pub(crate) fn args<O: Op<W>, W: World>(act: &Act<O>) -> (Vec<Axis>, Vec<String>)
     let any = |at: &str| {
         matches!(act, Act::Call(_)) && (at == "/args/json" || at.starts_with("/args/json/"))
     };
-    let builds = |at: &str, edit: &dyn Fn() -> Option<Value>| {
-        any(at) || edit().is_some_and(|j| act.rebuild(j).is_ok())
+    let leaves: Vec<(String, String, Leaf)> =
+        axes.leaves(&json).into_iter().map(|(at, leaf)| (starred(&json, &at), at, leaf)).collect();
+    let rebuilds = |edit: Edit, ats: &mut dyn Iterator<Item = &str>| {
+        edit.made(&json, ats).is_some_and(|j| act.rebuild(j).is_ok())
+    };
+    let mut together = std::collections::HashMap::new();
+    let mut builds = |name: &str, at: &str, edit: Edit| {
+        let all = || {
+            let ats = leaves.iter().filter(|(n, _, l)| n == name && edit.fits(l));
+            rebuilds(edit, &mut ats.map(|(_, at, _)| at.as_str()))
+        };
+        any(at)
+            || *together.entry((name.to_owned(), edit)).or_insert_with(all)
+            || rebuilds(edit, &mut std::iter::once(at))
     };
     let (mut out, mut fixed): (Vec<Axis>, Vec<String>) = (vec![], vec![]);
-    for (at, leaf) in axes.leaves(&json) {
-        let name = starred(&json, &at);
+    for (name, at, leaf) in &leaves {
+        let (name, at, leaf) = (name.clone(), at.as_str(), leaf.clone());
         let arg = |string| How::Arg { pointer: name.clone(), string };
         let (kind, at, how) = match leaf {
             Leaf::Number { value, string } => (AxisKind::Number, value, arg(string)),
             // A tuple's length is fixed: one item more, on it alone,
             // doesn't rebuild.
-            Leaf::Len(n) if n > 0 && !builds(&at, &|| longer(&json, &at)) => {
+            Leaf::Len(n) if n > 0 && !builds(&name, at, Edit::Longer) => {
                 fixed.push(name);
                 continue;
             }
             Leaf::Len(n) => (AxisKind::Len, n as u128, arg(false)),
-            Leaf::Bytes(n) if builds(&at, &|| with_bytes(&json, &at, n + 1)) => {
+            Leaf::Bytes(n) if builds(&name, at, Edit::Pad) => {
                 (AxisKind::Bytes, n as u128, arg(false))
             }
             Leaf::Bytes(_) | Leaf::Tagged => {
-                let values = choices::<O, W>(act, &json, &at);
+                let values = choices::<O, W>(act, &json, at);
                 let tag = |v: &Value| v.as_object().and_then(|m| m.keys().next().cloned());
-                let current = json.pointer(&at);
+                let current = json.pointer(at);
                 let same = |v: &Value| tag(v).is_some_and(|t| current.and_then(tag) == Some(t));
                 let k = values.iter().position(|v| Some(v) == current || same(v));
                 match k {
@@ -343,14 +363,10 @@ pub(crate) fn args<O: Op<W>, W: World>(act: &Act<O>) -> (Vec<Axis>, Vec<String>)
                 }
             }
             Leaf::Null => {
-                let text = |t: &str| {
-                    let mut j = json.clone();
-                    *j.pointer_mut(&at)? = Value::String(t.into());
-                    Some(j)
-                };
-                let string = if builds(&at, &|| Some(with_number(&json, &at, 0, false))) {
+                let string = if builds(&name, at, Edit::Zero) {
                     false
-                } else if builds(&at, &|| text("0")) && !builds(&at, &|| text("x")) {
+                } else if builds(&name, at, Edit::Text("0")) && !builds(&name, at, Edit::Text("x"))
+                {
                     true
                 } else {
                     continue;
@@ -366,6 +382,46 @@ pub(crate) fn args<O: Op<W>, W: World>(act: &Act<O>) -> (Vec<Axis>, Vec<String>)
         }
     }
     (out, fixed)
+}
+
+/// An edit [`args`] tries at a leaf, to see whether it's an axis.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum Edit {
+    /// A list one copy of its last item longer.
+    Longer,
+    /// A string one byte longer.
+    Pad,
+    /// An unset number set to 0.
+    Zero,
+    /// An unset number set to this text.
+    Text(&'static str),
+}
+
+impl Edit {
+    /// Whether [`args`] tries it at `leaf`.
+    fn fits(self, leaf: &Leaf) -> bool {
+        match self {
+            Edit::Longer => matches!(leaf, Leaf::Len(n) if *n > 0),
+            Edit::Pad => matches!(leaf, Leaf::Bytes(_)),
+            Edit::Zero | Edit::Text(_) => *leaf == Leaf::Null,
+        }
+    }
+
+    /// `json` with this edit made at each of `ats`, if each is a leaf it
+    /// fits.
+    fn made(self, json: &Value, ats: &mut dyn Iterator<Item = &str>) -> Option<Value> {
+        let mut json = json.clone();
+        for at in ats {
+            match (self, json.pointer_mut(at)?) {
+                (Edit::Longer, Value::Array(list)) => list.push(list.last()?.clone()),
+                (Edit::Pad, Value::String(s)) => s.push('x'),
+                (Edit::Zero, slot @ Value::Null) => *slot = json!(0),
+                (Edit::Text(t), slot @ Value::Null) => *slot = Value::String(t.into()),
+                _ => return None,
+            }
+        }
+        Some(json)
+    }
 }
 
 /// The pointer `at` into `json` with each index of a list `*`: a list's
@@ -952,15 +1008,6 @@ fn with_len(json: &Value, pointer: &str, n: usize, new: (bool, bool)) -> Option<
     Some(json)
 }
 
-/// `json` with the list at `pointer` one copy of its last item longer,
-/// the lists beside it untouched.
-fn longer(json: &Value, pointer: &str) -> Option<Value> {
-    let mut json = json.clone();
-    let list = json.pointer_mut(pointer)?.as_array_mut()?;
-    list.push(list.last()?.clone());
-    Some(json)
-}
-
 /// `json` with the string at `pointer` `n` bytes: cut, or padded with
 /// `x`.
 fn with_bytes(json: &Value, pointer: &str, n: usize) -> Option<Value> {
@@ -1064,7 +1111,8 @@ mod tests {
             assert!(at.starts_with("/args/json/"), "{at}");
             let mut edits =
                 vec![with_number(&json, &at, 0, false), with_number(&json, &at, 9, true)];
-            edits.extend([longer(&json, &at), with_bytes(&json, &at, 3)].into_iter().flatten());
+            let longer = Edit::Longer.made(&json, &mut std::iter::once(at.as_str()));
+            edits.extend([longer, with_bytes(&json, &at, 3)].into_iter().flatten());
             for t in ["0", "x"] {
                 let mut j = json.clone();
                 *j.pointer_mut(&at).unwrap() = Value::String(t.into());
@@ -1190,5 +1238,165 @@ mod tests {
         assert_eq!(fresh(&j, 5, false)["amounts"], json!(["1", "1"]));
         assert_eq!(with_bytes(&j, "/to", 8).unwrap()["to"], json!("r.nearxx"));
         assert_eq!(with_bytes(&j, "/to", 1).unwrap()["to"], json!("r"));
+    }
+
+    std::thread_local! {
+        /// How many times an op holding a [`Tick`] was built.
+        static BUILT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    }
+
+    /// A field that counts its op's builds: written `true`, and read last,
+    /// once the rest has.
+    #[derive(Clone, Debug)]
+    struct Tick;
+
+    impl Serialize for Tick {
+        fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+            s.serialize_bool(true)
+        }
+    }
+
+    impl<'de> Deserialize<'de> for Tick {
+        fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+            bool::deserialize(d)?;
+            BUILT.with(|b| b.set(b.get() + 1));
+            Ok(Tick)
+        }
+    }
+
+    /// Lists whose items' edits each rebuild: a string's byte, a list's
+    /// item (beside an empty list), an unset number, an unset amount, and
+    /// a string beside unset ones.
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    struct Lists {
+        counts: Vec<Option<u32>>,
+        ids: Vec<String>,
+        limits: Vec<Option<crate::Balance>>,
+        lists: Vec<Vec<String>>,
+        memos: Vec<Option<String>>,
+        // Last in either key order: a build that fails isn't counted.
+        tick: Tick,
+    }
+
+    impl super::super::Op for Lists {
+        fn submit(&self, _: &mut crate::Sim) -> Result<(), super::super::Skip> {
+            Ok(())
+        }
+    }
+
+    fn lists(n: usize) -> Lists {
+        let ids: Vec<String> = (0..n).map(|i| format!("id{i}")).collect();
+        Lists {
+            counts: vec![None; n],
+            lists: (0..n).map(|i| ids[..i].to_vec()).collect(),
+            ids,
+            limits: vec![None; n],
+            memos: (0..n).map(|i| (i % 2 == 1).then(|| "m".to_owned())).collect(),
+            tick: Tick,
+        }
+    }
+
+    /// The axes of a list's items are found by editing them all at once,
+    /// as the axis moves them: where every item takes an edit, the op is
+    /// built as often however long the list. Built once per item, each
+    /// build as long as the list, is quadratic in its length.
+    #[test]
+    fn a_lists_items_are_tried_together() {
+        let built = |n| {
+            BUILT.with(|b| b.set(0));
+            let got = args::<Lists, crate::Sim>(&Act::Op(lists(n)));
+            (got, BUILT.with(std::cell::Cell::get))
+        };
+        let ((axes, fixed), short) = built(2);
+        let ((long_axes, long_fixed), long) = built(40);
+        assert_eq!(short, long, "builds grow with the list");
+        let got = |axes: &[Axis]| axes.iter().map(|a| (a.name.clone(), a.kind, a.at)).collect();
+        let want = |n: usize, longest: u128| {
+            let w = [
+                ("/counts", AxisKind::Len, n as u128),
+                ("/counts/*", AxisKind::Number, 0),
+                ("/ids", AxisKind::Len, n as u128),
+                ("/ids/*", AxisKind::Bytes, longest),
+                ("/limits", AxisKind::Len, n as u128),
+                ("/limits/*", AxisKind::Number, 0),
+                ("/lists", AxisKind::Len, n as u128),
+                ("/lists/*", AxisKind::Len, n as u128 - 1),
+                ("/lists/*/*", AxisKind::Bytes, longest),
+                ("/memos", AxisKind::Len, n as u128),
+                ("/memos/*", AxisKind::Bytes, 1),
+            ];
+            w.map(|(name, kind, at)| (name.to_owned(), kind, at)).to_vec()
+        };
+        let sorted = |mut v: Vec<(String, AxisKind, u128)>| {
+            v.sort();
+            v
+        };
+        assert_eq!(sorted(got(&axes)), want(2, 3), "{axes:#?}");
+        assert_eq!(sorted(got(&long_axes)), want(40, 4), "{long_axes:#?}");
+        let how =
+            |axes: &[Axis], name: &str| axes.iter().find(|a| a.name == name).unwrap().how.clone();
+        let unset = |name: &str, string| How::Unset { pointer: name.into(), string };
+        assert_eq!(how(&long_axes, "/counts/*"), unset("/counts/*", false));
+        assert_eq!(how(&long_axes, "/limits/*"), unset("/limits/*", true));
+        assert!(fixed.is_empty() && long_fixed.is_empty(), "{fixed:?} {long_fixed:?}");
+    }
+
+    /// An op whose lists take no two items alike.
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    struct Distinct {
+        groups: Vec<Unique>,
+        #[serde(deserialize_with = "distinct")]
+        ids: Vec<String>,
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    struct Unique(#[serde(deserialize_with = "distinct")] Vec<String>);
+
+    fn distinct<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+        let ids = Vec::<String>::deserialize(d)?;
+        let set: std::collections::BTreeSet<_> = ids.iter().collect();
+        if set.len() < ids.len() { Err(serde::de::Error::custom("a repeated id")) } else { Ok(ids) }
+    }
+
+    impl super::super::Op for Distinct {
+        fn submit(&self, _: &mut crate::Sim) -> Result<(), super::super::Skip> {
+            Ok(())
+        }
+    }
+
+    /// Ids of their own type: an account id is at most 64 bytes.
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    struct Accounts {
+        ids: Vec<crate::AccountId>,
+    }
+
+    impl super::super::Op for Accounts {
+        fn submit(&self, _: &mut crate::Sim) -> Result<(), super::super::Skip> {
+            Ok(())
+        }
+    }
+
+    /// Where a list's items don't all take an edit together, each is
+    /// tried alone: an id at its type's cap is no axis, the rest are. A
+    /// check across the items is judged on all of them edited at once, as
+    /// the axis moves them: padding `a` alone repeats `ax`, padding both
+    /// repeats nothing, so the ids' bytes are an axis and not fixed. An
+    /// empty list is a length beside one that can't grow.
+    #[test]
+    fn items_that_dont_all_take_an_edit_are_tried_alone() {
+        let ids = vec!["a.near".parse().unwrap(), "x".repeat(64).parse().unwrap()];
+        let (axes, fixed) = args::<Accounts, crate::Sim>(&Act::Op(Accounts { ids }));
+        let bytes = axes.iter().find(|a| a.name == "/ids/*").map(|a| (a.kind, a.at));
+        assert_eq!(bytes, Some((AxisKind::Bytes, 6)), "{axes:#?}");
+        assert_eq!(fixed, ["/ids/*"]);
+        let ids = vec!["a".into(), "ax".into()];
+        let groups = vec![Unique(vec![]), Unique(vec!["a".into()])];
+        let (axes, fixed) = args::<Distinct, crate::Sim>(&Act::Op(Distinct { groups, ids }));
+        let axis = |name: &str, kind| axes.iter().find(|a| a.name == name && a.kind == kind);
+        assert_eq!(axis("/ids/*", AxisKind::Bytes).map(|a| a.at), Some(2), "{axes:#?}");
+        assert_eq!(axis("/groups/*", AxisKind::Len).map(|a| a.at), Some(0), "{axes:#?}");
+        // The lengths of `ids` and of the group of one aren't: one more
+        // copy of the last repeats it.
+        assert_eq!(fixed, ["/groups/*", "/ids"]);
     }
 }
