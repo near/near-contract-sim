@@ -739,7 +739,8 @@ impl<O> Audit<O> {
     }
 
     /// The finding of `check` at `at` (a site as it prints, with or
-    /// without its ` (Op)`, or its op's name), if found: this run's row
+    /// without its ` (Op)`, one call of a batch's receipt, or its op's
+    /// name), if found: this run's row
     /// first, else, resumed, the saved part's, as the summary lists both.
     /// A check folded into another's row finds that row.
     pub fn found_at(&self, check: &str, at: &str) -> Option<Shown<'_, O>> {
