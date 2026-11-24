@@ -191,7 +191,7 @@ contract accepted within 1,000 blocks (`tests/external_calls.rs`):
   `prepaid_gas`, `random_seed` and yields fail it. The signer and
   `refund_to` are the contract, the deposit is 0, the balance is the one
   before the charge, and a promise gets exactly the gas it attaches.
-  Every receipt down the chain carries
+  Every call down the chain carries
   `AuthorizationContext::ExternalContractCall`.
 - **Limits.** 20 Tgas burnt, fees included; a 20 KiB call; a 50 KiB
   recorded storage proof, a remove counting 2,000 bytes. An ordinary

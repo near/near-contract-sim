@@ -9,7 +9,8 @@
   "accept": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99999682652944463200000000"
+      "probe": "99999682652944463200000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "included": {
@@ -60,7 +61,8 @@
   "accept_again": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99999682652944463200000000"
+      "probe": "99999682652944463200000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "repeat_of": "accept"
@@ -77,7 +79,8 @@
   "account_balance": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99999067808690548700000000"
+      "probe": "99999067808690548700000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "included": {
@@ -120,7 +123,8 @@
   "attached_deposit": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99999189173266301600000000"
+      "probe": "99999189173266301600000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "included": {
@@ -163,7 +167,8 @@
   "empty": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99999804898577280500000000"
+      "probe": "99999804898577280500000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "included": {
@@ -210,7 +215,8 @@
   "gas_at_limit": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99996095018807494700000000"
+      "probe": "99996095018807494700000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "included": {
@@ -251,7 +257,8 @@
   "gas_past_limit": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99996095018807494700000000"
+      "probe": "99996095018807494700000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "data": "Timeout",
@@ -276,7 +283,8 @@
   "heights": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99998946700400891600000000"
+      "probe": "99998946700400891600000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "included": {
@@ -318,10 +326,141 @@
       }
     }
   },
+  "init_installs": {
+    "balances": {
+      "bob": "99999926293991489700000000",
+      "probe": "99995670890920982000000000",
+      "wallet": "9999833593167182700000000"
+    },
+    "send": {
+      "included": {
+        "call": {
+          "executor": "0u6mjkspwm62ccmse1x2vm4a3bbvtqf55sqg3qvj8fcsma2h6rm160",
+          "gas_burnt": 1664068328173,
+          "logs": [
+            "accepted"
+          ],
+          "profile": {
+            "BASE": 1323840555,
+            "CONTRACT_LOADING_BASE": 35445963,
+            "CONTRACT_LOADING_BYTES": 2310394695,
+            "LOG_BASE": 3543313050,
+            "LOG_BYTE": 105590328,
+            "READ_MEMORY_BASE": 5219726400,
+            "READ_MEMORY_BYTE": 38013330,
+            "READ_REGISTER_BASE": 2517165186,
+            "READ_REGISTER_BYTE": 295686,
+            "UTF8_DECODING_BASE": 3111779061,
+            "UTF8_DECODING_BYTE": 2332643832,
+            "WASM_INSTRUCTION": 41137800,
+            "WRITE_MEMORY_BASE": 2803794861,
+            "WRITE_MEMORY_BYTE": 8171316,
+            "WRITE_REGISTER_BASE": 2865522486
+          },
+          "receipts": 0,
+          "status": {
+            "SuccessValue": "dzE="
+          },
+          "tokens_burnt": "166406832817300000000"
+        },
+        "receipts": [],
+        "status": {
+          "SuccessValue": "dzE="
+        }
+      }
+    },
+    "view": {
+      "ok": {
+        "logs": [
+          "accepted"
+        ],
+        "value": "dzE="
+      }
+    }
+  },
+  "init_refused": {
+    "balances": {
+      "bob": "99999926293991489700000000",
+      "probe": "99995670890920982000000000",
+      "wallet": "10000000000000000000000000"
+    },
+    "send": {
+      "data": "Timeout",
+      "error": "TIMEOUT_ERROR"
+    },
+    "view": {
+      "refused": {
+        "error": {
+          "ActionError": {
+            "index": 0,
+            "kind": {
+              "FunctionCallError": {
+                "ExecutionError": "Smart contract panicked: refused"
+              }
+            }
+          }
+        },
+        "logs": []
+      }
+    }
+  },
+  "initialized_ignores_init": {
+    "balances": {
+      "bob": "99999926293991489700000000",
+      "probe": "99995670890920982000000000",
+      "wallet": "9999711347534365400000000"
+    },
+    "send": {
+      "included": {
+        "call": {
+          "executor": "0u6mjkspwm62ccmse1x2vm4a3bbvtqf55sqg3qvj8fcsma2h6rm160",
+          "gas_burnt": 1222456328173,
+          "logs": [
+            "accepted"
+          ],
+          "profile": {
+            "BASE": 1323840555,
+            "CONTRACT_LOADING_BASE": 35445963,
+            "CONTRACT_LOADING_BYTES": 2310394695,
+            "LOG_BASE": 3543313050,
+            "LOG_BYTE": 105590328,
+            "READ_MEMORY_BASE": 5219726400,
+            "READ_MEMORY_BYTE": 38013330,
+            "READ_REGISTER_BASE": 2517165186,
+            "READ_REGISTER_BYTE": 295686,
+            "UTF8_DECODING_BASE": 3111779061,
+            "UTF8_DECODING_BYTE": 2332643832,
+            "WASM_INSTRUCTION": 41137800,
+            "WRITE_MEMORY_BASE": 2803794861,
+            "WRITE_MEMORY_BYTE": 8171316,
+            "WRITE_REGISTER_BASE": 2865522486
+          },
+          "receipts": 0,
+          "status": {
+            "SuccessValue": "dzI="
+          },
+          "tokens_burnt": "122245632817300000000"
+        },
+        "receipts": [],
+        "status": {
+          "SuccessValue": "dzI="
+        }
+      }
+    },
+    "view": {
+      "ok": {
+        "logs": [
+          "accepted"
+        ],
+        "value": "dzI="
+      }
+    }
+  },
   "no_account": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99995670890920982000000000"
+      "probe": "99995670890920982000000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "data": {
@@ -351,7 +490,8 @@
   "no_contract": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99995670890920982000000000"
+      "probe": "99995670890920982000000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "data": {
@@ -381,7 +521,8 @@
   "predecessor_account_id": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99999554460327349700000000"
+      "probe": "99999554460327349700000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "data": "Timeout",
@@ -406,7 +547,8 @@
   "prepaid_gas": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99999554460327349700000000"
+      "probe": "99999554460327349700000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "data": "Timeout",
@@ -431,7 +573,8 @@
   "promise_fwd_pk": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99998095018483720500000000"
+      "probe": "99998095018483720500000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "included": {
@@ -563,7 +706,8 @@
   "promise_pk": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99998460224671980800000000"
+      "probe": "99998460224671980800000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "included": {
@@ -656,7 +800,8 @@
   "promise_weight": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99998702786814648300000000"
+      "probe": "99998702786814648300000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "included": {
@@ -739,7 +884,8 @@
   "promise_yield_create": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99999554460327349700000000"
+      "probe": "99999554460327349700000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "data": "Timeout",
@@ -764,7 +910,8 @@
   "promise_yield_create_with_id": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99999554460327349700000000"
+      "probe": "99999554460327349700000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "data": "Timeout",
@@ -789,7 +936,8 @@
   "promise_zero_gas": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99998702786814648300000000"
+      "probe": "99998702786814648300000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "data": "Timeout",
@@ -814,7 +962,8 @@
   "random_seed": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99999554460327349700000000"
+      "probe": "99999554460327349700000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "data": "Timeout",
@@ -839,7 +988,8 @@
   "refund_to_account_id": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99999310537512952100000000"
+      "probe": "99999310537512952100000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "included": {
@@ -883,7 +1033,8 @@
   "refuse": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99999554460327349700000000"
+      "probe": "99999554460327349700000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "data": "Timeout",
@@ -908,7 +1059,8 @@
   "refuse_after_log": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99999554460327349700000000"
+      "probe": "99999554460327349700000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "data": "Timeout",
@@ -935,7 +1087,8 @@
   "removes_25": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99995815828032427800000000"
+      "probe": "99995815828032427800000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "included": {
@@ -981,7 +1134,8 @@
   "removes_26": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99995815828032427800000000"
+      "probe": "99995815828032427800000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "data": "Timeout",
@@ -1006,7 +1160,8 @@
   "signer_account_id": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99999432499084702100000000"
+      "probe": "99999432499084702100000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "included": {
@@ -1050,7 +1205,8 @@
   "signer_account_pk": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99999554460327349700000000"
+      "probe": "99999554460327349700000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "data": "Timeout",
@@ -1075,7 +1231,8 @@
   "size_at_limit": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99995670890920982000000000"
+      "probe": "99995670890920982000000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "included": {
@@ -1126,7 +1283,8 @@
   "size_past_limit": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99995670890920982000000000"
+      "probe": "99995670890920982000000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "data": {
@@ -1155,10 +1313,42 @@
       }
     }
   },
+  "uninitialized_without_init": {
+    "balances": {
+      "bob": "99999926293991489700000000",
+      "probe": "99995670890920982000000000",
+      "wallet": "10000000000000000000000000"
+    },
+    "send": {
+      "data": {
+        "TxExecutionError": {
+          "InvalidTxError": {
+            "ContractNotFound": {
+              "contract_id": "0u6mjkspwm62ccmse1x2vm4a3bbvtqf55sqg3qvj8fcsma2h6rm160"
+            }
+          }
+        }
+      },
+      "error": "INVALID_TRANSACTION"
+    },
+    "view": {
+      "refused": {
+        "error": {
+          "InvalidTxError": {
+            "ContractNotFound": {
+              "contract_id": "0u6mjkspwm62ccmse1x2vm4a3bbvtqf55sqg3qvj8fcsma2h6rm160"
+            }
+          }
+        },
+        "logs": []
+      }
+    }
+  },
   "write": {
     "balances": {
       "bob": "99999926293991489700000000",
-      "probe": "99999554460327349700000000"
+      "probe": "99999554460327349700000000",
+      "wallet": "10000000000000000000000000"
     },
     "send": {
       "included": {

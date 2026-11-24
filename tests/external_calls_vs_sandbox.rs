@@ -16,6 +16,10 @@
 //!   timeout after the dry run refuses it);
 //! - the contracts' balances once the call's receipts have all run.
 //!
+//! The last cases call a universal account (NEP-655) that alice funds but
+//! leaves uninitialized: with no state init, with one the call refuses
+//! (and rolls back), with one it installs, and with one it then ignores.
+//!
 //! Heights differ, since a sandbox makes blocks on its own clock: for the
 //! height probe both sides record whether the run saw the block it was
 //! meant to (the chunk's parent, or for a view the view's block), not the
@@ -24,11 +28,25 @@
 mod common;
 use base64::Engine;
 use common::*;
-use near_contract_sim::nearcore::near_primitives::transaction::EccTransaction;
-use near_contract_sim::{Gas, Sim, SimTransport};
+use near_contract_sim::nearcore::near_primitives::action::{
+    Action, DeployGlobalContractAction, TransferAction,
+};
+use near_contract_sim::nearcore::near_primitives::hash::hash;
+use near_contract_sim::nearcore::near_primitives::transaction::{
+    EccTransaction, SignedTransaction, Transaction, TransactionV0,
+};
+use near_contract_sim::nearcore::near_primitives::universal_state_init::{
+    RawStateInit, UniversalStateInit, UniversalStateInitV1,
+};
+use near_contract_sim::nearcore::near_primitives::utils::derive_universal_account_id;
+use near_contract_sim::{
+    AccountId, Gas, GlobalContractDeployMode, GlobalContractIdentifier, Sim, SimTransport,
+};
 use near_kit::rpc::RpcTransport;
 use serde_json::{Map, Value, json};
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Write};
+use std::sync::Arc;
 
 const FIXTURE: &str = "sandbox_ecc_2.15.0-rc.1.json";
 const ACCOUNTS: [&str; 3] = ["alice.test.near", "probe.test.near", "bob.test.near"];
@@ -77,21 +95,48 @@ fn gas_boundary() -> u64 {
     lo
 }
 
-/// (label, contract, payload), sent in this order.
-fn cases() -> Vec<(String, &'static str, Vec<u8>)> {
+/// A case: its label, the contract, the payload and a state init.
+struct Case {
+    label: String,
+    to: String,
+    payload: Vec<u8>,
+    init: Option<RawStateInit>,
+}
+
+fn case(label: &str, to: &str, payload: Vec<u8>) -> Case {
+    Case { label: label.into(), to: to.into(), payload, init: None }
+}
+
+/// The state init of the universal account the cases call last: the
+/// probe, by the hash alice publishes it under.
+fn wallet_init() -> RawStateInit {
+    UniversalStateInit::V1(UniversalStateInitV1 {
+        code: Some(GlobalContractIdentifier::CodeHash(hash(&wat("ecc_probe.wat")))),
+        data: BTreeMap::from([(b"seed".to_vec(), b"1".to_vec())]),
+        access_keys: BTreeSet::new(),
+    })
+    .to_raw()
+}
+
+fn wallet() -> AccountId {
+    derive_universal_account_id(&wallet_init())
+}
+
+/// Sent in this order.
+fn cases() -> Vec<Case> {
     let size = |n: usize| EccTransaction::new(PROBE.parse().unwrap(), vec![0; n]).get_size();
     let fits = 20_480 - size(0) as usize;
     let n = gas_boundary();
-    let mut v: Vec<(String, &str, Vec<u8>)> = vec![
-        ("empty".into(), PROBE, vec![]),
-        ("accept".into(), PROBE, op(0, b"hi")),
+    let mut v = vec![
+        case("empty", PROBE, vec![]),
+        case("accept", PROBE, op(0, b"hi")),
         // Within the repeat window, and before a sandbox's garbage collection
         // (5 epochs by default) prunes the first inclusion's outcome, which
         // the answer to a repeat is.
-        ("accept_again".into(), PROBE, op(0, b"hi")),
-        ("write".into(), PROBE, op(2, b"v")),
-        ("refuse".into(), PROBE, vec![1]),
-        ("refuse_after_log".into(), PROBE, vec![19]),
+        case("accept_again", PROBE, op(0, b"hi")),
+        case("write", PROBE, op(2, b"v")),
+        case("refuse", PROBE, vec![1]),
+        case("refuse_after_log", PROBE, vec![19]),
     ];
     for (code, name) in [
         (3, "signer_account_pk"),
@@ -101,26 +146,33 @@ fn cases() -> Vec<(String, &'static str, Vec<u8>)> {
         (7, "promise_yield_create"),
         (8, "promise_yield_create_with_id"),
     ] {
-        v.push((name.into(), PROBE, vec![code]));
+        v.push(case(name, PROBE, vec![code]));
     }
     v.extend([
-        ("signer_account_id".into(), PROBE, vec![9]),
-        ("refund_to_account_id".into(), PROBE, vec![10]),
-        ("attached_deposit".into(), PROBE, vec![11]),
-        ("account_balance".into(), PROBE, vec![12]),
-        ("heights".into(), PROBE, vec![17]),
-        ("promise_weight".into(), PROBE, promise(5, 1, "ping", "bob.test.near")),
-        ("promise_zero_gas".into(), PROBE, promise(0, 1, "ping", "bob.test.near")),
-        ("promise_pk".into(), PROBE, promise(10, 0, "pk", "bob.test.near")),
-        ("promise_fwd_pk".into(), PROBE, promise(30, 0, "fwd", "bob.test.near")),
-        ("gas_at_limit".into(), PROBE, op(14, &n.to_le_bytes())),
-        ("gas_past_limit".into(), PROBE, op(14, &(n + 1).to_le_bytes())),
-        ("removes_25".into(), PROBE, op(16, &25u32.to_le_bytes())),
-        ("removes_26".into(), PROBE, op(16, &26u32.to_le_bytes())),
-        ("size_at_limit".into(), PROBE, vec![0; fits]),
-        ("size_past_limit".into(), PROBE, vec![0; fits + 1]),
-        ("no_contract".into(), "alice.test.near", vec![]),
-        ("no_account".into(), "nobody.test.near", vec![]),
+        case("signer_account_id", PROBE, vec![9]),
+        case("refund_to_account_id", PROBE, vec![10]),
+        case("attached_deposit", PROBE, vec![11]),
+        case("account_balance", PROBE, vec![12]),
+        case("heights", PROBE, vec![17]),
+        case("promise_weight", PROBE, promise(5, 1, "ping", "bob.test.near")),
+        case("promise_zero_gas", PROBE, promise(0, 1, "ping", "bob.test.near")),
+        case("promise_pk", PROBE, promise(10, 0, "pk", "bob.test.near")),
+        case("promise_fwd_pk", PROBE, promise(30, 0, "fwd", "bob.test.near")),
+        case("gas_at_limit", PROBE, op(14, &n.to_le_bytes())),
+        case("gas_past_limit", PROBE, op(14, &(n + 1).to_le_bytes())),
+        case("removes_25", PROBE, op(16, &25u32.to_le_bytes())),
+        case("removes_26", PROBE, op(16, &26u32.to_le_bytes())),
+        case("size_at_limit", PROBE, vec![0; fits]),
+        case("size_past_limit", PROBE, vec![0; fits + 1]),
+        case("no_contract", "alice.test.near", vec![]),
+        case("no_account", "nobody.test.near", vec![]),
+    ]);
+    let (wallet, init) = (wallet(), Some(wallet_init()));
+    v.extend([
+        case("uninitialized_without_init", wallet.as_str(), vec![]),
+        Case { init: init.clone(), ..case("init_refused", wallet.as_str(), vec![1]) },
+        Case { init: init.clone(), ..case("init_installs", wallet.as_str(), op(0, b"w1")) },
+        Case { init, ..case("initialized_ignores_init", wallet.as_str(), op(0, b"w2")) },
     ]);
     v
 }
@@ -155,6 +207,41 @@ impl Node {
     async fn balance(&self, id: &str) -> Value {
         let q = json!({"request_type": "view_account", "finality": "optimistic", "account_id": id});
         self.ok("query", q).await["amount"].clone()
+    }
+
+    /// Signs `action` from alice to `receiver`, sends it and checks it
+    /// succeeded.
+    async fn alice_sends(&self, receiver: &str, action: Action) {
+        let key = world().secret_key("alice.test.near");
+        let block = self.ok("block", json!({"finality": "optimistic"})).await;
+        let block_hash = block["header"]["hash"].as_str().unwrap().parse().unwrap();
+        let q = json!({"request_type": "view_access_key", "finality": "optimistic",
+                       "account_id": "alice.test.near", "public_key": key.public_key().to_string()});
+        let nonce = self.ok("query", q).await["nonce"].as_u64().unwrap() + 1;
+        let tx = Transaction::V0(TransactionV0 {
+            signer_id: "alice.test.near".parse().unwrap(),
+            public_key: key.public_key(),
+            nonce,
+            receiver_id: receiver.parse().unwrap(),
+            block_hash,
+            actions: vec![action],
+        });
+        let signature = key.sign(tx.get_hash_and_size().0.as_ref());
+        let signed = borsh::to_vec(&SignedTransaction::new(signature, tx)).unwrap();
+        let send = json!({"signed_tx_base64": b64(&signed), "wait_until": "FINAL"});
+        let r = self.ok("send_tx", send).await;
+        assert!(r["status"].get("SuccessValue").is_some(), "{r}");
+    }
+
+    /// alice publishes the probe by hash and funds the universal account
+    /// whose state init runs it, which stays uninitialized.
+    async fn publish_and_fund(&self) {
+        let wasm: Arc<[u8]> = wat("ecc_probe.wat").into();
+        let mode = GlobalContractDeployMode::CodeHash;
+        let deploy = DeployGlobalContractAction { code: wasm, deploy_mode: mode };
+        self.alice_sends("alice.test.near", Action::DeployGlobalContract(deploy)).await;
+        let transfer = TransferAction { deposit: near(10) };
+        self.alice_sends(wallet().as_str(), Action::Transfer(transfer)).await;
     }
 }
 
@@ -234,10 +321,14 @@ fn saw(value: &[u8], height: &Value, timestamp: &Value) -> bool {
 async fn record(node: &Node) -> Map<String, Value> {
     let mut out = Map::new();
     let mut included: Vec<(String, Value)> = vec![];
-    for (label, to, payload) in cases() {
-        let view = json!({"request_type": "call_function", "finality": "optimistic",
-                          "account_id": to, "method_name": "__external_call",
-                          "args_base64": b64(&payload)});
+    node.publish_and_fund().await;
+    for Case { label, to, payload, init } in cases() {
+        let mut view = json!({"request_type": "call_function", "finality": "optimistic",
+                              "account_id": to, "method_name": "__external_call",
+                              "args_base64": b64(&payload)});
+        if let Some(init) = &init {
+            view["state_init"] = json!({"universal": b64(&init.0)});
+        }
         let r = node.rpc("query", view).await;
         let view = match (&r["result"], &r["error"]) {
             (res, Value::Null) => {
@@ -258,7 +349,7 @@ async fn record(node: &Node) -> Map<String, Value> {
             },
         };
 
-        let ecc = EccTransaction::new(to.parse().unwrap(), payload);
+        let ecc = EccTransaction::new_with_state_init(to.parse().unwrap(), payload, init);
         let send = json!({"external_call_base64": b64(&borsh::to_vec(&ecc).unwrap()),
                           "wait_until": "FINAL"});
         let r = node.rpc("send_tx", send).await;
@@ -294,7 +385,8 @@ async fn record(node: &Node) -> Map<String, Value> {
             (_, e) => json!({"error": e["cause"]["name"], "data": e["data"]}),
         };
         let balances = json!({"probe": node.balance(PROBE).await,
-                              "bob": node.balance("bob.test.near").await});
+                              "bob": node.balance("bob.test.near").await,
+                              "wallet": node.balance(wallet().as_str()).await});
         out.insert(label, json!({"view": view, "send": send, "balances": balances}));
     }
     out
@@ -306,7 +398,7 @@ async fn external_calls_match_the_sandbox() {
     assert_eq!(sb["_protocol"], world().config.protocol_version);
     let sim = record(&Node::Sim(SimTransport::new(world()))).await;
     let mut problems = vec![];
-    for (label, _, _) in cases() {
+    for Case { label, .. } in cases() {
         let (a, b) = (&sim[&label], &sb[&label]);
         for part in ["view", "send", "balances"] {
             if a[part] != b[part] {
