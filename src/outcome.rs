@@ -15,7 +15,7 @@ use near_primitives::errors::{
 };
 use near_primitives::hash::CryptoHash;
 use near_primitives::receipt::{DataReceiver, Receipt};
-use near_primitives::transaction::ExecutionStatus;
+use near_primitives::transaction::{ECC_METHOD_NAME, ExecutionStatus};
 use near_primitives::types::{AccountId, Balance, Gas};
 use near_primitives::views::{ExecutionMetadataView, FinalExecutionStatus};
 use near_runtime::config::{exec_fee, tx_cost};
@@ -311,6 +311,14 @@ impl fmt::Display for StorageOps {
 }
 
 impl ReceiptOutcome {
+    /// The run of an external call ([`Sim::external_call`]): a
+    /// [`TxOutcome::transaction`] that ran its contract's
+    /// `__external_call` rather than converting a transaction.
+    pub fn is_external_call(&self) -> bool {
+        self.receipt_id == self.tx
+            && self.method_names.first().is_some_and(|m| m == ECC_METHOD_NAME)
+    }
+
     /// One of the runtime's refunds.
     pub fn is_refund(&self) -> bool {
         self.refund.is_some()
@@ -441,7 +449,7 @@ pub enum Failure {
 }
 
 impl Failure {
-    fn new(e: &TxExecutionError) -> Self {
+    pub(crate) fn new(e: &TxExecutionError) -> Self {
         let a = match e {
             TxExecutionError::ActionError(a) => a,
             TxExecutionError::InvalidTxError(e) => return Self::InvalidTx(e.clone()),
@@ -783,16 +791,20 @@ impl TxOutcome {
         panic!("expected {method} to leave {}, {why}{}", tgas(min), trace(self));
     }
 
-    /// The logs of every receipt that succeeded, in execution order;
-    /// [`all_logs`](Self::all_logs) adds failed receipts'.
+    /// The logs of every receipt that succeeded, in execution order, an
+    /// external call's own run first; [`all_logs`](Self::all_logs) adds
+    /// failed receipts'.
     pub fn logs(&self) -> Vec<&str> {
-        let ok = self.receipts.iter().filter(|r| r.failure().is_none());
+        let all = self.transaction.iter().chain(&self.receipts);
+        let ok = all.filter(|r| r.failure().is_none());
         ok.flat_map(|r| r.logs.iter().map(String::as_str)).collect()
     }
 
-    /// Every receipt's logs, failed receipts' included, in execution order.
+    /// Every receipt's logs, failed receipts' included, in execution order,
+    /// an external call's own run first.
     pub fn all_logs(&self) -> Vec<&str> {
-        self.receipts.iter().flat_map(|r| r.logs.iter().map(String::as_str)).collect()
+        let all = self.transaction.iter().chain(&self.receipts);
+        all.flat_map(|r| r.logs.iter().map(String::as_str)).collect()
     }
 
     /// The NEP-297 events of [`logs`](Self::logs), each the whole object.
@@ -844,7 +856,7 @@ impl Sim {
     pub fn outcome(&self, hash: impl Borrow<CryptoHash>) -> TxOutcome {
         let root = *hash.borrow();
         let log = self.chain.log();
-        assert!(log.txs.contains_key(&root), "unknown transaction {root}");
+        assert!(log.is_root(&root), "unknown transaction {root}");
         let mut outcomes = self.ran(root).into_iter();
         let transaction = outcomes.next();
         let receipts: Vec<ReceiptOutcome> = outcomes.collect();
@@ -885,11 +897,25 @@ impl Sim {
         let log = self.chain.log();
         let (b, _) = log.position(&root).expect("a converted transaction");
         let rc = priced_config(log.blocks[b].protocol_version, log.blocks[b].pricing);
-        // The conversion burnt its gas at the block's price.
-        let price = t.tokens_burnt.as_yoctonear() / u128::from(t.gas_burnt.as_gas());
-        let cost = tx_cost(rc, &log.txs[&root].transaction, Balance::from_yoctonear(price))
-            .expect("tx cost overflow")
-            .gas_cost;
+        let cost = match log.txs.get(&root) {
+            Some(tx) => {
+                // The conversion burnt its gas at the block's price.
+                let price = t.tokens_burnt.as_yoctonear() / u128::from(t.gas_burnt.as_gas());
+                tx_cost(rc, &tx.transaction, Balance::from_yoctonear(price))
+                    .expect("tx cost overflow")
+                    .gas_cost
+            }
+            // An external call's contract paid what it burnt, and the gas
+            // its promises carry at the price they bought it.
+            None => t.receipt_ids.iter().filter_map(|id| log.receipts.get(id)).fold(
+                t.tokens_burnt,
+                |paid, r| {
+                    let Some(a) = action_receipt(r) else { return paid };
+                    let gas = u128::from(prepaid(rc, r).as_gas());
+                    paid.saturating_add(Balance::from_yoctonear(gas * a.gas_price().as_yoctonear()))
+                },
+            ),
+        };
         receipts
             .iter()
             .filter(|r| r.refund == Some(Refund::Gas) && r.is_success())
@@ -915,7 +941,7 @@ impl Sim {
         let blocks = log.blocks.iter().enumerate().filter(|(_, b)| heights.contains(&b.height));
         blocks
             .flat_map(|(b, block)| (0..block.outcomes.len()).map(move |pos| (b, pos)))
-            .filter(|&at| !log.txs.contains_key(&log.at(at).1.id))
+            .filter(|&at| !log.is_root(&log.at(at).1.id))
             .map(|at| self.receipt_outcome(at))
             .collect()
     }
@@ -947,10 +973,14 @@ impl Sim {
             .filter_map(|id| log.receipts.get(id))
             .filter(|r| !r.predecessor_id().is_system())
             .fold(Gas::ZERO, |g, r| g.saturating_add(prepaid(rc, r)));
-        // A local receipt's predecessor, and the conversion's, is the signer.
+        // A local receipt's predecessor, and the conversion's, is the signer;
+        // an external call's, its contract.
         let signer = tx.or(log.txs.get(&e.id).map(|t| &t.transaction)).map(|t| t.signer_id());
-        let predecessor_id =
-            body.map(|r| r.predecessor_id()).or(signer).expect("a body or a transaction").clone();
+        let ecc = log.eccs.get(&e.id);
+        let predecessor_id = (body.map(|r| r.predecessor_id()).or(signer))
+            .or(ecc.map(|c| c.contract_id()))
+            .expect("a body, a transaction or an external call")
+            .clone();
         let gas_profile: BTreeMap<String, u64> = ExecutionMetadataView::from(o.metadata.clone())
             .gas_profile
             .unwrap_or_default()
@@ -974,8 +1004,14 @@ impl Sim {
             receiver_id: o.executor_id.clone(),
             refund: predecessor_id.is_system().then(|| refund_kind(log, at.0, &e.id, body)),
             predecessor_id,
-            method_names: method_names(actions),
-            args: calls(actions).map(|c| c.args.clone()).collect(),
+            method_names: match ecc {
+                Some(_) => vec![ECC_METHOD_NAME.to_string()],
+                None => method_names(actions),
+            },
+            args: match ecc {
+                Some(c) => vec![c.payload().to_vec()],
+                None => calls(actions).map(|c| c.args.clone()).collect(),
+            },
             actions: actions.iter().map(|a| a.as_ref().to_string()).collect(),
             block_height: block.height,
             block_timestamp_ns: block.timestamp_ns,

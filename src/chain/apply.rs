@@ -14,8 +14,11 @@ use near_primitives::errors::{EpochError, InvalidTxError};
 use near_primitives::hash::{CryptoHash, hash};
 use near_primitives::receipt::Receipt;
 use near_primitives::shard_layout::ShardLayout;
-use near_primitives::transaction::{ExecutionOutcomeWithId, SignedTransaction};
+use near_primitives::transaction::{
+    EccTransaction, ExecutionOutcomeWithId, SignedTransaction, TransactionEnvelope,
+};
 use near_primitives::types::{AccountId, Balance, EpochId, EpochInfoProvider, Gas, ShardId};
+use near_primitives::utils::create_ecc_outcome_id;
 use near_runtime::config::tx_cost;
 use near_runtime::{
     ApplyResult, ApplyState, PrevBlockContext, Runtime, SignedValidPeriodTransactions,
@@ -33,9 +36,16 @@ impl Chain {
         validators: &Option<ValidatorAccountsUpdate>,
         incoming: &[Receipt],
         txs: Vec<SignedTransaction>,
+        eccs: Vec<EccTransaction>,
     ) -> ApplyResult {
         let e = apply_state.epoch_height;
-        let taken: Vec<CryptoHash> = txs.iter().map(SignedTransaction::get_hash).collect();
+        // The outcome ids: a transaction's hash, a call's unique id.
+        let height = apply_state.block_height;
+        let taken: Vec<CryptoHash> = (txs.iter().map(SignedTransaction::get_hash))
+            .chain(eccs.iter().map(|c| create_ecc_outcome_id(c.hash_without_state_init(), height)))
+            .collect();
+        let envelopes: Vec<TransactionEnvelope> =
+            (txs.into_iter().map(Into::into)).chain(eccs.into_iter().map(Into::into)).collect();
         // Record reads like a chunk producer does (state witness): past the
         // soft limit the runtime delays the remaining receipts, and a single
         // receipt reading more than `per_receipt_storage_proof_size_limit`
@@ -49,7 +59,7 @@ impl Chain {
                 validators,
                 apply_state,
                 incoming,
-                SignedValidPeriodTransactions::new(txs, vec![true; taken.len()]),
+                SignedValidPeriodTransactions::new(envelopes, vec![true; taken.len()]),
                 &SimEpochInfo::new(config),
                 Default::default(),
             )
@@ -147,17 +157,7 @@ impl Chain {
     ) -> (Vec<SignedTransaction>, Vec<ExecutionOutcomeWithId>) {
         let rc = config.runtime_config();
         let cc = CongestionControl::new(rc.congestion_control_config, self.carry.congestion(), 0);
-        if let ShardAcceptsTransactions::No(reason) = cc.shard_accepts_transactions() {
-            let congestion_level = match reason {
-                RejectTransactionReason::IncomingCongestion { congestion_level }
-                | RejectTransactionReason::OutgoingCongestion { congestion_level }
-                | RejectTransactionReason::MemoryCongestion { congestion_level } => {
-                    congestion_level
-                }
-                RejectTransactionReason::MissedChunks { .. } => unreachable!("no missed chunks"),
-            };
-            let shard_id = self.shard_uid.shard_id().into();
-            let err = InvalidTxError::ShardCongested { shard_id, congestion_level };
+        if let Some(err) = self.shard_congested(config) {
             let refused = std::mem::take(&mut self.mempool)
                 .iter()
                 .map(|h| ExecutionOutcomeWithId::failed(&self.log.txs[h], err.clone()))
@@ -186,6 +186,25 @@ impl Chain {
         }
         let txs = self.mempool.drain(..take).map(|h| (*self.log.txs[&h]).clone()).collect();
         (txs, vec![])
+    }
+
+    /// Why the shard takes no transactions or calls in the next chunk, if
+    /// it doesn't: its congestion level (from the previous chunk) is at or
+    /// above `reject_tx_congestion_threshold`.
+    pub(super) fn shard_congested(&self, config: &Config) -> Option<InvalidTxError> {
+        let rc = config.runtime_config();
+        let cc = CongestionControl::new(rc.congestion_control_config, self.carry.congestion(), 0);
+        let ShardAcceptsTransactions::No(reason) = cc.shard_accepts_transactions() else {
+            return None;
+        };
+        let congestion_level = match reason {
+            RejectTransactionReason::IncomingCongestion { congestion_level }
+            | RejectTransactionReason::OutgoingCongestion { congestion_level }
+            | RejectTransactionReason::MemoryCongestion { congestion_level } => congestion_level,
+            RejectTransactionReason::MissedChunks { .. } => unreachable!("no missed chunks"),
+        };
+        let shard_id = self.shard_uid.shard_id().into();
+        Some(InvalidTxError::ShardCongested { shard_id, congestion_level })
     }
 }
 

@@ -338,11 +338,11 @@ impl Sim {
     /// 0, or rewinds below a held receipt. A transaction already queued
     /// (`submit` queues nothing) leaves the pin.
     #[track_caller]
-    pub(crate) fn submit_pinned(
+    pub(crate) fn submit_pinned<T>(
         &mut self,
         local: bool,
-        submit: impl FnOnce(&mut Chain) -> CryptoHash,
-    ) -> CryptoHash {
+        submit: impl FnOnce(&mut Chain) -> T,
+    ) -> T {
         let Pinned { height, time } = self.pinned;
         let k: u64 = if local { 1 } else { 2 };
         let room = |what: &str, at: u64, need: u64, unit: &str| {
@@ -377,9 +377,9 @@ impl Sim {
              (Fault::Hold): settle() first",
             self.chain.height
         );
-        let queued = self.chain.queued().count();
+        let queued = self.chain.pooled();
         let hash = submit(&mut self.chain);
-        if self.chain.queued().count() > queued {
+        if self.chain.pooled() > queued {
             (self.chain.height, self.chain.timestamp_ns) = (h, t);
             self.pinned = Pinned::default();
         }
@@ -632,7 +632,8 @@ impl Sim {
         out
     }
 
-    /// Every transaction submitted, setup included, in order.
+    /// Every transaction submitted, setup included, in order, and the
+    /// unique id of every external call a chunk included.
     pub fn txs(&self) -> &[CryptoHash] {
         &self.chain.log().roots
     }

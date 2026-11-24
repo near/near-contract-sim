@@ -95,15 +95,17 @@ impl TxOutcome {
     fn gas_table(&self, full: bool, color: bool) -> String {
         let mut rows: Vec<(String, [u64; 7], u64, bool)> = vec![];
         if let Some(t) = &self.transaction {
-            let mut cols = [0; 7];
-            cols[SEND] = t.gas_burnt.as_gas();
             let failed = t.failure_text().is_some();
-            rows.push((
-                format!("conversion {}", t.receiver_id),
-                cols,
-                t.gas_burnt.as_gas(),
-                failed,
-            ));
+            // An external call's run has a profile; a conversion only sends.
+            let (label, cols) = match t.is_external_call() {
+                true => (format!("external call {}", t.receiver_id), columns(t)),
+                false => {
+                    let mut cols = [0; 7];
+                    cols[SEND] = t.gas_burnt.as_gas();
+                    (format!("conversion {}", t.receiver_id), cols)
+                }
+            };
+            rows.push((label, cols, t.gas_burnt.as_gas(), failed));
         }
         let calls: Vec<&ReceiptOutcome> = self.receipts.iter().filter(|r| !r.is_refund()).collect();
         let first = first_failure(self);
@@ -219,8 +221,12 @@ impl TxOutcome {
         }
         let refunds = self.receipts.iter().filter(|r| r.is_refund() && !r.unhandled).count();
         let status = paint(color && self.is_failure(), RED, &status_label(self));
+        let (what, by, gas) = match tx.is_external_call() {
+            true => ("external call", "to", "burnt"),
+            false => ("tx", "signed by", "conversion"),
+        };
         let mut out = format!(
-            "tx {} signed by {} at #{} (conversion {}) -> {}\n",
+            "{what} {} {by} {} at #{} ({gas} {}) -> {}\n",
             short(&self.hash),
             tx.receiver_id,
             tx.block_height,
@@ -633,7 +639,11 @@ pub(crate) fn verdict(o: &TxOutcome) -> String {
     }
     let conversion = o.transaction.iter().filter_map(|t| {
         let why = t.failure_text()?;
-        Some(format!("#{} conversion of a tx signed by {}: {why}", t.block_height, t.receiver_id))
+        let what = match t.is_external_call() {
+            true => "external call to",
+            false => "conversion of a tx signed by",
+        };
+        Some(format!("#{} {what} {}: {why}", t.block_height, t.receiver_id))
     });
     let receipts = o.receipts.iter().filter_map(|r| {
         let from = delivered_from(r).unwrap_or_default();

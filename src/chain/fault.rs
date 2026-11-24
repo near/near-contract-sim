@@ -243,6 +243,10 @@ impl Chain {
             let tx = if self.log.txs.contains_key(&o.id) {
                 own.extend(o.outcome.receipt_ids.first());
                 o.id
+            } else if self.log.eccs.contains_key(&o.id) {
+                // An external call has no receipt of its own: the first is
+                // a promise.
+                o.id
             } else {
                 match root.get(&o.id).or(self.log.origin.get(&o.id)) {
                     Some(tx) => *tx,

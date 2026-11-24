@@ -12,7 +12,7 @@ use near_primitives::errors::TxExecutionError;
 use near_primitives::hash::CryptoHash;
 use near_primitives::receipt::{Receipt, VersionedActionReceipt, VersionedReceiptEnum};
 use near_primitives::transaction::{
-    ExecutionOutcomeWithId, ExecutionStatus, SignedTransaction, Transaction,
+    EccTransaction, ExecutionOutcomeWithId, ExecutionStatus, SignedTransaction, Transaction,
 };
 use near_primitives::trie_key::TrieKey;
 use near_primitives::types::{
@@ -43,9 +43,15 @@ pub(crate) struct Block {
 #[derive(Clone, Default, BorshSerialize, BorshDeserialize)]
 pub(crate) struct Log {
     pub blocks: Vec<Arc<Block>>,
-    /// Every transaction submitted, in order.
+    /// Every transaction submitted, and every external call included (by
+    /// its unique id), in order.
     pub roots: Vec<CryptoHash>,
     pub txs: HashMap<CryptoHash, Arc<SignedTransaction>>,
+    /// Every external call included, by its unique id, as included.
+    pub eccs: HashMap<CryptoHash, Arc<EccTransaction>>,
+    /// Per external call (its hash without a state init), its first
+    /// accepted inclusion in the repeat window: the height and unique id.
+    pub accepted_eccs: HashMap<CryptoHash, (u64, CryptoHash)>,
     pub receipts: HashMap<CryptoHash, Arc<Receipt>>,
     /// Outcome id -> (block, position in its outcomes).
     index: HashMap<CryptoHash, (usize, usize)>,
@@ -120,7 +126,7 @@ impl Log {
         for (pos, o) in block.outcomes.iter().enumerate() {
             self.index.insert(o.id, (b, pos));
             // A block's outcomes come parent first, so the origin is known.
-            let root = if self.txs.contains_key(&o.id) { o.id } else { self.origin[&o.id] };
+            let root = if self.is_root(&o.id) { o.id } else { self.origin[&o.id] };
             for c in &o.outcome.receipt_ids {
                 self.origin.insert(*c, root);
             }
@@ -352,7 +358,14 @@ impl Log {
     pub(crate) fn converted_from(&self, id: &CryptoHash) -> Option<&Transaction> {
         let t = self.origin.get(id)?;
         let conversion = &self.at(self.index[t]).1.outcome;
-        (conversion.receipt_ids.first() == Some(id)).then_some(&self.txs[t].transaction)
+        let tx = self.txs.get(t)?;
+        (conversion.receipt_ids.first() == Some(id)).then_some(&tx.transaction)
+    }
+
+    /// A transaction's hash or an included external call's unique id: an
+    /// outcome nothing else created.
+    pub(crate) fn is_root(&self, id: &CryptoHash) -> bool {
+        self.txs.contains_key(id) || self.eccs.contains_key(id)
     }
 
     pub(crate) fn on_balance(&mut self, b: &BalanceStatsV1) {

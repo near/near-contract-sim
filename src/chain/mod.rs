@@ -5,6 +5,7 @@
 
 mod apply;
 mod callback;
+mod ecc;
 mod epoch;
 mod fault;
 mod log;
@@ -16,6 +17,7 @@ mod watch;
 
 #[cfg(feature = "near-kit")]
 pub(crate) use apply::VALIDATOR;
+pub(crate) use ecc::Verdict;
 pub(crate) use epoch::Epochs;
 pub(crate) use log::{Block, Log, action_receipt, calls, is_gas_refund, method_names};
 pub(crate) use reply::BoundReply;
@@ -375,6 +377,10 @@ pub(crate) struct Chain {
     pub timestamp_ns: u64,
     /// Transactions for the next block, in submission order.
     mempool: Vec<CryptoHash>,
+    /// Every send of an external call, and the pending ones, in order:
+    /// see `ecc.rs`. Not snapshotted.
+    sends: Vec<ecc::Send>,
+    ecc_pool: Vec<usize>,
     /// Receipts for the next block.
     incoming: Vec<Receipt>,
     /// Receipts holds keep back (`order.rs`), in the order they go out, each
@@ -411,6 +417,8 @@ impl Chain {
             height,
             timestamp_ns,
             mempool: vec![],
+            sends: vec![],
+            ecc_pool: vec![],
             incoming: vec![],
             holding: VecDeque::new(),
             carry: Carry::new(shard_uid.shard_id()),
@@ -522,7 +530,7 @@ impl Chain {
     }
 
     /// Panics unless each `Receipts::in_tx` is a `HoldUntil`'s and names a
-    /// transaction submitted before.
+    /// transaction submitted before, or an external call included before.
     #[track_caller]
     fn check_in_tx(&self, injections: &[(Receipts, Fault)]) {
         for (at, fault) in injections {
@@ -535,7 +543,7 @@ impl Chain {
                 && let Some(t) = until.tx_of()
             {
                 assert!(
-                    self.log.txs.contains_key(&t),
+                    self.log.is_root(&t),
                     "{fault} at {at}: {t} names no transaction submitted before this one"
                 );
             }
@@ -544,6 +552,11 @@ impl Chain {
 
     pub(crate) fn queued(&self) -> impl Iterator<Item = &SignedTransaction> {
         self.mempool.iter().map(|h| &*self.log.txs[h])
+    }
+
+    /// Transactions and external calls waiting for a block.
+    pub(crate) fn pooled(&self) -> usize {
+        self.mempool.len() + self.ecc_pool.len()
     }
 
     /// Applies block `height + 1`, one `block_time` after the last, and makes
@@ -562,7 +575,10 @@ impl Chain {
         self.timestamp_ns = apply_state.block_timestamp;
         let incoming = std::mem::take(&mut self.incoming);
         let (txs, mut outcomes) = self.take_chunk_transactions(config);
-        let mut res = self.apply_chunk(config, &apply_state, &validators, &incoming, txs);
+        let size = txs.iter().map(SignedTransaction::size_for_limits).sum();
+        let eccs = self.take_chunk_eccs(config, &apply_state, &txs, size);
+        let mut res = self.apply_chunk(config, &apply_state, &validators, &incoming, txs, eccs);
+        self.remember_eccs(apply_state.block_height, &res.external_calls);
         // Before the log records the bodies, so a delivered callback's, and a
         // faulted receipt's, is its own.
         self.rewrite_callbacks(
@@ -655,7 +671,10 @@ impl Chain {
 
     /// Settled but for held receipts.
     fn is_quiet(&self) -> bool {
-        self.mempool.is_empty() && self.incoming.is_empty() && self.carry.is_empty()
+        self.mempool.is_empty()
+            && !self.has_pooled_eccs()
+            && self.incoming.is_empty()
+            && self.carry.is_empty()
     }
 }
 

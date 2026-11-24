@@ -468,8 +468,8 @@ impl Sim {
         let mut calls = vec![];
         for block in &log.blocks {
             for e in block.outcomes.iter().filter(|e| e.outcome.executor_id == id) {
-                if log.txs.contains_key(&e.id) {
-                    continue; // a conversion
+                if log.is_root(&e.id) {
+                    continue; // a conversion, or an external call's run
                 }
                 // A local receipt, the signer's to itself, has no body: its
                 // transaction describes it.

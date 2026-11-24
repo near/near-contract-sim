@@ -15,11 +15,14 @@ use near_primitives::action::{
     GlobalContractIdentifier, TransferAction, TransferToGasKeyAction, UseGlobalContractAction,
     WithdrawFromGasKeyAction,
 };
+use near_primitives::errors::{ActionsValidationError, TxExecutionError};
 use near_primitives::hash::CryptoHash;
 use near_primitives::transaction::{
-    NonceMode, SignedTransaction, Transaction, TransactionNonce, TransactionV0, TransactionV1,
+    ECC_METHOD_NAME, EccTransaction, NonceMode, SignedTransaction, Transaction, TransactionNonce,
+    TransactionV0, TransactionV1,
 };
 use near_primitives::types::{AccountId, Balance, Gas, Nonce, NonceIndex};
+use near_primitives::version::ProtocolFeature;
 use near_primitives::views::{FinalExecutionStatus, StateInitView};
 use near_runtime::state_viewer::errors::CallFunctionError;
 use serde::Serialize;
@@ -105,7 +108,9 @@ impl Sim {
 
     /// Runs `method` of `id` as a view at `at`, noting it as one that ran
     /// (`Sim::viewed`, an audit's coverage) if it succeeded: what
-    /// [`view_raw`](Self::view_raw) and RPC's `call_function` share.
+    /// [`view_raw`](Self::view_raw) and RPC's `call_function` share. A
+    /// view of `__external_call`, once the next block runs external calls,
+    /// is the dry run of one with `args` as its payload, as a node runs it.
     pub(crate) fn run_view(
         &self,
         at: crate::chain::ViewAt,
@@ -113,12 +118,46 @@ impl Sim {
         method: &str,
         args: &[u8],
         state_init: Option<&StateInitView>,
-    ) -> (Result<Vec<u8>, CallFunctionError>, Vec<String>) {
-        let (result, logs) = self.chain.view(&self.config, at, id, method, args, state_init);
+    ) -> (Result<Vec<u8>, ViewError>, Vec<String>) {
+        let pv = self.config.protocol_version;
+        let (result, logs) =
+            match method == ECC_METHOD_NAME && ProtocolFeature::ExternalContractCalls.enabled(pv) {
+                true => self.view_external_call(at, id, args, state_init),
+                false => {
+                    let (r, logs) = self.chain.view(&self.config, at, id, method, args, state_init);
+                    (r.map_err(ViewError::Call), logs)
+                }
+            };
         if result.is_ok() {
             self.viewed.lock().map(|mut v| v.insert(format!("{id}::{method}"))).ok();
         }
         (result, logs)
+    }
+
+    fn view_external_call(
+        &self,
+        at: crate::chain::ViewAt,
+        id: &AccountId,
+        payload: &[u8],
+        state_init: Option<&StateInitView>,
+    ) -> (Result<Vec<u8>, ViewError>, Vec<String>) {
+        let state_init = match state_init {
+            None => None,
+            Some(StateInitView::Universal(raw)) => Some(raw.clone()),
+            Some(StateInitView::Deterministic { .. }) => {
+                let error = ActionsValidationError::UnsupportedProtocolFeature {
+                    protocol_feature: "deterministic state init in an external call".into(),
+                    version: self.config.protocol_version,
+                };
+                let error = CallFunctionError::InvalidStateInit { error: Box::new(error) };
+                return (Err(ViewError::Call(error)), vec![]);
+            }
+        };
+        let ecc = EccTransaction::new_with_state_init(id.clone(), payload.to_vec(), state_init);
+        match self.chain.view_ecc(&self.config, at, &ecc) {
+            Ok((value, logs)) => (Ok(value), logs),
+            Err(r) => (Err(ViewError::ExternalCallRefused(Box::new(r.error))), r.logs),
+        }
     }
 
     /// Calls `method` of `id` without a transaction, as RPC's
@@ -141,11 +180,12 @@ impl Sim {
         let id = id.into_account_id();
         let (result, logs) = self.run_view(at, &id, method, &args.into(), None);
         let result = result.map_err(|e| match e {
-            CallFunctionError::VMError { error, .. } => Failure::call(&error),
-            CallFunctionError::AccountDoesNotExist { requested_account_id } => {
+            ViewError::Call(CallFunctionError::VMError { error, .. }) => Failure::call(&error),
+            ViewError::Call(CallFunctionError::AccountDoesNotExist { requested_account_id }) => {
                 Failure::AccountDoesNotExist(requested_account_id)
             }
-            e => panic!("view {id}.{method} at #{}: {e}", at.height),
+            ViewError::ExternalCallRefused(e) => Failure::new(&e),
+            ViewError::Call(e) => panic!("view {id}.{method} at #{}: {e}", at.height),
         });
         let missing = result.as_ref().is_err_and(Failure::is_missing_method);
         ViewResult {
@@ -157,6 +197,13 @@ impl Sim {
             block_height: at.height,
         }
     }
+}
+
+/// Why a view failed: the call's own error, or for a view of
+/// `__external_call`, why a node would refuse the external call.
+pub(crate) enum ViewError {
+    Call(CallFunctionError),
+    ExternalCallRefused(Box<TxExecutionError>),
 }
 
 /// What a view returned, or why it failed, and its logs. It reads as a

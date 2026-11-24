@@ -79,6 +79,11 @@ callback or the resume that wakes it.
 - **A fault rewrites a receipt between blocks** ([faults.md](faults.md)).
 - **`apply_state_records` leaves `storage_usage` alone**, where
   `Sim::set_state` keeps it right.
+- **External calls see final blocks at once.** A node's repeat window
+  counts back from its final head, a block or two behind, and a node may
+  prune an old inclusion, after which a repeat's `send_tx` times out.
+  Outcomes, gas, balances and errors match a 2.15.0-rc.1 sandbox
+  (`tests/external_calls_vs_sandbox.rs`).
 
 ## Limits
 

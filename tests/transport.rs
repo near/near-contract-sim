@@ -826,3 +826,76 @@ async fn a_block_reports_a_supply_above_i128_max() {
     let total = block["result"]["header"]["total_supply"].as_str().unwrap().to_owned();
     assert_eq!(total, (1u128 << 127).to_string());
 }
+
+/// External calls through `send_tx`'s `external_call_base64`: an accepted
+/// one answers with its inclusion, under its unique id, which
+/// `EXPERIMENTAL_tx_status` and `receipt_to_tx` know; one the node's checks
+/// refuse is an invalid transaction; one the producer's dry run refuses is
+/// never included, so the wait times out. A `call_function` view of
+/// `__external_call` is the dry run.
+#[tokio::test(start_paused = true)]
+async fn external_calls_go_through_send_tx() {
+    use base64::Engine;
+    use near_contract_sim::nearcore::near_primitives::transaction::EccTransaction;
+    let b64 = |b: &[u8]| base64::engine::general_purpose::STANDARD.encode(b);
+    let mut sim = probe_sim();
+    sim.deploy("probe.near", wat("ecc_probe.wat"));
+    sim.deploy("bob.near", wat("ecc_probe.wat"));
+    let node = SimTransport::new(sim);
+    let send = |to: &str, payload: Vec<u8>| {
+        let ecc = EccTransaction::new(to.parse().unwrap(), payload);
+        json!({"external_call_base64": b64(&borsh::to_vec(&ecc).unwrap()),
+               "wait_until": "EXECUTED_OPTIMISTIC"})
+    };
+
+    let (status, r) = post(&node, "send_tx", send("probe.near", vec![0, b'h', b'i'])).await;
+    assert_eq!(status, 200, "{r}");
+    let r = &r["result"];
+    assert_eq!(r["status"]["SuccessValue"], b64(b"hi"), "{r}");
+    assert_eq!(r["transaction"]["kind"], "external_call", "{r}");
+    assert_eq!(r["transaction"]["contract_id"], "probe.near", "{r}");
+    let unique = r["transaction"]["transaction_id"].as_str().unwrap().to_string();
+    assert_eq!(r["transaction_outcome"]["id"], unique, "{r}");
+    assert_eq!(r["transaction_outcome"]["outcome"]["logs"], json!(["accepted"]), "{r}");
+    assert_eq!(r["receipts_outcome"], json!([]), "{r}");
+    let (_, st) = post(
+        &node,
+        "EXPERIMENTAL_tx_status",
+        json!({"tx_hash": unique, "sender_account_id": "probe.near", "wait_until": "FINAL"}),
+    )
+    .await;
+    assert_eq!(st["result"]["transaction"]["transaction_id"], unique, "{st}");
+
+    // A promise's receipt names the call as its origin.
+    let mut p = vec![13u8];
+    p.extend(5_000_000_000_000u64.to_le_bytes());
+    p.extend([0u8; 8 + 16]);
+    p.push(4);
+    p.extend(b"pingbob.near");
+    let (_, r) = post(&node, "send_tx", send("probe.near", p)).await;
+    let r = &r["result"];
+    assert_eq!(r["status"]["SuccessValue"], b64(b"pong"), "{r}");
+    let receipt = r["receipts_outcome"][0]["id"].clone();
+    let (_, found) =
+        post(&node, "EXPERIMENTAL_receipt_to_tx", json!({"receipt_id": receipt})).await;
+    assert_eq!(found["result"]["sender_account_id"], "probe.near", "{found}");
+    assert_eq!(found["result"]["transaction_hash"], r["transaction"]["transaction_id"]);
+
+    // Refused before the pool: alice has no contract.
+    assert_eq!(fails(&node, "send_tx", send("alice.near", vec![])).await.1, "INVALID_TRANSACTION");
+    // Refused by the dry run: never included.
+    assert_eq!(fails(&node, "send_tx", send("probe.near", vec![1])).await.1, "TIMEOUT_ERROR");
+
+    let view = |payload: &[u8]| {
+        json!({"request_type": "call_function", "finality": "optimistic",
+               "account_id": "probe.near", "method_name": "__external_call",
+               "args_base64": b64(payload)})
+    };
+    let (_, v) = post(&node, "query", view(&[0, b'o', b'k'])).await;
+    assert_eq!(v["result"]["result"], json!(b"ok".to_vec()), "{v}");
+    assert_eq!(v["result"]["logs"], json!(["accepted"]), "{v}");
+    let (_, v) = post(&node, "query", view(&[19])).await;
+    assert_eq!(v["error"]["cause"]["name"], "EXTERNAL_CALL_REFUSED", "{v}");
+    assert_eq!(v["error"]["code"], -32000, "{v}");
+    assert_eq!(v["error"]["cause"]["info"]["logs"], json!(["accepted"]), "{v}");
+}

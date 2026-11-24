@@ -14,6 +14,15 @@ enum near_contract_sim::AccessKeyPermission
 enum near_contract_sim::Action
 enum near_contract_sim::ActionErrorKind
 enum near_contract_sim::ExecutionStatus
+enum near_contract_sim::ExternalCallOutcome = #[non_exhaustive]pub enum ExternalCallOutcome
+enum near_contract_sim::ExternalCallOutcome impl = impl ExternalCallOutcome
+enum near_contract_sim::ExternalCallOutcome method assert_refused = pub fn assert_refused(&self) -> Failure
+enum near_contract_sim::ExternalCallOutcome method included = pub fn included(self) -> TxOutcome
+enum near_contract_sim::ExternalCallOutcome method refusal = pub fn refusal(&self) -> Option<&ExternalCallRefusal>
+enum near_contract_sim::ExternalCallOutcome variant Included = Included(Box<TxOutcome>)
+enum near_contract_sim::ExternalCallOutcome variant Pending = Pending
+enum near_contract_sim::ExternalCallOutcome variant Refused = Refused(ExternalCallRefusal)
+enum near_contract_sim::ExternalCallOutcome variant Repeat = Repeat(Box<TxOutcome>)
 enum near_contract_sim::Failure = #[non_exhaustive]pub enum Failure
 enum near_contract_sim::Failure impl = impl Failure
 enum near_contract_sim::Failure method message = pub fn message(&self) -> Option<&str>
@@ -245,6 +254,18 @@ struct near_contract_sim::Effects structfield near = near: Vec<NearMove>
 struct near_contract_sim::Effects structfield pending = pending: Vec<PendingReceipt>
 struct near_contract_sim::Effects structfield storage = storage: Vec<StorageChange>
 struct near_contract_sim::Effects structfield token_moves = token_moves: Vec<TokenMove>
+struct near_contract_sim::ExternalCall = pub struct ExternalCall<'a>
+struct near_contract_sim::ExternalCall impl = impl<'a> ExternalCall<'a>
+struct near_contract_sim::ExternalCall method build = pub fn build(&self) -> EccTransaction
+struct near_contract_sim::ExternalCall method forced = pub fn forced(self) -> Self
+struct near_contract_sim::ExternalCall method state_init = pub fn state_init(self, state_init: RawStateInit) -> Self
+struct near_contract_sim::ExternalCall method submit = pub fn submit(self) -> SentCall
+struct near_contract_sim::ExternalCall method transact = pub fn transact(self) -> ExternalCallOutcome
+struct near_contract_sim::ExternalCallRefusal = #[non_exhaustive]pub struct ExternalCallRefusal
+struct near_contract_sim::ExternalCallRefusal impl = impl ExternalCallRefusal
+struct near_contract_sim::ExternalCallRefusal method failure = pub fn failure(&self) -> Failure
+struct near_contract_sim::ExternalCallRefusal structfield error = error: TxExecutionError
+struct near_contract_sim::ExternalCallRefusal structfield logs = logs: Vec<String>
 struct near_contract_sim::Finding = #[non_exhaustive]pub struct Finding
 struct near_contract_sim::Finding impl = impl Finding
 struct near_contract_sim::Finding method key = pub fn key(&self) -> Option<&str>
@@ -324,6 +345,7 @@ struct near_contract_sim::ReceiptOutcome method args_json = pub fn args_json<T: 
 struct near_contract_sim::ReceiptOutcome method failure = pub fn failure(&self) -> Option<Failure>
 struct near_contract_sim::ReceiptOutcome method headroom = pub fn headroom(&self) -> Gas
 struct near_contract_sim::ReceiptOutcome method is_callback = pub fn is_callback(&self) -> bool
+struct near_contract_sim::ReceiptOutcome method is_external_call = pub fn is_external_call(&self) -> bool
 struct near_contract_sim::ReceiptOutcome method is_refund = pub fn is_refund(&self) -> bool
 struct near_contract_sim::ReceiptOutcome method is_success = pub fn is_success(&self) -> bool
 struct near_contract_sim::ReceiptOutcome method method = pub fn method(&self) -> Option<&str>
@@ -381,6 +403,7 @@ struct near_contract_sim::Reply method json = pub fn json(value: impl Serialize)
 struct near_contract_sim::Reply method logs = pub fn logs(self, lines: impl IntoIterator<Item = impl Into<String>>) -> Self
 struct near_contract_sim::Reply method pad_to = pub fn pad_to(self, len: usize) -> Self
 struct near_contract_sim::Reply method panic = pub fn panic(message: &str) -> Self
+struct near_contract_sim::SentCall = pub struct SentCall(/* private fields */);
 struct near_contract_sim::SignedDelegateAction
 struct near_contract_sim::Sim = pub struct Sim
 struct near_contract_sim::Sim impl = impl Sim
@@ -405,6 +428,8 @@ struct near_contract_sim::Sim method epoch_height = pub fn epoch_height(&self) -
 struct near_contract_sim::Sim method epoch_of = pub fn epoch_of(&self, h: u64) -> u64
 struct near_contract_sim::Sim method epoch_start = pub fn epoch_start(&self, e: u64) -> u64
 struct near_contract_sim::Sim method expire = pub fn expire(&mut self, y: &PendingYield) -> TxOutcome
+struct near_contract_sim::Sim method external_call = pub fn external_call(&mut self, contract_id: impl IntoAccountId, payload: impl Into<Vec<u8>>) -> ExternalCall<'_>
+struct near_contract_sim::Sim method external_call_outcome = pub fn external_call_outcome(&self, sent: SentCall) -> ExternalCallOutcome
 struct near_contract_sim::Sim method findings = pub fn findings(&self) -> Findings
 struct near_contract_sim::Sim method gas_ceiling = pub fn gas_ceiling(&self) -> Gas
 struct near_contract_sim::Sim method gas_key_nonces = pub fn gas_key_nonces(&self, id: impl IntoAccountId, pk: &PublicKey) -> Option<Vec<Nonce>>

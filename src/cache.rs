@@ -460,6 +460,33 @@ mod tests {
         sim.snapshot();
     }
 
+    #[test]
+    #[should_panic(expected = "a snapshot needs nothing queued or in flight")]
+    fn a_pending_external_call_keeps_a_chain_from_being_saved() {
+        let mut sim = with_users(["probe.near"]);
+        let probe = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/res/ecc_probe.wat");
+        sim.deploy("probe.near", wat::parse_file(probe).unwrap());
+        sim.external_call("probe.near", [0u8]).submit();
+        sim.snapshot();
+    }
+
+    /// The repeat window is chain state: a loaded chain drops a call its
+    /// contract accepted before the snapshot, as the built one does.
+    #[test]
+    fn a_loaded_chain_remembers_the_external_calls_it_accepted() {
+        use crate::ExternalCallOutcome;
+        let mut sim = with_users(["probe.near"]);
+        let probe = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/res/ecc_probe.wat");
+        sim.deploy("probe.near", wat::parse_file(probe).unwrap());
+        let first = sim.external_call("probe.near", [0u8]).transact().included();
+        let mut loaded = Sim::from_snapshot(sim.snapshot()).unwrap();
+        match loaded.external_call("probe.near", [0u8]).transact() {
+            ExternalCallOutcome::Repeat(o) => assert_eq!(o.hash, first.hash),
+            other => panic!("expected a repeat, got {other}"),
+        }
+        assert_eq!(loaded.txs(), sim.txs());
+    }
+
     /// An empty directory of its own under the system's temporary one.
     fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("ncs-{name}-{}", std::process::id()));
