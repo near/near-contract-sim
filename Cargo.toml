@@ -9,8 +9,8 @@ description = "In-process NEAR contract simulator driven by nearcore's own Runti
 readme = "README.md"
 keywords = ["near", "blockchain", "testing", "simulator", "smart-contracts"]
 categories = ["development-tools::testing", "cryptography::cryptocurrencies"]
-# Not on crates.io: nearcore's node-runtime and near-store aren't published
-# there, so the crate is a git dependency (see the nearcore block below).
+# Not on crates.io: the nearcore crates are git dependencies (see the
+# nearcore block below), which crates.io doesn't accept.
 publish = false
 # For a future crates.io package (a git dependency ignores this): the
 # library, its licenses, changelog and the agent skill, whose references/
@@ -36,34 +36,32 @@ include = [
 # All nearcore crates MUST come from the same source, otherwise types like
 # `near_primitives::receipt::Receipt` get duplicated and nothing type-checks.
 #
-# Today: git, pinned to the 2.14.0 release tag (node-runtime and
-# near-store are `publish = false` upstream).
-#
-# After the upstream publish PR lands (node-runtime -> near-runtime, and
-# near-store/near-runtime on crates.io), each line below becomes the
-# commented crates.io line next to it: one-line change per dep.
+# Today: git, pinned to the 2.15.0-rc.1 release tag. Its crates are on
+# crates.io as 0.39.0-rc.1, a prerelease; once a stable 0.39 is out, each
+# line below can become the commented crates.io line next to it: one-line
+# change per dep.
 # ---------------------------------------------------------------------------
 [dependencies]
-# crates.io later: node-runtime = { package = "near-runtime", version = "0.38" }
-node-runtime = { git = "https://github.com/near/nearcore", tag = "2.14.0" }
-# crates.io later: near-store = "0.38"
+# crates.io later: near-runtime = "0.39"
+near-runtime = { git = "https://github.com/near/nearcore", tag = "2.15.0-rc.1" }
+# crates.io later: near-store = "0.39"
 # `near_store::test_utils::TestTriesBuilder` is compiled unconditionally in
-# 2.14 (no feature needed). NOTE: near-store pulls rocksdb (C++ build) even
+# 2.15 (no feature needed). NOTE: near-store pulls rocksdb (C++ build) even
 # though we only ever use the in-memory TestDB.
-near-store = { git = "https://github.com/near/nearcore", tag = "2.14.0" }
-# crates.io later: near-primitives = "0.38"
-near-primitives = { git = "https://github.com/near/nearcore", tag = "2.14.0" }
-# crates.io later: near-parameters = "0.38"
-near-parameters = { git = "https://github.com/near/nearcore", tag = "2.14.0" }
-# crates.io later: near-crypto = { version = "0.38", features = ["rand"] }
-near-crypto = { git = "https://github.com/near/nearcore", tag = "2.14.0", features = ["rand"] }
-# crates.io later: near-vm-runner = "0.38"
-near-vm-runner = { git = "https://github.com/near/nearcore", tag = "2.14.0" }
+near-store = { git = "https://github.com/near/nearcore", tag = "2.15.0-rc.1" }
+# crates.io later: near-primitives = "0.39"
+near-primitives = { git = "https://github.com/near/nearcore", tag = "2.15.0-rc.1" }
+# crates.io later: near-parameters = "0.39"
+near-parameters = { git = "https://github.com/near/nearcore", tag = "2.15.0-rc.1" }
+# crates.io later: near-crypto = { version = "0.39", features = ["rand"] }
+near-crypto = { git = "https://github.com/near/nearcore", tag = "2.15.0-rc.1", features = ["rand"] }
+# crates.io later: near-vm-runner = "0.39"
+near-vm-runner = { git = "https://github.com/near/nearcore", tag = "2.15.0-rc.1" }
 # SimTransport's requests, views and errors (feature `near-kit`).
-# crates.io later: near-jsonrpc-primitives = { version = "0.38", optional = true }
-near-jsonrpc-primitives = { git = "https://github.com/near/nearcore", tag = "2.14.0", optional = true }
-# crates.io later: near-time = { version = "0.38", optional = true }
-near-time = { git = "https://github.com/near/nearcore", tag = "2.14.0", optional = true }
+# crates.io later: near-jsonrpc-primitives = { version = "0.39", optional = true }
+near-jsonrpc-primitives = { git = "https://github.com/near/nearcore", tag = "2.15.0-rc.1", optional = true }
+# crates.io later: near-time = { version = "0.39", optional = true }
+near-time = { git = "https://github.com/near/nearcore", tag = "2.15.0-rc.1", optional = true }
 
 # `rc`: snapshots store the outcome history, which is behind `Arc`s.
 borsh = { version = "1", features = ["derive", "rc"] }

@@ -823,9 +823,12 @@ fn sim_account(sim: &Sim, id: &str) -> Value {
     }
 }
 
-/// `view_access_key_list` shape: {public key: access key view}, empty for a
-/// missing account, as a node answers.
+/// `view_access_key_list` shape: {public key: access key view}, null for a
+/// missing account, which a node answers with an error.
 fn sim_keys(sim: &Sim, id: &str) -> Value {
+    if sim.account(id).is_none() {
+        return Value::Null;
+    }
     let m: serde_json::Map<String, Value> = sim
         .access_keys(id)
         .into_iter()
@@ -1287,7 +1290,7 @@ pub fn compare(f: &Feature, sim: &Value, sb: &Value, timing: &mut Vec<String>) -
             continue;
         }
         // Where the sandbox says a tx is invalid: refused by the RPC (with
-        // the kind), dropped (the 2.14 sandbox's RPC accepts invalid txs and
+        // the kind), dropped (the sandbox's RPC accepts invalid txs and
         // the chunk producer leaves them out: no kind to compare), or
         // included and failed as invalid. Chain-specific fields (nonces,
         // balances) differ, so only the error kinds are compared.

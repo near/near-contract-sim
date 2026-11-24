@@ -4,12 +4,12 @@
 #
 #   tests/differential/run.sh [cases] [seed]
 #
-# Starts nearprotocol/sandbox:$NCS_SANDBOX_IMAGE_TAG (default 2.14.0, the
-# pinned nearcore) on a localhost port, runs the test, removes the container.
+# Starts nearprotocol/sandbox:$NCS_SANDBOX_IMAGE_TAG (default 2.15.0-rc.1,
+# the pinned nearcore) on a localhost port, runs the test, removes the container.
 # The chain must be fresh: the simulator replays the same account set.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-TAG="${NCS_SANDBOX_IMAGE_TAG:-2.14.0}"
+TAG="${NCS_SANDBOX_IMAGE_TAG:-2.15.0-rc.1}"
 PORT="${NCS_SANDBOX_PORT:-3930}"
 NAME="ncs-diff-sandbox-$$"
 docker run -d --rm --name "$NAME" -p "127.0.0.1:$PORT:3030" "nearprotocol/sandbox:$TAG" >/dev/null

@@ -304,10 +304,10 @@ total 2.21 Tgas (2214699529258 gas)
 
 /// A result can be as long as a receipt can return, 4 MiB; a byte more
 /// panics at submit, since no receipt returns it. Results longer together
-/// than nearcore#16561's input limit, 4,194,944 bytes, run: nearcore 2.14.0
+/// than nearcore#16561's input limit, 4,194,944 bytes, run: nearcore 2.15.0-rc.1
 /// enforces that limit from nightly protocol 157 only (nearcore#16575), and
-/// the simulator runs 84 to 88. At 87 and 88 the limit is `u32::MAX`, past
-/// what 128 inputs of 4 MiB can reach.
+/// the simulator runs 85 to 89. There the limit is `u32::MAX`, past what 128
+/// inputs of 4 MiB can reach.
 #[test]
 fn results_up_to_the_return_size_limit() {
     let base = callback_probe_sim();
@@ -336,9 +336,9 @@ fn results_up_to_the_return_size_limit() {
     assert!(sim.is_idle(), "nothing was submitted");
 
     // nearcore counts each result as stored, 5 bytes more than its value:
-    // these two are a byte past that limit, and run at 88 and at 87.
+    // these two are a byte past that limit, and run at 89 and at 85.
     let two = |sim: &mut Sim, n| cb(sim, vec![Successful(vec![7; max]), Successful(vec![7; n])]);
-    for version in [88, 87] {
+    for version in [89, 85] {
         let mut sim = base.clone();
         sim.config.protocol_version = version;
         let limits = &sim.config.runtime_config().wasm_config.limit_config;
@@ -599,9 +599,9 @@ fn a_deposit_comes_from_the_signer_and_a_failure_refunds_the_contract() {
 /// On the oldest protocol the pinned nearcore runs too, a delivered callback
 /// matches one reached through `promise_then`, its receipt's size included.
 #[test]
-fn a_delivered_callback_matches_on_protocol_84() {
+fn a_delivered_callback_matches_on_protocol_85() {
     let mut base = callback_probe_sim();
-    base.config.protocol_version = 84;
+    base.config.protocol_version = 85;
     let mut real = base.clone();
     let out = real.call("alice.near", "probe.near", "start").args(b"hello").transact();
     let want = out.expect_receipt("cb");

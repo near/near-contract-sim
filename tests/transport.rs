@@ -199,7 +199,7 @@ async fn blocks_and_status_are_the_logs() {
         (header.gas_price.as_yoctonear(), header.total_supply.as_yoctonear()),
         (100_000_000, supply)
     );
-    assert_eq!((header.latest_protocol_version, head.author.as_str()), (88, "validator.near"));
+    assert_eq!((header.latest_protocol_version, head.author.as_str()), (89, "validator.near"));
     let chunk = &head.chunks[0];
     assert_eq!((chunk.height_created, chunk.height_included), (h, h));
     assert_eq!(chunk.gas_limit, 1_000_000_000_000_000);
@@ -222,7 +222,7 @@ async fn blocks_and_status_are_the_logs() {
     let sync = &status.sync_info;
     assert_eq!((sync.latest_block_height, sync.latest_block_hash), (h + 1, after.header.hash));
     assert_eq!((status.chain_id.as_str(), status.genesis_hash), ("localnet", genesis.header.hash));
-    assert_eq!((status.protocol_version, status.version.build.as_str()), (88, "near-contract-sim"));
+    assert_eq!((status.protocol_version, status.version.build.as_str()), (89, "near-contract-sim"));
     assert_eq!(sync.latest_state_root, Some(after.header.prev_state_root));
     let earliest = (sync.earliest_block_height, sync.earliest_block_hash);
     assert_eq!(earliest, (Some(0), Some(genesis.header.hash)), "every state is kept");
@@ -238,7 +238,7 @@ async fn blocks_and_status_are_the_logs() {
     // block applied on.
     node.with(|sim| (sim.config.seed, sim.config.protocol_version) = (7, 86));
     let again = rpc.block(BlockReference::genesis()).await.unwrap().header;
-    assert_eq!((again.hash, again.latest_protocol_version), (genesis.header.hash, 88));
+    assert_eq!((again.hash, again.latest_protocol_version), (genesis.header.hash, 89));
     assert_eq!(rpc.status().await.unwrap().genesis_hash, genesis.header.hash);
 }
 
@@ -401,7 +401,8 @@ async fn errors_reach_near_kit_typed() {
     let e = rpc.view_access_key_list_page(&id("bob.near"), None, None, at).await.unwrap_err();
     assert!(matches!(e, RpcError::TooManyAccessKeys { limit: 100, .. }), "{e:?}");
     assert_eq!(bob.access_keys("bob.near").await.unwrap().keys.len(), 101, "paginated");
-    assert!(alice.access_keys("nobody.near").await.unwrap().keys.is_empty(), "not an error");
+    let e = rpc_error(alice.access_keys("nobody.near").await);
+    assert!(matches!(e, RpcError::AccountNotFound { .. }), "{e:?}");
     let e = rpc_error(alice.balance("alice.near").at_block(10_000).await);
     assert!(matches!(e, RpcError::UnknownBlock(_)), "{e:?}");
     let e = rpc_error(alice.validators().await);
@@ -762,7 +763,7 @@ async fn patches_write_at_once() {
 
 /// A world set up on the sim and patched into a sandbox, where the same
 /// near-kit scenario burns the same gas. It needs a fresh sandbox of its own
-/// (`nearprotocol/sandbox:2.14.0`) at `NCS_SANDBOX_RPC`, as CI's
+/// (`nearprotocol/sandbox:2.15.0-rc.1`) at `NCS_SANDBOX_RPC`, as CI's
 /// differential job gives it.
 #[tokio::test]
 #[ignore = "needs a fresh sandbox: set NCS_SANDBOX_RPC"]

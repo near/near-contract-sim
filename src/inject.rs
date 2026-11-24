@@ -411,7 +411,7 @@ mod tests {
         assert!(msg.starts_with("Receipts::action(\"Unstake\"): not one of nearcore's"), "{msg}");
     }
 
-    /// nearcore 2.14.0's two newest `Action` variants are kinds too.
+    /// nearcore's two newest `Action` variants are kinds too.
     #[test]
     fn the_newest_actions_are_kinds() {
         for kind in ["DelegateV2", "UniversalStateInit"] {

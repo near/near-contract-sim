@@ -1,7 +1,7 @@
 # Working on near-contract-sim
 
 A Rust crate: an in-process, single-shard NEAR chain for contract tests,
-run by nearcore 2.14.0's own `Runtime::apply` over an in-memory trie. Its
+run by nearcore 2.15.0-rc.1's own `Runtime::apply` over an in-memory trie. Its
 users are mostly coding agents writing contract tests, through the skill
 in `skills/near-contract-sim/`.
 

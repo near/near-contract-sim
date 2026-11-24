@@ -54,13 +54,13 @@ use near_primitives::views::{
     GasPriceView, QueryRequest, ReceiptView, SignedTransactionView, StatusResponse, StatusSyncInfo,
     TxExecutionStatus,
 };
-use near_store::TrieUpdate;
-use near_vm_runner::ContractCode;
-use node_runtime::state_viewer::TrieViewer;
-use node_runtime::state_viewer::errors::{
+use near_runtime::state_viewer::TrieViewer;
+use near_runtime::state_viewer::errors::{
     CallFunctionError, ViewAccessKeyError, ViewAccountError, ViewContractCodeError,
     ViewGasKeyNoncesError, ViewStateError,
 };
+use near_store::TrieUpdate;
+use near_vm_runner::ContractCode;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -76,7 +76,7 @@ const POLLING_TIMEOUT: Duration = Duration::from_secs(10);
 /// A `TrieViewer` with a node's state size limit (`trie_viewer_state_size_limit`,
 /// 50,000 bytes), which `TrieViewer::default()` lacks.
 static VIEWER: LazyLock<TrieViewer> =
-    LazyLock::new(|| TrieViewer::new(RuntimeConfigStore::new(None), Some(50_000), 100, None));
+    LazyLock::new(|| TrieViewer::new(RuntimeConfigStore::new(), Some(50_000), 100, None));
 
 /// A node for near-kit, in process: a `Clone` handle to one [`Sim`] that
 /// answers with nearcore's own views and errors.
@@ -233,6 +233,7 @@ fn answer(sim: &mut Sim, method: &str, params: Value) -> Result<Value, RpcError>
                 account_id: r.account_id,
                 method_name: r.method_name,
                 args: r.args,
+                state_init: r.state_init,
             };
             reply(view(sim, &r.block_reference, q).map_err(RpcCallFunctionError::from))
         }
@@ -463,7 +464,7 @@ fn status_view(
     });
     let outcome = FinalExecutionOutcomeView {
         status: sim.tx_status(hash),
-        transaction: SignedTransactionView::from((*log.txs[&hash]).clone()),
+        transaction: SignedTransactionView::from((*log.txs[&hash]).clone()).into(),
         transaction_outcome: views.next().expect("a converted transaction"),
         receipts_outcome: views.collect(),
     };
@@ -659,6 +660,11 @@ fn view(
         block_height,
         block_hash,
     };
+    let uninitialized = |requested_account_id| RpcQueryError::UninitializedAccount {
+        requested_account_id,
+        block_height,
+        block_hash,
+    };
     let other =
         |e: &dyn fmt::Debug| RpcQueryError::InternalError { error_message: format!("{e:?}") };
     let code = |c: ContractCode| {
@@ -712,6 +718,9 @@ fn view(
                     ViewStateError::AccountDoesNotExist { requested_account_id } => {
                         unknown(requested_account_id)
                     }
+                    ViewStateError::UninitializedAccount { requested_account_id } => {
+                        uninitialized(requested_account_id)
+                    }
                     ViewStateError::AccountStateTooLarge { requested_account_id } => {
                         RpcQueryError::TooLargeContractState {
                             contract_account_id: requested_account_id,
@@ -729,6 +738,12 @@ fn view(
                     ViewAccessKeyError::AccessKeyDoesNotExist { public_key } => {
                         RpcQueryError::UnknownAccessKey { public_key, block_height, block_hash }
                     }
+                    ViewAccessKeyError::AccountDoesNotExist { requested_account_id } => {
+                        unknown(requested_account_id)
+                    }
+                    ViewAccessKeyError::UninitializedAccount { requested_account_id } => {
+                        uninitialized(requested_account_id)
+                    }
                     e => other(&e),
                 })?;
             QueryResponseKind::AccessKey(key.into())
@@ -744,6 +759,12 @@ fn view(
                             block_height,
                             block_hash,
                         }
+                    }
+                    ViewAccessKeyError::AccountDoesNotExist { requested_account_id } => {
+                        unknown(requested_account_id)
+                    }
+                    ViewAccessKeyError::UninitializedAccount { requested_account_id } => {
+                        uninitialized(requested_account_id)
                     }
                     e => other(&e),
                 })?;
@@ -761,11 +782,18 @@ fn view(
             )?;
             QueryResponseKind::GasKeyNonces(GasKeyNoncesView { nonces })
         }
-        QueryRequest::CallFunction { account_id, method_name, args } => {
-            let (result, logs) = sim.run_view(at, &account_id, &method_name, &args);
+        QueryRequest::CallFunction { account_id, method_name, args, state_init } => {
+            let (result, logs) =
+                sim.run_view(at, &account_id, &method_name, &args, state_init.as_ref());
             let result = result.map_err(|e| match e {
                 CallFunctionError::AccountDoesNotExist { requested_account_id } => {
                     unknown(requested_account_id)
+                }
+                CallFunctionError::UninitializedAccount { requested_account_id } => {
+                    uninitialized(requested_account_id)
+                }
+                CallFunctionError::InvalidStateInit { error } => {
+                    RpcQueryError::InvalidStateInit { error, block_height, block_hash }
                 }
                 CallFunctionError::VMError { error, error_message } => {
                     RpcQueryError::ContractExecutionError {

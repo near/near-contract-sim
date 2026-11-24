@@ -18,7 +18,7 @@ use near_primitives::receipt::{DataReceiver, Receipt};
 use near_primitives::transaction::ExecutionStatus;
 use near_primitives::types::{AccountId, Balance, Gas};
 use near_primitives::views::{ExecutionMetadataView, FinalExecutionStatus};
-use node_runtime::config::{exec_fee, tx_cost};
+use near_runtime::config::{exec_fee, tx_cost};
 use serde::de::DeserializeOwned;
 use std::borrow::Borrow;
 use std::collections::BTreeMap;
@@ -1200,7 +1200,7 @@ mod tests {
         use crate::PromiseResult;
         let wat = crate::sim::tests::manifest_dir().join("tests/res/callback_probe.wat");
         let mut base = Sim::new();
-        base.config.protocol_version = 84;
+        base.config.protocol_version = 85;
         base.create_account("alice.near", Balance::from_near(100));
         base.deploy("probe.near", wat::parse_file(wat).unwrap());
         let mut real = base.clone();

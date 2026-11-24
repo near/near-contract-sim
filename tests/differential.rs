@@ -6,7 +6,7 @@
 //!
 //! `differential_vs_sandbox` is ignored by default; it needs a running
 //! sandbox (the `nearprotocol/sandbox` Docker image matching the pinned
-//! nearcore, i.e. 2.14.0):
+//! nearcore, i.e. 2.15.0-rc.1):
 //!
 //! ```sh
 //! tests/differential/run.sh 40 1

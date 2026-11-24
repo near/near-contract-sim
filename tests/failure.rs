@@ -71,7 +71,7 @@ fn rejected_transaction_insufficient_balance() {
     let mut sim = setup();
     sim.create_account("poor.near", Balance::from_yoctonear(1));
     let out = sim.call("poor.near", "probe.near", "ts").transact();
-    // nearcore 2.14 records invalid transactions with an InvalidTxError outcome.
+    // nearcore records invalid transactions with an InvalidTxError outcome.
     assert!(out.receipts.is_empty());
     let failure = out.assert_failure();
     assert!(matches!(failure, Failure::InvalidTx(InvalidTxError::NotEnoughBalance { .. })));

@@ -20,8 +20,8 @@ use near_primitives::transaction::{
     NonceMode, SignedTransaction, Transaction, TransactionNonce, TransactionV0, TransactionV1,
 };
 use near_primitives::types::{AccountId, Balance, Gas, Nonce, NonceIndex};
-use near_primitives::views::FinalExecutionStatus;
-use node_runtime::state_viewer::errors::CallFunctionError;
+use near_primitives::views::{FinalExecutionStatus, StateInitView};
+use near_runtime::state_viewer::errors::CallFunctionError;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::collections::BTreeSet;
@@ -112,8 +112,9 @@ impl Sim {
         id: &AccountId,
         method: &str,
         args: &[u8],
+        state_init: Option<&StateInitView>,
     ) -> (Result<Vec<u8>, CallFunctionError>, Vec<String>) {
-        let (result, logs) = self.chain.view(&self.config, at, id, method, args);
+        let (result, logs) = self.chain.view(&self.config, at, id, method, args, state_init);
         if result.is_ok() {
             self.viewed.lock().map(|mut v| v.insert(format!("{id}::{method}"))).ok();
         }
@@ -138,7 +139,7 @@ impl Sim {
     ) -> ViewResult {
         let at = self.chain.latest(&self.config);
         let id = id.into_account_id();
-        let (result, logs) = self.run_view(at, &id, method, &args.into());
+        let (result, logs) = self.run_view(at, &id, method, &args.into(), None);
         let result = result.map_err(|e| match e {
             CallFunctionError::VMError { error, .. } => Failure::call(&error),
             CallFunctionError::AccountDoesNotExist { requested_account_id } => {

@@ -13,12 +13,13 @@ use near_primitives::hash::CryptoHash;
 use near_primitives::receipt::{PromiseYieldTimeout, Receipt};
 use near_primitives::trie_key::{TrieKey, col};
 use near_primitives::types::{AccountId, Balance, EpochId, Gas, StateChangeCause, StateRoot};
+use near_primitives::views::StateInitView;
+use near_runtime::config::{total_deposit, total_prepaid_exec_fees, total_prepaid_gas};
+use near_runtime::state_viewer::errors::CallFunctionError;
+use near_runtime::state_viewer::{TrieViewer, ViewApplyState};
 use near_store::trie::AccessOptions;
 use near_store::trie::update::TrieUpdate;
 use near_store::{Trie, TrieChanges};
-use node_runtime::config::{total_deposit, total_prepaid_exec_fees, total_prepaid_gas};
-use node_runtime::state_viewer::errors::CallFunctionError;
-use node_runtime::state_viewer::{TrieViewer, ViewApplyState};
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
@@ -48,7 +49,7 @@ fn viewer(limits: GasLimits) -> &'static TrieViewer {
         LazyLock::new(Default::default);
     let mut built = LIMITED.lock().unwrap_or_else(|e| e.into_inner());
     built.entry(limits).or_insert_with(|| {
-        let store = near_parameters::RuntimeConfigStore::new(None);
+        let store = near_parameters::RuntimeConfigStore::new();
         Box::leak(Box::new(TrieViewer::new(store, None, 100, Some(burnt))))
     })
 }
@@ -95,9 +96,11 @@ impl Chain {
         contract: &AccountId,
         method: &str,
         args: &[u8],
+        state_init: Option<&StateInitView>,
     ) -> (Result<Vec<u8>, CallFunctionError>, Vec<String>) {
         let tu = TrieUpdate::new(self.trie_at(at.root));
-        self.run_view(config, viewer(config.gas_limits), tu, at, (contract, method, args))
+        let call = (contract, method, args, state_init);
+        self.run_view(config, viewer(config.gas_limits), tu, at, call)
     }
 
     /// The code `id` ran at `at`, its own or a global contract's; `None`
@@ -116,7 +119,7 @@ impl Chain {
         viewer: &TrieViewer,
         tu: TrieUpdate,
         at: ViewAt,
-        (contract, method, args): (&AccountId, &str, &[u8]),
+        (contract, method, args, state_init): (&AccountId, &str, &[u8], Option<&StateInitView>),
     ) -> (Result<Vec<u8>, CallFunctionError>, Vec<String>) {
         let state = ViewApplyState {
             block_height: at.height,
@@ -130,8 +133,16 @@ impl Chain {
         };
         let mut logs = vec![];
         let epoch_info = SimEpochInfo::new(config);
-        let result =
-            viewer.call_function(tu, state, contract, method, args, &mut logs, &epoch_info);
+        let result = viewer.call_function(
+            tu,
+            state,
+            contract,
+            method,
+            args,
+            state_init,
+            &mut logs,
+            &epoch_info,
+        );
         if let Err(CallFunctionError::VMError { error, .. }) = &result {
             assert_vm_room(error);
         }

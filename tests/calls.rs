@@ -269,13 +269,11 @@ fn explicit_nonce_is_reserved_for_later_transactions() {
 }
 
 /// The same transaction signed twice before a block has one hash, and it is
-/// queued once, as in nearcore's mempool. At protocol 84, before chunks
-/// dropped duplicates, a second copy would run, fail on its used nonce and
-/// replace the first one's outcome.
+/// queued once, as in nearcore's mempool: a second copy would run, fail on
+/// its used nonce and replace the first one's outcome.
 #[test]
 fn a_transaction_submitted_twice_is_queued_once() {
     let mut sim = Sim::new();
-    sim.config.protocol_version = 84;
     sim.create_account("alice.near", near(10));
     sim.create_account("bob.near", near(10));
     let pk = sim.secret_key("alice.near").public_key();
@@ -305,7 +303,7 @@ fn a_refused_transaction_leaves_no_nonce_gap() {
     strict(&mut sim).assert_success();
 }
 
-/// nearcore 2.14 checks the nonce upper bound in the runtime
+/// nearcore checks the nonce upper bound in the runtime
 /// (`nonce < block_height * 1e6`), not only in the chain layer.
 #[test]
 fn nonce_upper_bound_is_enforced_by_the_runtime() {

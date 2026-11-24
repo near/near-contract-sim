@@ -8,10 +8,10 @@ use borsh::BorshDeserialize;
 use near_primitives::receipt::Receipt;
 use near_primitives::trie_key::col;
 use near_primitives::types::PromiseYieldStatus;
+use near_runtime::config::total_deposit;
 use near_store::trie::receipts_column_helper::{
     DelayedReceiptQueue, ShardsOutgoingReceiptBuffer, TrieQueue,
 };
-use node_runtime::config::total_deposit;
 use std::collections::HashMap;
 
 impl Chain {

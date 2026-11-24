@@ -579,8 +579,7 @@ fn check_transaction_size_budget(bytes: usize, expected: [u64; 5]) {
                 deposit: Balance::ZERO,
             }))],
         });
-        SignedTransaction::new(Signature::empty(KeyType::ED25519), tx)
-            .size_for_limits(sim.config.protocol_version)
+        SignedTransaction::new(Signature::empty(KeyType::ED25519), tx).size_for_limits()
     };
     let (s0, s1) = (size(prog(0)), size(prog(1)));
     assert_eq!(s1, s0 + 1);
@@ -633,7 +632,7 @@ fn chunk_transaction_size_budget_carries_over() {
 /// must reach runtime validation rather than keep the queue stuck forever.
 #[test]
 fn oversized_transactions_do_not_block_later_transactions() {
-    for version in [84, 87] {
+    for version in [85, 87] {
         let mut sim = Sim::new();
         sim.config.protocol_version = version;
         for id in ["alice.near", "bob.near"] {

@@ -2,7 +2,7 @@
 
 Use this page to set up the crate, build and share a world, and read or
 patch contract state. `Sim` is a single-shard NEAR chain in process, run
-by nearcore's own `Runtime::apply` at 2.14.0 (protocol 88), so
+by nearcore's own `Runtime::apply` at 2.15.0-rc.1 (protocol 89), so
 fees, gas, receipts, refunds, callbacks and yields are a node's
 ([fidelity.md](fidelity.md)). Calls are synchronous and ids are strings.
 

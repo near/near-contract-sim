@@ -28,7 +28,7 @@ use fault::Faulting;
 use near_parameters::{RuntimeConfig, RuntimeConfigStore};
 use near_primitives::errors::{ActionError, ActionErrorKind, FunctionCallError, TxExecutionError};
 use near_primitives::hash::{CryptoHash, hash};
-use near_primitives::receipt::{Receipt, ReceiptOrStateStoredReceipt, ReceiptSource};
+use near_primitives::receipt::{Receipt, ReceiptSource, StateStoredReceipt};
 use near_primitives::shard_layout::{ShardLayout, ShardUId};
 use near_primitives::transaction::{ExecutionStatus, SignedTransaction};
 use near_primitives::trie_key::TrieKey;
@@ -50,8 +50,8 @@ use std::time::Duration;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Config {
     /// The version whose fees, limits and wasm config the next block runs
-    /// with; changing it runs no migrations. The pinned nearcore runs 84 to
-    /// 88, and its `PROTOCOL_VERSION`, 88, is the default.
+    /// with; changing it runs no migrations. The pinned nearcore runs 85 to
+    /// 89, and its `PROTOCOL_VERSION`, 89, is the default.
     /// [`runtime_config`](Self::runtime_config) and
     /// [`Sim::step`](crate::Sim::step) panic on any other.
     pub protocol_version: ProtocolVersion,
@@ -115,8 +115,11 @@ pub struct Config {
     /// penalties. To price a defect at an older (or newer) version's
     /// costs, as a sandbox on that version would, while contracts run on
     /// the pinned semantics: an approximation, labeled as such on every
-    /// report made under it, and never merged into a default one. Any `n` the
-    /// store holds (it keeps a config per change since genesis).
+    /// report made under it, and never merged into a default one. Any `n`
+    /// from 85 to 89, the versions the pinned nearcore's store holds: 2.15
+    /// dropped the configs of older versions, so
+    /// [`runtime_config`](Self::runtime_config) and
+    /// [`Sim::step`](crate::Sim::step) panic on any other.
     pub gas_pricing: Option<ProtocolVersion>,
 }
 
@@ -218,7 +221,21 @@ impl Config {
             supported.contains(&v),
             "config.protocol_version {v} is not supported (supported: {supported:?})"
         );
+        if let Some(p) = self.gas_pricing {
+            assert!(
+                supported.contains(&p),
+                "config.gas_pricing {p} is not supported (supported: {supported:?}): the \
+                 pinned nearcore's config store holds no other version's prices"
+            );
+        }
         limited_config(v, self.gas_limits, self.gas_pricing)
+    }
+
+    /// Every supported version's [`runtime_config`](Self::runtime_config)
+    /// under these limits and pricing: what a receipt's static fees are
+    /// priced with, by the version it was created at.
+    pub(crate) fn runtime_config_store(&self) -> &'static Arc<RuntimeConfigStore> {
+        config_store(self.gas_limits, self.gas_pricing)
     }
 
     /// What one transaction may attach: `max_total_prepaid_gas`. The
@@ -278,7 +295,7 @@ pub(crate) struct ViewAt {
 /// Unchecked: a block's version was checked when it ran. The protocol's
 /// own limits: what fees read (no fee depends on a gas ceiling).
 pub(crate) fn runtime_config(v: ProtocolVersion) -> &'static Arc<RuntimeConfig> {
-    static STORE: LazyLock<RuntimeConfigStore> = LazyLock::new(|| RuntimeConfigStore::new(None));
+    static STORE: LazyLock<RuntimeConfigStore> = LazyLock::new(RuntimeConfigStore::new);
     STORE.get_config(v)
 }
 
@@ -327,6 +344,23 @@ fn limited_config(
         wasm.limit_config.max_gas_burnt = burnt;
         rc.wasm_config = Arc::new(wasm);
         Box::leak(Box::new(Arc::new(rc)))
+    })
+}
+
+/// The store of [`limited_config`] for every supported version, built once
+/// per (limits, pricing) and kept for the process.
+fn config_store(
+    limits: GasLimits,
+    pricing: Option<ProtocolVersion>,
+) -> &'static Arc<RuntimeConfigStore> {
+    type Stores = HashMap<(GasLimits, Option<ProtocolVersion>), &'static Arc<RuntimeConfigStore>>;
+    static STORES: LazyLock<std::sync::Mutex<Stores>> = LazyLock::new(Default::default);
+    let mut built = STORES.lock().unwrap_or_else(|e| e.into_inner());
+    built.entry((limits, pricing)).or_insert_with(|| {
+        let configs = (MIN_SUPPORTED_PROTOCOL_VERSION..=PROTOCOL_VERSION)
+            .map(|v| (v, Arc::clone(limited_config(v, limits, pricing))))
+            .collect();
+        Box::leak(Box::new(Arc::new(RuntimeConfigStore::new_custom(configs))))
     })
 }
 
@@ -531,10 +565,19 @@ impl Chain {
         let mut res = self.apply_chunk(config, &apply_state, &validators, &incoming, txs);
         // Before the log records the bodies, so a delivered callback's, and a
         // faulted receipt's, is its own.
-        self.rewrite_callbacks(outcomes.iter().chain(&res.outcomes), &mut res.outgoing_receipts);
+        self.rewrite_callbacks(
+            outcomes.iter().chain(&res.outcomes),
+            &mut res.outgoing_receipts,
+            config.protocol_version,
+        );
         let buffered: Vec<Receipt> =
             res.state_changes.iter().filter_map(buffered_receipt).collect();
-        let hold = self.apply_faults(&mut res.outcomes, &mut res.outgoing_receipts, &buffered);
+        let hold = self.apply_faults(
+            &mut res.outcomes,
+            &mut res.outgoing_receipts,
+            &buffered,
+            config.protocol_version,
+        );
         let before = self.trie();
         self.log.note_writes(&res.state_changes, |k| {
             before.get(&k.to_vec(), AccessOptions::DEFAULT).expect("storage")
@@ -573,7 +616,7 @@ impl Chain {
             height: self.height,
             timestamp_ns: self.timestamp_ns,
             hash: block_hash(config.seed, self.log.blocks.len() as u64 + 1),
-            prev_hash: apply_state.prev_block_hash,
+            prev_hash: apply_state.prev_block.hash,
             prev_state_root,
             protocol_version: config.protocol_version,
             pricing: config.gas_pricing,
@@ -654,7 +697,7 @@ fn block_hash(seed: u64, n: u64) -> CryptoHash {
 fn buffered_receipt(c: &RawStateChangesWithTrieKey) -> Option<Receipt> {
     let TrieKey::BufferedReceipt { .. } = c.trie_key else { return None };
     let v = c.changes.last()?.data.as_deref()?;
-    Some(ReceiptOrStateStoredReceipt::try_from_slice(v).expect("a buffered receipt").into_receipt())
+    Some(StateStoredReceipt::try_from_slice(v).expect("a buffered receipt").into_receipt())
 }
 
 /// Says once per process that an epoch began with stake and
