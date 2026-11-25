@@ -652,6 +652,24 @@ fn a_repeat_is_answered_by_the_first_accepted_copy_then_by_the_latest() {
     honest(&mut s, p()).included().assert_success();
 }
 
+/// A copy accepted after the first left the window is the first accepted
+/// from then on: a refused copy after it leaves it answering repeats.
+#[test]
+fn a_copy_accepted_past_the_window_is_the_first_from_then_on() {
+    let p = || op(2, b"r");
+    let mut s = sim();
+    let at = honest(&mut s, p()).included().transaction.unwrap().block_height;
+    s.advance_to(at + 1_001);
+    let again = honest(&mut s, p()).included();
+    let refuses = wat::parse_str(r#"(module (func (export "__external_call") unreachable))"#);
+    s.deploy(PROBE, refuses.unwrap());
+    forced(&mut s, p()).included().assert_failure();
+    match honest(&mut s, p()) {
+        ExternalCallOutcome::Repeat(o) => assert_eq!(o.hash, again.hash),
+        other => panic!("expected a repeat, got {other}"),
+    }
+}
+
 /// A forced send is its own: an honest send of the same call doesn't
 /// share it, and is then a repeat of its inclusion.
 #[test]
