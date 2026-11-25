@@ -37,9 +37,6 @@ jobs:
         uses: release-plz/action@v0.5
         with:
           command: release
-          # Only the crate's first publish, which trusted publishing can't
-          # do. Unset, release-plz takes a token by trusted publishing.
-          token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
