@@ -45,9 +45,8 @@ opt-level = 2
 debug = false
 ```
 
-The crate isn't on crates.io (nearcore's runtime crates aren't
-published), so it is a git dependency: pin `rev` to the commit of a release
-tag (`v0.2.3`'s is shown), and keep it pinned. Set the profile before the
+The crate isn't on crates.io yet, so it is a git dependency: pin `rev` to
+the commit of a release tag (`v0.2.3`'s is shown), and keep it pinned. Set the profile before the
 first build: unoptimized nearcore can take a minute for one large call.
 
 nearcore's VM has 1000 wasm instances per process, and its idle rayon

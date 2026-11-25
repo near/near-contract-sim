@@ -9,8 +9,7 @@ description = "In-process NEAR contract simulator driven by nearcore's own Runti
 readme = "README.md"
 keywords = ["near", "blockchain", "testing", "simulator", "smart-contracts"]
 categories = ["development-tools::testing", "cryptography::cryptocurrencies"]
-# Not on crates.io: the nearcore crates are git dependencies (see the
-# nearcore block below), which crates.io doesn't accept.
+# Not on crates.io yet: releases are git tags (release-plz.toml).
 publish = false
 # For a future crates.io package (a git dependency ignores this): the
 # library, its licenses, changelog and the agent skill, whose references/
@@ -33,35 +32,45 @@ include = [
 # ---------------------------------------------------------------------------
 # nearcore dependencies
 #
-# All nearcore crates MUST come from the same source, otherwise types like
-# `near_primitives::receipt::Receipt` get duplicated and nothing type-checks.
-#
-# Today: git, pinned to the 2.15.0-rc.1 release tag. Its crates are on
-# crates.io as 0.39.0-rc.1, a prerelease; once a stable 0.39 is out, each
-# line below can become the commented crates.io line next to it: one-line
-# change per dep.
+# All nearcore crates MUST be one release, otherwise types like
+# `near_primitives::receipt::Receipt` get duplicated and nothing type-checks,
+# and the runtime is no longer the release's. nearcore 2.15.0-rc.1 publishes
+# its crates on crates.io as 0.39.0-rc.1, from the tag's commit. Each one is
+# pinned with `=`: nearcore's own requirements between its crates are carets,
+# which a consumer's resolver (it doesn't read this Cargo.lock) would move to
+# the next prerelease or patch.
 # ---------------------------------------------------------------------------
 [dependencies]
-# crates.io later: near-runtime = "0.39"
-near-runtime = { git = "https://github.com/near/nearcore", tag = "2.15.0-rc.1" }
-# crates.io later: near-store = "0.39"
+near-runtime = "=0.39.0-rc.1"
 # `near_store::test_utils::TestTriesBuilder` is compiled unconditionally in
 # 2.15 (no feature needed). NOTE: near-store pulls rocksdb (C++ build) even
 # though we only ever use the in-memory TestDB.
-near-store = { git = "https://github.com/near/nearcore", tag = "2.15.0-rc.1" }
-# crates.io later: near-primitives = "0.39"
-near-primitives = { git = "https://github.com/near/nearcore", tag = "2.15.0-rc.1" }
-# crates.io later: near-parameters = "0.39"
-near-parameters = { git = "https://github.com/near/nearcore", tag = "2.15.0-rc.1" }
-# crates.io later: near-crypto = { version = "0.39", features = ["rand"] }
-near-crypto = { git = "https://github.com/near/nearcore", tag = "2.15.0-rc.1", features = ["rand"] }
-# crates.io later: near-vm-runner = "0.39"
-near-vm-runner = { git = "https://github.com/near/nearcore", tag = "2.15.0-rc.1" }
+near-store = "=0.39.0-rc.1"
+near-primitives = "=0.39.0-rc.1"
+near-parameters = "=0.39.0-rc.1"
+near-crypto = { version = "=0.39.0-rc.1", features = ["rand"] }
+near-vm-runner = "=0.39.0-rc.1"
 # SimTransport's requests, views and errors (feature `near-kit`).
-# crates.io later: near-jsonrpc-primitives = { version = "0.39", optional = true }
-near-jsonrpc-primitives = { git = "https://github.com/near/nearcore", tag = "2.15.0-rc.1", optional = true }
-# crates.io later: near-time = { version = "0.39", optional = true }
-near-time = { git = "https://github.com/near/nearcore", tag = "2.15.0-rc.1", optional = true }
+near-jsonrpc-primitives = { version = "=0.39.0-rc.1", optional = true }
+# SimTransport's clock (feature `near-kit`, which enables its default
+# features); the runtime's crates use it whatever the features.
+near-time = { version = "=0.39.0-rc.1", default-features = false }
+# Not used directly: these pin the rest of the release's crates in the
+# dependency tree, the last one with feature `near-kit`.
+near-async = { version = "=0.39.0-rc.1", default-features = false }
+near-async-derive = { version = "=0.39.0-rc.1", default-features = false }
+near-chain-configs = { version = "=0.39.0-rc.1", default-features = false }
+near-chain-primitives = { version = "=0.39.0-rc.1", default-features = false }
+near-config-utils = { version = "=0.39.0-rc.1", default-features = false }
+near-external-storage = { version = "=0.39.0-rc.1", default-features = false }
+near-fmt = { version = "=0.39.0-rc.1", default-features = false }
+near-o11y = { version = "=0.39.0-rc.1", default-features = false }
+near-primitives-core = { version = "=0.39.0-rc.1", default-features = false }
+near-schema-checker-core = { version = "=0.39.0-rc.1", default-features = false }
+near-schema-checker-lib = { version = "=0.39.0-rc.1", default-features = false }
+near-schema-checker-macro = { version = "=0.39.0-rc.1", default-features = false }
+near-stdx = { version = "=0.39.0-rc.1", default-features = false }
+near-indexer-primitives = { version = "=0.39.0-rc.1", default-features = false, optional = true }
 
 # `rc`: snapshots store the outcome history, which is behind `Arc`s.
 borsh = { version = "1", features = ["derive", "rc"] }
@@ -99,7 +108,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 # `SimTransport`: near-kit's RPC client answered in-process by a `Sim`.
-near-kit = ["dep:near-kit", "dep:near-jsonrpc-primitives", "dep:near-time", "dep:tokio"]
+near-kit = ["dep:near-kit", "dep:near-jsonrpc-primitives", "dep:near-indexer-primitives", "near-time/default", "dep:tokio"]
 
 [dev-dependencies]
 base64 = "0.22"

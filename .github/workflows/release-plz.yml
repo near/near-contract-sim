@@ -1,5 +1,5 @@
 # The release-plz quickstart workflow (https://release-plz.dev/docs/github/quickstart),
-# without CARGO_REGISTRY_TOKEN (release-plz.toml: git_only, no crates.io),
+# without CARGO_REGISTRY_TOKEN (release-plz.toml: git_only, not on crates.io yet),
 # with the toolchain installed as ci.yml does (the channel that
 # rust-toolchain.toml pins, not a second `stable`), and with one added
 # step: CI on the release branch.
