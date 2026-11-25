@@ -13,6 +13,12 @@ since the last tag: **Breaking** for a `!` title, **Added** for `feat`,
 title. `explore` is experimental and changes more often than the rest;
 its changes follow the same rules.
 
+## 0.3.0 (2026-11-25)
+
+### Breaking
+
+- Run nearcore 2.15.0-rc.1 and simulate external contract calls ([#42](https://github.com/near/near-contract-sim/pull/42))
+
 ## 0.2.3 (2026-11-12)
 
 ### Fixed
