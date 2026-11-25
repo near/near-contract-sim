@@ -28,11 +28,11 @@ import sys
 root, out = map(Path, sys.argv[1:])
 page = (root / 'skills/near-contract-sim/references/quickstart.md').read_text()
 blocks = lambda lang: re.findall(rf'^```{lang}\n(.*?)^```', page, re.S | re.M)
-# The pinned git source, its rev a commit.
-git = r'\{ git = "https://github\.com/near/near-contract-sim", rev = "[^"]+" \}'
+# The crates.io version.
+release = r'(?<=near-contract-sim = )"[0-9][^"]*"'
 toml = blocks('toml')[0]
-assert re.search(git, toml), toml
-toml = re.sub(git, lambda _: f'{{ path = "{root}" }}', toml)
+assert re.search(release, toml), toml
+toml = re.sub(release, lambda _: f'{{ path = "{root}" }}', toml)
 package = '[package]\nname = "consumer-pages"\nversion = "0.0.0"\nedition = "2024"\npublish = false\n\n'
 (out / 'Cargo.toml').write_text(package + toml)
 (out / 'src/lib.rs').write_text('')
@@ -79,10 +79,10 @@ layout = next(b for b in blocks('text') if 'auction-tests/' in b)
 toml = {b.split('\n')[0]: b for b in blocks('toml')}
 for file in ['.cargo/config.toml', 'Cargo.toml', 'rust-toolchain.toml', 'src/lib.rs', 'tests/sim.rs']:
     assert file in layout, (file, layout)
-git = r'\{ git = "https://github\.com/near/near-contract-sim", rev = "[^"]+" \}'
+release = r'(?<=near-contract-sim = )"[0-9][^"]*"'
 manifest = toml['[package]']
-assert re.search(git, manifest), manifest
-(out / 'Cargo.toml').write_text(re.sub(git, lambda _: f'{{ path = "{root}" }}', manifest))
+assert re.search(release, manifest), manifest
+(out / 'Cargo.toml').write_text(re.sub(release, lambda _: f'{{ path = "{root}" }}', manifest))
 (out / 'rust-toolchain.toml').write_text(toml['[toolchain]'])
 (out / '.cargo/config.toml').write_text(toml['[env]'])
 (out / 'src/lib.rs').write_text('')

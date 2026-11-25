@@ -1,6 +1,6 @@
 [package]
 name = "near-contract-sim"
-version = "0.2.3"
+version = "0.3.0-rc.1"
 edition = "2024"
 rust-version = "1.95.0"
 license = "MIT OR Apache-2.0"
@@ -9,13 +9,11 @@ description = "In-process NEAR contract simulator driven by nearcore's own Runti
 readme = "README.md"
 keywords = ["near", "blockchain", "testing", "simulator", "smart-contracts"]
 categories = ["development-tools::testing", "cryptography::cryptocurrencies"]
-# Not on crates.io yet: releases are git tags (release-plz.toml).
-publish = false
-# For a future crates.io package (a git dependency ignores this): the
-# library, its licenses, changelog and the agent skill, whose references/
-# holds the guides. Tests and fixtures stay in the repo, but for the ones
-# src/'s unit tests load: every tests/res/*.wat, and probe.wasm,
-# fungible_token.wasm, mtoken_events.wasm and vault.wasm.
+# The crates.io package: the library, its licenses, changelog and the
+# agent skill, whose references/ holds the guides. Tests and fixtures stay
+# in the repo, but for the ones src/'s unit tests load: every
+# tests/res/*.wat, and probe.wasm, fungible_token.wasm, mtoken_events.wasm
+# and vault.wasm.
 include = [
     "/src",
     "/README.md",

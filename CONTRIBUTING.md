@@ -87,9 +87,12 @@ see takes one of those, not `test`, `perf`, `ci` or `docs`.
 [release-plz](https://release-plz.dev) keeps a release pull request open
 against `main`. It bumps the version from the titles merged since the
 last tag (`!` moves the minor version while it is 0.x; `feat` and `fix`
-the patch) and writes their CHANGELOG entry. Merging it tags `vX.Y.Z` and
-publishes a GitHub release. The crate isn't on crates.io, so versions
-come from the tags.
+the patch) and writes their CHANGELOG entry. Merging it publishes the
+crate to crates.io (trusted publishing, so no token is stored), tags
+`vX.Y.Z` and makes a GitHub release. A release candidate (`0.3.0-rc.1`)
+is a pull request of its own that sets the version and writes its
+CHANGELOG entry by hand; its GitHub release is marked a prerelease.
+After a release, a pull request moves the docs' version to it.
 
 ## Docs and fixtures
 
