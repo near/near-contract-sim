@@ -5,8 +5,8 @@
 mod common;
 use common::*;
 use near_contract_sim::{
-    AccessKey, Balance, CryptoHash, ExecutionStatus, Failure, Gas, KeyType, NonceMode, SecretKey,
-    Sim, Tx,
+    AccessKey, Balance, CryptoHash, ExecutionStatus, Failure, Gas, GasLimits, KeyType, NonceMode,
+    SecretKey, Sim, Tx,
 };
 use serde_json::json;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -330,4 +330,21 @@ fn nonce_upper_bound_is_enforced_by_the_runtime() {
     assert!(e.contains("NonceTooLarge"), "{e}");
     sim.set_height(2_000);
     call(&mut sim).assert_success();
+}
+
+/// A view runs under the gas limits' burnt-gas ceiling, as a node's
+/// `max_gas_burnt_view`: one burning a few Tgas succeeds under the
+/// protocol's and runs out under a custom 1 Tgas.
+#[test]
+fn a_view_runs_under_the_gas_limits_ceiling() {
+    let mut sim = Sim::new();
+    sim.create_account("probe.near", near(10));
+    sim.deploy("probe.near", wat("ecc_probe.wat"));
+    let mut p = vec![14];
+    p.extend(2_000_000u64.to_le_bytes());
+    sim.view_raw("probe.near", "call", p.clone()).assert_success();
+    let (prepaid, burnt) = (Gas::from_teragas(300), Gas::from_teragas(1));
+    sim.config.gas_limits = GasLimits::Custom { prepaid, burnt };
+    let v = sim.view_raw("probe.near", "call", p);
+    assert_eq!(v.failure(), Some(Failure::GasLimitExceeded), "{v:?}");
 }

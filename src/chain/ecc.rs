@@ -14,6 +14,7 @@
 //! producer's choices (the dry run, the repeat, congestion and contract
 //! checks) and keeps only the chunk's rules, so apply alone decides.
 
+use super::log::SeenCall;
 use super::{Chain, Config, ViewAt};
 use crate::cache::contract_cache;
 use crate::ecc::ExternalCallRefusal;
@@ -181,10 +182,14 @@ impl Chain {
 
     /// The unique id of the accepted inclusion `ecc` repeats, if its
     /// contract accepted it in a block at most `REPEAT_WINDOW` below the
-    /// last: blocks are final at once here.
+    /// last (blocks are final at once here): the first such of the ones
+    /// near-chain's `ExternalCallCache` keeps.
     fn repeat_of(&self, ecc: &EccTransaction) -> Option<CryptoHash> {
-        let &(height, unique) = self.log.accepted_eccs.get(ecc.hash_without_state_init())?;
-        (self.height.saturating_sub(height) <= REPEAT_WINDOW).then_some(unique)
+        let seen = self.log.seen_eccs.get(ecc.hash_without_state_init())?;
+        let inside =
+            |&(h, _): &(u64, CryptoHash)| h <= self.height && self.height - h <= REPEAT_WINDOW;
+        let mut inside = seen.accepted().filter(inside);
+        inside.next().map(|(_, unique)| unique)
     }
 
     pub(crate) fn has_pooled_eccs(&self) -> bool {
@@ -213,7 +218,7 @@ impl Chain {
             (rc.witness_config.combined_transactions_size_limit as u64).saturating_sub(signed_size);
         let congested = self.shard_congested(config);
         let mut state = TrieUpdate::new(self.trie().recording_reads_new_recorder());
-        let mut charged = SignerCharges::new(self, config, apply_state, signed);
+        let charged = SignerCharges::new(self, config, apply_state, signed);
         let (mut packed, mut left) = (vec![], vec![]);
         for i in std::mem::take(&mut self.ecc_pool) {
             let send = &self.sends[i];
@@ -223,7 +228,19 @@ impl Chain {
                 left.push(i);
                 continue;
             }
-            if !validity.has_room() || !shares.has_room() || ecc.get_size() > size_left {
+            // A full chunk leaves every call for the next.
+            if !validity.has_room() || !shares.has_room() {
+                left.push(i);
+                continue;
+            }
+            // A repeat leaves the pool even if it doesn't fit.
+            if !send.forced
+                && let Some(unique) = self.repeat_of(&ecc)
+            {
+                self.sends[i].verdict = Verdict::Repeat(unique);
+                continue;
+            }
+            if ecc.get_size() > size_left {
                 left.push(i);
                 continue;
             }
@@ -235,10 +252,6 @@ impl Chain {
                 room.commit();
                 size_left -= ecc.get_size();
                 packed.push((i, (*ecc).clone()));
-                continue;
-            }
-            if let Some(unique) = self.repeat_of(&ecc) {
-                self.sends[i].verdict = Verdict::Repeat(unique);
                 continue;
             }
             if let Some(e) = &congested {
@@ -265,9 +278,10 @@ impl Chain {
             )
             .unwrap_or_else(|e| panic!("dry run of an external call failed: {e:?}"));
             match out.dry_run {
-                EccDryRun::Accepted { account, installed_state_init, .. } => {
+                // The chunk takes no other call to this contract, so no
+                // later run sees the account the call charged.
+                EccDryRun::Accepted { installed_state_init, .. } => {
                     room.commit();
-                    charged.set(ecc.contract_id(), account);
                     // A state init the account ignored is stripped, as a
                     // producer strips it; the unique id leaves it out.
                     let ecc = match ecc.state_init().is_some() && !installed_state_init {
@@ -309,15 +323,20 @@ impl Chain {
             .collect()
     }
 
-    /// Notes the chunk's accepted calls for the repeat window: the first
-    /// accepted inclusion of a call stays while inside it (near-chain's
-    /// `ExternalCallCache::remember`).
+    /// Notes the chunk's calls for the repeat window, as near-chain's
+    /// `ExternalCallCache::remember` does: each call's first accepted
+    /// inclusion stays while inside the window, and its latest replaces
+    /// the one before.
     pub(super) fn remember_eccs(&mut self, height: u64, inclusions: &[ExternalCallInclusion]) {
-        for inc in inclusions.iter().filter(|inc| inc.accepted) {
-            let earlier = self.log.accepted_eccs.get(&inc.hash_without_state_init);
-            if earlier.is_none_or(|&(h, _)| height.saturating_sub(h) > REPEAT_WINDOW) {
-                self.log.accepted_eccs.insert(inc.hash_without_state_init, (height, inc.unique_id));
-            }
+        for inc in inclusions {
+            let latest = (height, inc.unique_id);
+            let earlier = self.log.seen_eccs.get(&inc.hash_without_state_init);
+            let first_accepted = match earlier.and_then(|s| s.first_accepted) {
+                Some(first) if height.saturating_sub(first.0) <= REPEAT_WINDOW => Some(first),
+                _ => inc.accepted.then_some(latest),
+            };
+            let seen = SeenCall { first_accepted, latest, latest_accepted: inc.accepted };
+            self.log.seen_eccs.insert(inc.hash_without_state_init, seen);
         }
     }
 }
@@ -438,13 +457,5 @@ impl SignerCharges {
 
     fn account(&self, id: &AccountId) -> Option<Account> {
         self.accounts.get(id).cloned()
-    }
-
-    /// An accepted call charged `id`: later calls in the chunk see that, if
-    /// apply has the account loaded.
-    fn set(&mut self, id: &AccountId, account: Account) {
-        if let Some(a) = self.accounts.get_mut(id) {
-            *a = account;
-        }
     }
 }

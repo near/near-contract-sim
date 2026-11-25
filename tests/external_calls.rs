@@ -309,6 +309,9 @@ fn the_contract_pays_the_gas_and_the_deposit_it_attaches_and_gets_the_refunds() 
     // Once settled: the gas it all burnt and the deposit; the rest came back.
     let spent = out.tokens_burnt().as_yoctonear() + near(2).as_yoctonear();
     assert_eq!(probe - s.balance(PROBE).as_yoctonear(), spent);
+    // What the contract paid for gas: the charge less the refunds.
+    let paid = out.effects().gas_paid().as_yoctonear();
+    assert_eq!(paid, spent - near(2).as_yoctonear());
     let bob_burnt = out.expect_receipt("ping").tokens_burnt.as_yoctonear();
     assert!(s.balance("bob.near").as_yoctonear() + bob_burnt >= bob + near(2).as_yoctonear());
     s.findings().assert_none();
@@ -620,6 +623,131 @@ fn a_hold_can_wait_for_a_receipt_of_an_external_call() {
     };
     assert_eq!(run(false), (0, false));
     assert_eq!(run(true), (1, true));
+}
+
+/// A node keeps a call's first accepted inclusion while inside the
+/// window, and its latest: a forced copy inside the window (as a producer
+/// may pack one before the first is final) leaves the first answering
+/// repeats, and answers them once the first has left the window.
+#[test]
+fn a_repeat_is_answered_by_the_first_accepted_copy_then_by_the_latest() {
+    let p = || op(2, b"r");
+    let mut s = sim();
+    let first = honest(&mut s, p()).included();
+    let at = first.transaction.as_ref().unwrap().block_height;
+    forced(&mut s, p()).included().assert_success();
+    s.advance_to(at + 999);
+    let latest = s.external_call(PROBE, p()).forced().submit();
+    s.step();
+    let latest = s.external_call_outcome(latest).included();
+    assert_eq!(latest.transaction.as_ref().unwrap().block_height, at + 1_000);
+    let repeat_of = |s: &mut Sim| match honest(s, p()) {
+        ExternalCallOutcome::Repeat(o) => o.hash,
+        other => panic!("expected a repeat, got {other}"),
+    };
+    assert_eq!(repeat_of(&mut s), first.hash);
+    s.step();
+    assert_eq!(repeat_of(&mut s), latest.hash);
+    s.advance_to(at + 2_001);
+    honest(&mut s, p()).included().assert_success();
+}
+
+/// A forced send is its own: an honest send of the same call doesn't
+/// share it, and is then a repeat of its inclusion.
+#[test]
+fn an_honest_send_of_a_forced_call_is_another_send() {
+    let mut s = sim();
+    let f = s.external_call(PROBE, vec![]).forced().submit();
+    let h = s.external_call(PROBE, vec![]).submit();
+    assert_ne!(f, h);
+    s.settle();
+    let f = s.external_call_outcome(f).included();
+    match s.external_call_outcome(h) {
+        ExternalCallOutcome::Repeat(o) => assert_eq!(o.hash, f.hash),
+        other => panic!("expected a repeat, got {other}"),
+    }
+}
+
+/// The chunk's external calls together get a share of its compute (2/5
+/// of its gas limit): once a call passes it, the rest wait for the next
+/// chunk, refused by nobody.
+#[test]
+fn calls_past_the_chunks_compute_share_wait_for_the_next_chunk() {
+    let at_limit = {
+        let ok = |n: u64| honest(&mut sim(), op(14, &n.to_le_bytes())).refusal().is_none();
+        let (mut lo, mut hi) = (0, 1 << 30);
+        while hi - lo > 1 {
+            let m = lo + (hi - lo) / 2;
+            if ok(m) { lo = m } else { hi = m }
+        }
+        op(14, &lo.to_le_bytes())
+    };
+    let mut s = sim();
+    s.config.block_gas_limit = Some(Gas::from_teragas(50));
+    let ids: Vec<String> = (0..5).map(|i| format!("c{i}.near")).collect();
+    for id in &ids {
+        s.create_account(id, near(10));
+        s.deploy(id, wat("ecc_probe.wat"));
+    }
+    let sent: Vec<_> =
+        ids.iter().map(|id| s.external_call(id, at_limit.clone()).submit()).collect();
+    s.step();
+    let included = |s: &Sim| {
+        (sent.iter().map(|&c| s.external_call_outcome(c)))
+            .filter(|o| matches!(o, ExternalCallOutcome::Included(_)))
+            .count()
+    };
+    let first = included(&s);
+    assert!((1..5).contains(&first), "{first} of 5 in the first chunk");
+    for &c in &sent {
+        let o = s.external_call_outcome(c);
+        assert!(
+            matches!(o, ExternalCallOutcome::Included(_) | ExternalCallOutcome::Pending),
+            "{o}"
+        );
+    }
+    s.settle();
+    assert_eq!(included(&s), 5);
+}
+
+/// The dry run sees the contract's balance after the chunk's signed
+/// transactions it signed, which here leave it too little for the call.
+#[test]
+fn a_call_its_contract_can_no_longer_pay_for_after_its_transactions_is_refused() {
+    let mut s = sim();
+    let before = s.balance(PROBE).as_yoctonear();
+    let fee = {
+        let mut t = s.clone();
+        t.tx(PROBE, "alice.near").transfer(near(1)).submit();
+        t.step();
+        before - t.balance(PROBE).as_yoctonear() - near(1).as_yoctonear()
+    };
+    let usage = s.account(PROBE).unwrap().storage_usage;
+    let stake = s.storage_cost(usage).as_yoctonear();
+    let amount = Balance::from_yoctonear(before - fee - stake - 1);
+    let t = s.tx(PROBE, "alice.near").transfer(amount).submit();
+    let sent = s.external_call(PROBE, vec![]).submit();
+    s.step();
+    assert_eq!(s.balance(PROBE).as_yoctonear(), stake + 1, "{}", s.outcome(t));
+    let out = s.external_call_outcome(sent);
+    assert!(out.refusal().is_some(), "{out}");
+}
+
+#[test]
+fn an_outcome_prints_what_came_of_the_call() {
+    let mut s = sim();
+    let sent = s.external_call(PROBE, vec![]).submit();
+    assert_eq!(s.external_call_outcome(sent).to_string(), "pending");
+    s.settle();
+    let out = s.external_call_outcome(sent);
+    let hash = out.clone().included().hash;
+    assert!(out.to_string().starts_with(&format!("included as {hash}:\n")), "{out}");
+    let again = honest(&mut s, vec![]);
+    assert_eq!(again.to_string(), format!("a repeat of {hash}"));
+    let refused = honest(&mut s, vec![19]);
+    let want =
+        "refused: Action #0: ExecutionError(\"Smart contract panicked: refused\")\n  log: accepted";
+    assert!(refused.to_string().contains(want), "{refused}");
 }
 
 #[test]

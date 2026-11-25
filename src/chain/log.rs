@@ -40,6 +40,24 @@ pub(crate) struct Block {
     pub outcomes: Vec<ExecutionOutcomeWithId>,
 }
 
+/// What near-chain's `ExternalCallCache` keeps of an external call's
+/// inclusions: its first accepted one while inside the repeat window, and
+/// its latest, accepted or not. Each is a height and a unique id.
+#[derive(Clone, Copy, BorshSerialize, BorshDeserialize)]
+pub(crate) struct SeenCall {
+    pub first_accepted: Option<(u64, CryptoHash)>,
+    pub latest: (u64, CryptoHash),
+    pub latest_accepted: bool,
+}
+
+impl SeenCall {
+    /// The accepted inclusions, the first one first.
+    pub fn accepted(&self) -> impl Iterator<Item = (u64, CryptoHash)> {
+        let latest = self.latest_accepted.then_some(self.latest);
+        self.first_accepted.into_iter().chain(latest)
+    }
+}
+
 #[derive(Clone, Default, BorshSerialize, BorshDeserialize)]
 pub(crate) struct Log {
     pub blocks: Vec<Arc<Block>>,
@@ -49,9 +67,9 @@ pub(crate) struct Log {
     pub txs: HashMap<CryptoHash, Arc<SignedTransaction>>,
     /// Every external call included, by its unique id, as included.
     pub eccs: HashMap<CryptoHash, Arc<EccTransaction>>,
-    /// Per external call (its hash without a state init), its first
-    /// accepted inclusion in the repeat window: the height and unique id.
-    pub accepted_eccs: HashMap<CryptoHash, (u64, CryptoHash)>,
+    /// Per external call (its hash without a state init), the inclusions
+    /// the repeat window checks.
+    pub seen_eccs: HashMap<CryptoHash, SeenCall>,
     pub receipts: HashMap<CryptoHash, Arc<Receipt>>,
     /// Outcome id -> (block, position in its outcomes).
     index: HashMap<CryptoHash, (usize, usize)>,

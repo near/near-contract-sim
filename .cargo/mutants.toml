@@ -23,4 +23,7 @@ exclude_re = [
     # Equivalent but for a nondeterministic op: a case's rerun has the same receipts.
     'run.rs:466:60: replace && with \|\| in Harness<O, W>::name_traps',
     'run.rs:468:21: replace && with \|\| in Harness<O, W>::name_traps',
+    # Equivalent: a view of `__external_call` runs on the view block's hash, which no
+    # host function an external call may use shows (`random_seed` is not allowed).
+    'chain/ecc.rs:[0-9]+:[0-9]+: replace == with != in Chain::view_ecc',
 ]

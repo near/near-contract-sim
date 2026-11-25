@@ -75,7 +75,9 @@ pub enum ExternalCallOutcome {
     /// The node dropped it as a repeat of a call its contract accepted at
     /// most 1,000 blocks before (near-chain's
     /// `EXTERNAL_CALL_REPEAT_WINDOW`), whose outcome this is, as a node's
-    /// `send_tx` answers.
+    /// `send_tx` answers: the call's first accepted copy, or once that has
+    /// left the window, its latest one if accepted (a later copy is only
+    /// [`forced`](ExternalCall::forced) in here).
     Repeat(Box<TxOutcome>),
     /// Waiting in the pool for a block.
     Pending,
@@ -229,6 +231,49 @@ mod tests {
         p.extend(method.as_bytes());
         p.extend(target.as_bytes());
         p
+    }
+
+    /// A chunk's external calls go after its signed transactions, in the
+    /// bytes they leave of `combined_transactions_size_limit`: here two
+    /// calls' worth exactly, so the third waits, forced or not.
+    #[test]
+    fn calls_take_the_bytes_a_chunks_signed_transactions_leave() {
+        for forced in [false, true] {
+            let mut sim = Sim::new();
+            sim.create_account("alice.near", Balance::from_near(100));
+            sim.create_account("bob.near", Balance::from_near(1));
+            let ids = ["p0.near", "p1.near", "p2.near"];
+            for id in ids {
+                sim.create_account(id, Balance::from_near(10));
+                sim.deploy(id, probe());
+            }
+            let payload = vec![0u8; 19_000];
+            let each = sim.external_call(ids[0], payload.clone()).build().get_size();
+            let limit = sim.config.runtime_config().witness_config.combined_transactions_size_limit;
+            let send = |sim: &mut Sim, n: usize| {
+                let call = sim.call("alice.near", "bob.near", "x").args(vec![0u8; n]);
+                let h = call.gas(Gas::from_teragas(1)).submit();
+                (sim.chain.log().txs[&h].size_for_limits(), n as u64)
+            };
+            let (size, n) = send(&mut sim, 1_500_000);
+            let overhead = size - n;
+            send(&mut sim, 1_500_000);
+            let rest = limit as u64 - 2 * each - 2 * size - overhead;
+            assert_eq!(send(&mut sim, rest as usize).0 + 2 * size + 2 * each, limit as u64);
+            let sent: Vec<_> = (ids.iter())
+                .map(|id| {
+                    let call = sim.external_call(*id, payload.clone());
+                    if forced { call.forced() } else { call }.submit()
+                })
+                .collect();
+            sim.step();
+            let pending: Vec<_> = (sent.iter())
+                .map(|&c| matches!(sim.external_call_outcome(c), ExternalCallOutcome::Pending))
+                .collect();
+            assert_eq!(pending, [false, false, true], "forced: {forced}");
+            sim.settle();
+            sim.external_call_outcome(sent[2]).included().assert_success();
+        }
     }
 
     /// Every action receipt an accepted call's chain makes, two hops down
