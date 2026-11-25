@@ -4,8 +4,8 @@ Use this page to decide how far a result carries to a real node: what
 matches a node exactly, what differs, and what the simulator doesn't
 model.
 
-What a contract observes comes from nearcore's own code at 2.14.0
-(protocol 88): `Runtime::apply` validates and converts transactions and
+What a contract observes comes from nearcore's own code at 2.15.0-rc.1
+(protocol 89): `Runtime::apply` validates and converts transactions and
 runs receipts with nearcore's fees, limits and wasm config, and views go
 through nearcore's `TrieViewer`. The simulator decides what goes into
 each block and when blocks happen ([blocks-and-clock.md](blocks-and-clock.md)).
@@ -15,11 +15,11 @@ root (`tests/prop_invariants.rs`, over random programs).
 ## How it is checked
 
 Gas, every gas-profile entry and every refund match a recorded `neard`
-2.14.0 sandbox run at protocol 88 (`tests/gas_vs_sandbox.rs`);
-random programs match a 2.14.0 sandbox receipt by receipt, with a new
+2.15.0-rc.1 sandbox run at protocol 89 (`tests/gas_vs_sandbox.rs`);
+random programs match a 2.15.0-rc.1 sandbox receipt by receipt, with a new
 seed in CI (`tests/differential.rs`); near/mpc's TEE verifier matches
-its native build (`tests/mpc_tee.rs`). An older `protocol_version` gets
-nearcore's config for it, unchecked against a sandbox. A margin here is
+its native build (`tests/mpc_tee.rs`). An older `protocol_version` (85 to 88)
+gets nearcore's config for it, unchecked against a sandbox. A margin here is
 a sandbox's margin: near/mpc#4118 measured one call on testnet at 1.34
 times its sandbox gas fixed, and 1.21 times per entry.
 
@@ -79,6 +79,11 @@ callback or the resume that wakes it.
 - **A fault rewrites a receipt between blocks** ([faults.md](faults.md)).
 - **`apply_state_records` leaves `storage_usage` alone**, where
   `Sim::set_state` keeps it right.
+- **External calls see final blocks at once.** A node's repeat window
+  counts back from its final head, a block or two behind, and a node may
+  prune an old inclusion, after which a repeat's `send_tx` times out.
+  Outcomes, gas, balances and errors match a 2.15.0-rc.1 sandbox
+  (`tests/external_calls_vs_sandbox.rs`).
 
 ## Limits
 

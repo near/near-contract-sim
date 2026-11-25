@@ -5,8 +5,8 @@
 mod common;
 use common::*;
 use near_contract_sim::{
-    AccessKey, Balance, CryptoHash, ExecutionStatus, Failure, Gas, KeyType, NonceMode, SecretKey,
-    Sim, Tx,
+    AccessKey, Balance, CryptoHash, ExecutionStatus, Failure, Gas, GasLimits, KeyType, NonceMode,
+    SecretKey, Sim, Tx,
 };
 use serde_json::json;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -269,13 +269,11 @@ fn explicit_nonce_is_reserved_for_later_transactions() {
 }
 
 /// The same transaction signed twice before a block has one hash, and it is
-/// queued once, as in nearcore's mempool. At protocol 84, before chunks
-/// dropped duplicates, a second copy would run, fail on its used nonce and
-/// replace the first one's outcome.
+/// queued once, as in nearcore's mempool: a second copy would run, fail on
+/// its used nonce and replace the first one's outcome.
 #[test]
 fn a_transaction_submitted_twice_is_queued_once() {
     let mut sim = Sim::new();
-    sim.config.protocol_version = 84;
     sim.create_account("alice.near", near(10));
     sim.create_account("bob.near", near(10));
     let pk = sim.secret_key("alice.near").public_key();
@@ -305,7 +303,7 @@ fn a_refused_transaction_leaves_no_nonce_gap() {
     strict(&mut sim).assert_success();
 }
 
-/// nearcore 2.14 checks the nonce upper bound in the runtime
+/// nearcore checks the nonce upper bound in the runtime
 /// (`nonce < block_height * 1e6`), not only in the chain layer.
 #[test]
 fn nonce_upper_bound_is_enforced_by_the_runtime() {
@@ -332,4 +330,21 @@ fn nonce_upper_bound_is_enforced_by_the_runtime() {
     assert!(e.contains("NonceTooLarge"), "{e}");
     sim.set_height(2_000);
     call(&mut sim).assert_success();
+}
+
+/// A view runs under the gas limits' burnt-gas ceiling, as a node's
+/// `max_gas_burnt_view`: one burning a few Tgas succeeds under the
+/// protocol's and runs out under a custom 1 Tgas.
+#[test]
+fn a_view_runs_under_the_gas_limits_ceiling() {
+    let mut sim = Sim::new();
+    sim.create_account("probe.near", near(10));
+    sim.deploy("probe.near", wat("ecc_probe.wat"));
+    let mut p = vec![14];
+    p.extend(2_000_000u64.to_le_bytes());
+    sim.view_raw("probe.near", "call", p.clone()).assert_success();
+    let (prepaid, burnt) = (Gas::from_teragas(300), Gas::from_teragas(1));
+    sim.config.gas_limits = GasLimits::Custom { prepaid, burnt };
+    let v = sim.view_raw("probe.near", "call", p);
+    assert_eq!(v.failure(), Some(Failure::GasLimitExceeded), "{v:?}");
 }

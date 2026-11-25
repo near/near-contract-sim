@@ -214,15 +214,25 @@ fn protocol_version_selects_runtime_config() {
 
 /// A view runs at the last block's protocol version, as RPC's view of the
 /// latest block does, so a new `config.protocol_version` reaches views with
-/// the next block. Protocol 84 predates the `chain_id` host function.
+/// the next block. Protocol 86 predates the `ml_dsa_verify` host function.
 #[test]
 fn a_view_runs_at_the_last_blocks_protocol_version() {
+    let wasm = wat::parse_str(
+        r#"(module
+  (import "env" "ml_dsa_verify"
+    (func $verify (param i64 i64 i64 i64 i64 i64) (result i64)))
+  (import "env" "value_return" (func $ret (param i64 i64)))
+  (memory (export "memory") 1)
+  (data (i32.const 0) "ok")
+  (func (export "ok") (call $ret (i64.const 2) (i64.const 0))))"#,
+    )
+    .unwrap();
     let mut sim = Sim::new();
-    sim.deploy("env.near", env_wasm());
-    sim.config.protocol_version = 84;
-    assert_eq!(sim.view("env.near", "chain_id", ()).result.unwrap(), b"localnet");
+    sim.deploy("pq.near", wasm);
+    sim.config.protocol_version = 86;
+    assert_eq!(sim.view("pq.near", "ok", ()).result.unwrap(), b"ok");
     sim.step();
-    let err = sim.view("env.near", "chain_id", ()).assert_failure().to_string();
+    let err = sim.view("pq.near", "ok", ()).assert_failure().to_string();
     assert!(err.contains("unknown or invalid import"), "{err}");
 }
 

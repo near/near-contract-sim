@@ -34,9 +34,9 @@ use near_primitives::trie_key::{TrieKey, col};
 use near_primitives::types::{
     AccountId, RawStateChange, RawStateChangesWithTrieKey, StateChangeCause, StateRoot,
 };
+use near_runtime::ApplyResult;
 use near_store::trie::AccessOptions;
 use near_store::trie::update::TrieUpdate;
-use node_runtime::ApplyResult;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 /// The watched tokens and what they measured, kept in the log (so a saved
@@ -293,7 +293,7 @@ impl Chain {
             protocol_version: config.protocol_version,
             root: self.root,
         };
-        let (result, _) = self.run_view(config, &VIEWER, tu, at, (contract, method, args));
+        let (result, _) = self.run_view(config, &VIEWER, tu, at, (contract, method, args, None));
         result.map_err(|e| format!("failed: {e}"))
     }
 

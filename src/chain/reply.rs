@@ -19,7 +19,7 @@ use near_primitives::hash::CryptoHash;
 use near_primitives::trie_key::TrieKey;
 use near_primitives::types::AccountId;
 use near_primitives::utils::{create_action_hash_from_receipt_id, create_random_seed};
-use node_runtime::ApplyState;
+use near_runtime::ApplyState;
 
 /// A reply a transaction binds: the stub and its method, the storage key
 /// of the method's reply (`reply/<i>`), and the encoded reply.

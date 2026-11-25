@@ -1,6 +1,6 @@
-//! Gas cross-check against a real `neard` sandbox (2.14.0, protocol 88).
+//! Gas cross-check against a real `neard` sandbox (2.15.0-rc.1, protocol 89).
 //!
-//! `tests/res/sandbox_gas_2.14.0.json` was recorded by running the
+//! `tests/res/sandbox_gas_2.15.0-rc.1.json` was recorded by running the
 //! same scenario (same accounts, wasm, args, prepaid gas, in the same order)
 //! against near-sandbox via RPC and saving `EXPERIMENTAL_tx_status`
 //! (`record_sandbox_gas`).
@@ -30,7 +30,7 @@ use serde_json::Value;
 use std::collections::BTreeSet;
 
 /// Recorded by `record_sandbox_gas`, below.
-const FIXTURE: &str = "sandbox_gas_2.14.0.json";
+const FIXTURE: &str = "sandbox_gas_2.15.0-rc.1.json";
 
 /// (scenario, receipt method, cost) triples that are data-dependent (see module docs).
 const DATA_DEPENDENT: [(&str, &str, &str); 2] = [
@@ -62,8 +62,14 @@ const CALLS: [(&str, &str, &str, &str, u64); 5] = [
     ("factorial_3", "xcc.test.near", "factorial", r#"{"n":3}"#, 300),
 ];
 
+/// Both chains run the calls above this height, so `probe_height` formats
+/// a number of the same length on each: its memory reads and instructions
+/// depend on the digit count.
+const START_HEIGHT: u64 = 1_000;
+
 fn world() -> Sim {
     let mut sim = Sim::new();
+    sim.advance_to(START_HEIGHT);
     for (id, wasm) in
         ACCOUNTS.into_iter().zip([None, Some(status_wasm()), Some(xcc_wasm()), Some(probe_wasm())])
     {
@@ -229,7 +235,12 @@ async fn record_sandbox_gas() {
     let node = Near::custom(url, "sandbox").signer(alice).build();
     let rpc = node.rpc();
     rpc.sandbox_patch_state(json!(sim.state_records(ACCOUNTS))).await.unwrap();
-    rpc.sandbox_fast_forward(3).await.unwrap();
+    let height = rpc.call::<Value, Value>("status", json!([])).await.unwrap()["sync_info"]
+        ["latest_block_height"]
+        .as_u64()
+        .unwrap();
+    assert!(height < START_HEIGHT - 3, "not a fresh sandbox: at height {height}");
+    rpc.sandbox_fast_forward(START_HEIGHT - height).await.unwrap();
     let send = async |rcv: &str, m: &str, a: &str, tgas: u64| -> CryptoHash {
         let call = node.call(rcv, m).args_raw(a.as_bytes().to_vec()).gas(format!("{tgas} Tgas"));
         let sent = call.send().wait_until::<near_kit::transaction::Included>();

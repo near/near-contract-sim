@@ -23,7 +23,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_primitives::types::validator_stake::ValidatorStake;
 use near_primitives::types::{AccountId, Balance};
-use node_runtime::ValidatorAccountsUpdate;
+use near_runtime::ValidatorAccountsUpdate;
 use std::collections::{BTreeMap, BTreeSet};
 
 type Stakes = BTreeMap<AccountId, Balance>;

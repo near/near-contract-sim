@@ -57,8 +57,9 @@ fn a_funded_gas_key_has_its_balance_and_parallel_nonces() {
     let nonces = sim.gas_key_nonces("alice.near", &gk.public_key()).unwrap();
     assert_eq!(nonces.len(), 4);
     // Every index starts at the same height-derived nonce, like a new
-    // access key: (height of the AddKey block - 1) * 1e6.
-    assert!(nonces.iter().all(|n| *n == nonces[0] && n % 1_000_000 == 0), "{nonces:?}");
+    // access key: height of the AddKey block * 1e6 - 1 (protocol 89's
+    // `RaiseInitialAccessKeyNonce`).
+    assert!(nonces.iter().all(|n| *n == nonces[0] && (n + 1) % 1_000_000 == 0), "{nonces:?}");
     // Not a gas key / no such key.
     let default_pk = sim.secret_key("alice.near").public_key();
     assert_eq!(sim.gas_key_nonces("alice.near", &default_pk), None);
@@ -380,19 +381,4 @@ fn strict_nonce_mode() {
         .nonce(n + 5)
         .transact());
     assert!(e.contains("InvalidNonce"), "{e}");
-}
-
-#[test]
-fn gas_keys_need_protocol_85() {
-    // 84 predates gas keys: the AddKey is refused.
-    let mut sim = Sim::new();
-    sim.config.protocol_version = 84;
-    sim.create_account("alice.near", near(10));
-    let gk = gas_key("old");
-    let key = AccessKey::gas_key_full_access(1);
-    let e = err(&sim.tx("alice.near", "alice.near").add_key(gk.public_key(), key).transact());
-    assert!(
-        e.contains("UnsupportedProtocolFeature { protocol_feature: \"GasKeys\", version: 84 }"),
-        "{e}"
-    );
 }

@@ -8,8 +8,9 @@
 //! them is copied from `chain/jsonrpc/src/lib.rs` at the pinned tag, and says
 //! so where it is.
 
-use crate::chain::{Block, Log, VALIDATOR, ViewAt};
+use crate::chain::{Block, Log, VALIDATOR, Verdict, ViewAt};
 use crate::sim::{GENESIS_TIMESTAMP_NS, IntoAccountId, Sim};
+use crate::tx::ViewError;
 use near_crypto::{KeyType, PublicKey};
 use near_jsonrpc_primitives::errors::{RpcError, RpcErrorKind};
 use near_jsonrpc_primitives::message::{Message, Request};
@@ -27,7 +28,7 @@ use near_jsonrpc_primitives::types::sandbox::{
     RpcSandboxPatchStateResponse,
 };
 use near_jsonrpc_primitives::types::transactions::{
-    RpcSendTransactionRequest, RpcTransactionError, RpcTransactionResponse,
+    RpcSendTransactionEnvelopeRequest, RpcTransactionError, RpcTransactionResponse,
     RpcTransactionStatusRequest, TimeoutErrorCause,
 };
 use near_jsonrpc_primitives::types::view_access_key::{
@@ -42,25 +43,27 @@ use near_primitives::action::GlobalContractIdentifier;
 use near_primitives::errors::{InvalidTxError, TxExecutionError};
 use near_primitives::hash::CryptoHash;
 use near_primitives::sharding::ShardChunkHeader;
-use near_primitives::transaction::ExecutionStatus;
+use near_primitives::transaction::{
+    EccTransaction, ExecutionStatus, SignedTransaction, TransactionEnvelope,
+};
 use near_primitives::types::{
     Balance, BlockId, BlockReference, Gas, ShardId, StateRoot, SyncCheckpoint,
 };
 use near_primitives::version::{PROTOCOL_VERSION, Version};
 use near_primitives::views::{
     AccessKeyInfoView, AccessKeyList, BlockHeaderView, BlockView, CallResult, ChunkHeaderView,
-    ContractCodeView, ExecutionOutcomeWithIdView, FinalExecutionOutcomeView,
+    ContractCodeView, EccTransactionView, ExecutionOutcomeWithIdView, FinalExecutionOutcomeView,
     FinalExecutionOutcomeViewEnum, FinalExecutionOutcomeWithReceiptView, GasKeyNoncesView,
     GasPriceView, QueryRequest, ReceiptView, SignedTransactionView, StatusResponse, StatusSyncInfo,
-    TxExecutionStatus,
+    TransactionEnvelopeView, TxExecutionStatus,
 };
-use near_store::TrieUpdate;
-use near_vm_runner::ContractCode;
-use node_runtime::state_viewer::TrieViewer;
-use node_runtime::state_viewer::errors::{
+use near_runtime::state_viewer::TrieViewer;
+use near_runtime::state_viewer::errors::{
     CallFunctionError, ViewAccessKeyError, ViewAccountError, ViewContractCodeError,
     ViewGasKeyNoncesError, ViewStateError,
 };
+use near_store::TrieUpdate;
+use near_vm_runner::ContractCode;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -76,7 +79,7 @@ const POLLING_TIMEOUT: Duration = Duration::from_secs(10);
 /// A `TrieViewer` with a node's state size limit (`trie_viewer_state_size_limit`,
 /// 50,000 bytes), which `TrieViewer::default()` lacks.
 static VIEWER: LazyLock<TrieViewer> =
-    LazyLock::new(|| TrieViewer::new(RuntimeConfigStore::new(None), Some(50_000), 100, None));
+    LazyLock::new(|| TrieViewer::new(RuntimeConfigStore::new(), Some(50_000), 100, None));
 
 /// A node for near-kit, in process: a `Clone` handle to one [`Sim`] that
 /// answers with nearcore's own views and errors.
@@ -233,6 +236,7 @@ fn answer(sim: &mut Sim, method: &str, params: Value) -> Result<Value, RpcError>
                 account_id: r.account_id,
                 method_name: r.method_name,
                 args: r.args,
+                state_init: r.state_init,
             };
             reply(view(sim, &r.block_reference, q).map_err(RpcCallFunctionError::from))
         }
@@ -243,7 +247,10 @@ fn answer(sim: &mut Sim, method: &str, params: Value) -> Result<Value, RpcError>
                 log.origin.get(&id).ok_or(RpcReceiptToTxError::UnknownReceipt { receipt_id: id });
             reply(tx.map(|tx| RpcReceiptToTxResponse {
                 transaction_hash: *tx,
-                sender_account_id: log.txs[tx].transaction.signer_id().clone(),
+                sender_account_id: match log.txs.get(tx) {
+                    Some(t) => t.transaction.signer_id().clone(),
+                    None => log.eccs[tx].contract_id().clone(),
+                },
             }))
         }
         "EXPERIMENTAL_tx_status" => {
@@ -296,7 +303,15 @@ fn answer(sim: &mut Sim, method: &str, params: Value) -> Result<Value, RpcError>
             sim.apply_state_records(r.records);
             Ok(to_json(RpcSandboxPatchStateResponse {}))
         }
-        "send_tx" => reply(send_tx(sim, parse(params)?)),
+        "send_tx" => {
+            let r: RpcSendTransactionEnvelopeRequest = parse(params)?;
+            match r.transaction {
+                TransactionEnvelope::Signed(tx) => reply(send_tx(sim, tx, r.wait_until)),
+                TransactionEnvelope::Unsigned(ecc) => {
+                    reply(send_external_call(sim, ecc, r.wait_until))
+                }
+            }
+        }
         "status" => Ok(to_json(status(sim))),
         _ => Err(RpcError::method_not_found(method.into())),
     }
@@ -352,30 +367,60 @@ fn query(response: Result<RpcQueryResponse, RpcQueryError>) -> Result<Value, Rpc
 
 fn send_tx(
     sim: &mut Sim,
-    r: RpcSendTransactionRequest,
+    tx: SignedTransaction,
+    wait_until: TxExecutionStatus,
 ) -> Result<RpcTransactionResponse, RpcTransactionError> {
-    let tx = r.signed_transaction;
     let hash = tx.get_hash();
     // nearcore's `check_transaction_validity_period` refuses a block hash it
     // doesn't know as expired.
     let ours = by_id(sim, &BlockId::Hash(*tx.transaction.block_hash())).is_some();
     // A pinned height or time is the first receipt's, as for a `Tx`.
     let local = tx.transaction.signer_id() == tx.transaction.receiver_id();
-    if r.wait_until == TxExecutionStatus::None {
+    if wait_until == TxExecutionStatus::None {
         // `send_tx_async`: queued, with nothing said about it.
         if ours {
             sim.submit_pinned(local, |chain| chain.submit(tx, None, None, vec![]));
         }
-        return Ok(RpcTransactionResponse {
-            final_execution_outcome: None,
-            final_execution_status: TxExecutionStatus::None,
-        });
+        return Ok(unawaited());
     }
     if !ours {
         return Err(RpcTransactionError::InvalidTransaction { context: InvalidTxError::Expired });
     }
     sim.submit_pinned(local, |chain| chain.submit(tx, None, None, vec![]));
-    fetch(sim, hash, r.wait_until, true)
+    fetch(sim, hash, wait_until, true)
+}
+
+fn unawaited() -> RpcTransactionResponse {
+    RpcTransactionResponse {
+        final_execution_outcome: None,
+        final_execution_status: TxExecutionStatus::None,
+    }
+}
+
+/// `send_tx` of an external call: a call the node's checks refuse is an
+/// invalid transaction; a repeat of one its contract accepted is answered
+/// with that inclusion; otherwise it waits for the call's inclusion, which a
+/// call the producer's dry run refuses never gets, so it times out.
+fn send_external_call(
+    sim: &mut Sim,
+    ecc: EccTransaction,
+    wait_until: TxExecutionStatus,
+) -> Result<RpcTransactionResponse, RpcTransactionError> {
+    let config = sim.config.clone();
+    let sent = sim.submit_pinned(true, |chain| chain.send_ecc(&config, ecc, false));
+    if wait_until == TxExecutionStatus::None {
+        return Ok(unawaited());
+    }
+    if let Verdict::Refused(r) = &sim.chain.send(sent).verdict
+        && let TxExecutionError::InvalidTxError(context) = &r.error
+    {
+        return Err(RpcTransactionError::InvalidTransaction { context: context.clone() });
+    }
+    sim.settle_until(|sim| !matches!(sim.chain.send(sent).verdict, Verdict::Pending));
+    match sim.chain.send(sent).verdict {
+        Verdict::Included(unique) | Verdict::Repeat(unique) => fetch(sim, unique, wait_until, true),
+        _ => Err(RpcTransactionError::TimeoutError(Some(TimeoutErrorCause::NotObserved))),
+    }
 }
 
 /// The server's `tx_status_fetch`, with blocks produced while it waits: until
@@ -463,7 +508,13 @@ fn status_view(
     });
     let outcome = FinalExecutionOutcomeView {
         status: sim.tx_status(hash),
-        transaction: SignedTransactionView::from((*log.txs[&hash]).clone()),
+        transaction: match log.txs.get(&hash) {
+            Some(tx) => SignedTransactionView::from((**tx).clone()).into(),
+            None => {
+                let ecc = (*log.eccs[&hash]).clone();
+                TransactionEnvelopeView::Unsigned(EccTransactionView::new(ecc, hash))
+            }
+        },
         transaction_outcome: views.next().expect("a converted transaction"),
         receipts_outcome: views.collect(),
     };
@@ -659,6 +710,11 @@ fn view(
         block_height,
         block_hash,
     };
+    let uninitialized = |requested_account_id| RpcQueryError::UninitializedAccount {
+        requested_account_id,
+        block_height,
+        block_hash,
+    };
     let other =
         |e: &dyn fmt::Debug| RpcQueryError::InternalError { error_message: format!("{e:?}") };
     let code = |c: ContractCode| {
@@ -712,6 +768,9 @@ fn view(
                     ViewStateError::AccountDoesNotExist { requested_account_id } => {
                         unknown(requested_account_id)
                     }
+                    ViewStateError::UninitializedAccount { requested_account_id } => {
+                        uninitialized(requested_account_id)
+                    }
                     ViewStateError::AccountStateTooLarge { requested_account_id } => {
                         RpcQueryError::TooLargeContractState {
                             contract_account_id: requested_account_id,
@@ -729,6 +788,12 @@ fn view(
                     ViewAccessKeyError::AccessKeyDoesNotExist { public_key } => {
                         RpcQueryError::UnknownAccessKey { public_key, block_height, block_hash }
                     }
+                    ViewAccessKeyError::AccountDoesNotExist { requested_account_id } => {
+                        unknown(requested_account_id)
+                    }
+                    ViewAccessKeyError::UninitializedAccount { requested_account_id } => {
+                        uninitialized(requested_account_id)
+                    }
                     e => other(&e),
                 })?;
             QueryResponseKind::AccessKey(key.into())
@@ -744,6 +809,12 @@ fn view(
                             block_height,
                             block_hash,
                         }
+                    }
+                    ViewAccessKeyError::AccountDoesNotExist { requested_account_id } => {
+                        unknown(requested_account_id)
+                    }
+                    ViewAccessKeyError::UninitializedAccount { requested_account_id } => {
+                        uninitialized(requested_account_id)
                     }
                     e => other(&e),
                 })?;
@@ -761,13 +832,26 @@ fn view(
             )?;
             QueryResponseKind::GasKeyNonces(GasKeyNoncesView { nonces })
         }
-        QueryRequest::CallFunction { account_id, method_name, args } => {
-            let (result, logs) = sim.run_view(at, &account_id, &method_name, &args);
+        QueryRequest::CallFunction { account_id, method_name, args, state_init } => {
+            let (result, logs) =
+                sim.run_view(at, &account_id, &method_name, &args, state_init.as_ref());
             let result = result.map_err(|e| match e {
-                CallFunctionError::AccountDoesNotExist { requested_account_id } => {
-                    unknown(requested_account_id)
+                ViewError::ExternalCallRefused(error) => RpcQueryError::ExternalCallRefused {
+                    error,
+                    logs: logs.clone(),
+                    block_height,
+                    block_hash,
+                },
+                ViewError::Call(CallFunctionError::AccountDoesNotExist {
+                    requested_account_id,
+                }) => unknown(requested_account_id),
+                ViewError::Call(CallFunctionError::UninitializedAccount {
+                    requested_account_id,
+                }) => uninitialized(requested_account_id),
+                ViewError::Call(CallFunctionError::InvalidStateInit { error }) => {
+                    RpcQueryError::InvalidStateInit { error, block_height, block_hash }
                 }
-                CallFunctionError::VMError { error, error_message } => {
+                ViewError::Call(CallFunctionError::VMError { error, error_message }) => {
                     RpcQueryError::ContractExecutionError {
                         vm_error: error_message,
                         error,
@@ -775,7 +859,7 @@ fn view(
                         block_hash,
                     }
                 }
-                e => other(&e),
+                ViewError::Call(e) => other(&e),
             })?;
             QueryResponseKind::CallResult(CallResult { result, logs })
         }

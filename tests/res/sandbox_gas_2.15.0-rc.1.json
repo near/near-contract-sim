@@ -1,14 +1,14 @@
 {
-  "_protocol": 88,
+  "_protocol": 89,
   "_version": {
-    "build": "2.14.0",
-    "commit": "bc4e9e8cfb03d9e82f027883055624e18576993e",
+    "build": "2.15.0-rc.1",
+    "commit": "e51199ed00b4a916e02cac7f54d062cffb2a62b7",
     "rustc_version": "1.95.0",
-    "version": "2.14.0"
+    "version": "2.15.0-rc.1"
   },
   "factorial_3": {
     "conversion_burnt": 308822439440,
-    "hash": "EoxYukFKwcWMWJJEguhiAi21rrHUtpceKHuPrq9QyZzJ",
+    "hash": "An7n5KkXxLPjgrcyowDo2Gek4f6KRbiauP8b2bvByKN",
     "outcomes": [
       {
         "gas_burnt": 1773945234196,
@@ -37,7 +37,7 @@
         },
         "receiver": "xcc.test.near",
         "status": {
-          "SuccessReceiptId": "EPvDr8rT8nk9uSQUVur9PnoBemiyo236f4KiwUvr1B48"
+          "SuccessReceiptId": "HhX46c75dTvjH7g8gVKb2thfbCawPKq1t7rvRDqQD3jj"
         }
       },
       {
@@ -68,7 +68,7 @@
         },
         "receiver": "xcc.test.near",
         "status": {
-          "SuccessReceiptId": "73sdj2qg4hKUnf8aQ1C32VgP19KM6utjyr3qW4VRYk7Q"
+          "SuccessReceiptId": "HLgT51aSySgBpR1dtK6Yux7g57AhzHXHJotEvNsbk6om"
         }
       },
       {
@@ -208,7 +208,7 @@
   },
   "get_status_call": {
     "conversion_burnt": 310062216030,
-    "hash": "D7qDdKaWxGvNsmGEo4i3GiapT3KgViJxQuFK7gmif7zo",
+    "hash": "F9CwaTK6fs18S4K8Lqvsqji5oa3HNs9nuanb6cUnHgpB",
     "outcomes": [
       {
         "gas_burnt": 1141950149895,
@@ -255,7 +255,7 @@
   },
   "last_after_resume": {
     "conversion_burnt": 308345602290,
-    "hash": "Cvy5VCz2KrqJYPk1L33CC1yebijDLsWw2RzSSu88eYvQ",
+    "hash": "EG4cygjriVBv4G3ysjgS8zxLwQn8X4CLxj28VTFLpqLD",
     "outcomes": [
       {
         "gas_burnt": 1010947633462,
@@ -296,7 +296,7 @@
   },
   "last_after_timeout": {
     "conversion_burnt": 308345602290,
-    "hash": "EwH1gsPjv7q9qqnr1xp3yPwfTYe4eK3jYyyXwfdPT6tA",
+    "hash": "gp1shNbiosLYf8BJj9KPg1fH3XQGdDyawLf2ohMKoz2",
     "outcomes": [
       {
         "gas_burnt": 1010056450908,
@@ -337,24 +337,24 @@
   },
   "probe_height": {
     "conversion_burnt": 308440969720,
-    "hash": "2Pck1nE9jfGkhf2RyLQkvwyQbiwj8Gsi6QBbiXUbUtZZ",
+    "hash": "DiBh2WbAgkBb6NwRV9MRyHdukhzBqtASVN2dt2nofW4X",
     "outcomes": [
       {
-        "gas_burnt": 998076542779,
+        "gas_burnt": 998160661753,
         "logs": [],
         "profile": {
           "BASE": 794304333,
           "CONTRACT_LOADING_BASE": 35445963,
           "CONTRACT_LOADING_BYTES": 46419217130,
           "READ_MEMORY_BASE": 5219726400,
-          "READ_MEMORY_BYTE": 26609331,
+          "READ_MEMORY_BYTE": 34211997,
           "STORAGE_READ_BASE": 56356845749,
           "STORAGE_READ_KEY_BYTE": 154762665,
-          "WASM_INSTRUCTION": 992243736
+          "WASM_INSTRUCTION": 1068760044
         },
         "receiver": "probe.test.near",
         "status": {
-          "SuccessValue": "NDU="
+          "SuccessValue": "MTAyNA=="
         }
       },
       {
@@ -367,11 +367,11 @@
         }
       }
     ],
-    "total_burnt": 1529700074999
+    "total_burnt": 1529784193973
   },
   "resume": {
     "conversion_burnt": 308440969720,
-    "hash": "HAN8KNUPuhohZAyt869Gsgm9xcTr5Avgbjr1KxgqgUjD",
+    "hash": "4HU8xLQtEeJxYLn4J6H3qA77WMiFwC64dGjFfMmR65ov",
     "outcomes": [
       {
         "gas_burnt": 2310977318151,
@@ -380,7 +380,6 @@
           "BASE": 1853376777,
           "CONTRACT_LOADING_BASE": 35445963,
           "CONTRACT_LOADING_BYTES": 46419217130,
-          "READ_CACHED_TRIE_NODE": 2280000000,
           "READ_MEMORY_BASE": 15659179200,
           "READ_MEMORY_BYTE": 627219945,
           "READ_REGISTER_BASE": 2517165186,
@@ -392,7 +391,7 @@
           "STORAGE_WRITE_EVICTED_BYTE": 3597138384,
           "STORAGE_WRITE_KEY_BYTE": 352414335,
           "STORAGE_WRITE_VALUE_BYTE": 3474076368,
-          "TOUCHING_TRIE_NODE": 11400000000,
+          "TOUCHING_TRIE_NODE": 13680000000,
           "WASM_INSTRUCTION": 4836982524,
           "WRITE_MEMORY_BASE": 5607589722,
           "WRITE_MEMORY_BYTE": 348642816,
@@ -420,7 +419,7 @@
   },
   "set_status_1": {
     "conversion_burnt": 309442327735,
-    "hash": "DpTgRybAMY111shrSVsPcUSwDgruzEFty6qZMFGnNfmx",
+    "hash": "HWRkhim6U6dM85fWcQ3Qgtwk2VxjjaxeJyHERTKV6vCB",
     "outcomes": [
       {
         "gas_burnt": 1281040742987,
@@ -433,7 +432,6 @@
           "CONTRACT_LOADING_BYTES": 71214839215,
           "LOG_BASE": 3543313050,
           "LOG_BYTE": 593945595,
-          "READ_CACHED_TRIE_NODE": 4560000000,
           "READ_MEMORY_BASE": 18269042400,
           "READ_MEMORY_BYTE": 402941298,
           "READ_REGISTER_BASE": 5034330372,
@@ -443,7 +441,7 @@
           "STORAGE_WRITE_BASE": 128393472000,
           "STORAGE_WRITE_KEY_BYTE": 1691588808,
           "STORAGE_WRITE_VALUE_BYTE": 403241007,
-          "TOUCHING_TRIE_NODE": 4560000000,
+          "TOUCHING_TRIE_NODE": 9120000000,
           "UTF8_DECODING_BASE": 3111779061,
           "UTF8_DECODING_BYTE": 13121121555,
           "WASM_INSTRUCTION": 10120721556,
@@ -471,7 +469,7 @@
   },
   "set_status_2": {
     "conversion_burnt": 310396002035,
-    "hash": "4qowQs4mLbaVWwx4dRBbPUPwowCTWgw22vXZeG9CNbwh",
+    "hash": "E9SzRbULS4r7fDTSZJz6P8mM74EtQ8RAyUTHfpNGWEua",
     "outcomes": [
       {
         "gas_burnt": 1331945325030,
@@ -484,7 +482,6 @@
           "CONTRACT_LOADING_BYTES": 71214839215,
           "LOG_BASE": 3543313050,
           "LOG_BYTE": 857921415,
-          "READ_CACHED_TRIE_NODE": 13680000000,
           "READ_MEMORY_BASE": 18269042400,
           "READ_MEMORY_BYTE": 554994618,
           "READ_REGISTER_BASE": 10068660744,
@@ -496,7 +493,7 @@
           "STORAGE_WRITE_EVICTED_BYTE": 417524991,
           "STORAGE_WRITE_KEY_BYTE": 1691588808,
           "STORAGE_WRITE_VALUE_BYTE": 1023611787,
-          "TOUCHING_TRIE_NODE": 13680000000,
+          "TOUCHING_TRIE_NODE": 27360000000,
           "UTF8_DECODING_BASE": 3111779061,
           "UTF8_DECODING_BYTE": 18952731135,
           "WASM_INSTRUCTION": 12027047208,
@@ -524,10 +521,10 @@
   },
   "start_yield": {
     "conversion_burnt": 308679388295,
-    "hash": "4AeGiDtVaYJqE2Dni2BPrj8gKCWoGWMdjm9wCVd3rCMq",
+    "hash": "Dqcv9a9g64DGEw6vom6YXDQRZCokrD9htAGnTBK5sAHm",
     "outcomes": [
       {
-        "gas_burnt": 1661076731711,
+        "gas_burnt": 1661135147387,
         "logs": [],
         "profile": {
           "BASE": 1588608666,
@@ -546,7 +543,7 @@
           "STORAGE_WRITE_KEY_BYTE": 352414335,
           "STORAGE_WRITE_VALUE_BYTE": 3474076368,
           "TOUCHING_TRIE_NODE": 6840000000,
-          "WASM_INSTRUCTION": 34127918880,
+          "WASM_INSTRUCTION": 34186334556,
           "WRITE_MEMORY_BASE": 5607589722,
           "WRITE_MEMORY_BYTE": 130741056,
           "WRITE_REGISTER_BASE": 2865522486,
@@ -566,7 +563,6 @@
           "BASE": 3706753554,
           "CONTRACT_LOADING_BASE": 35445963,
           "CONTRACT_LOADING_BYTES": 46419217130,
-          "READ_CACHED_TRIE_NODE": 2280000000,
           "READ_MEMORY_BASE": 7829589600,
           "READ_MEMORY_BYTE": 247086645,
           "READ_REGISTER_BASE": 10068660744,
@@ -578,7 +574,7 @@
           "STORAGE_WRITE_EVICTED_BYTE": 3597138384,
           "STORAGE_WRITE_KEY_BYTE": 352414335,
           "STORAGE_WRITE_VALUE_BYTE": 1706019645,
-          "TOUCHING_TRIE_NODE": 11400000000,
+          "TOUCHING_TRIE_NODE": 13680000000,
           "WASM_INSTRUCTION": 8796084396,
           "WRITE_MEMORY_BASE": 14018974305,
           "WRITE_MEMORY_BYTE": 449422380,
@@ -609,14 +605,14 @@
         }
       }
     ],
-    "total_burnt": 3551756819647
+    "total_burnt": 3551815235323
   },
   "start_yield_2": {
     "conversion_burnt": 308679388295,
-    "hash": "DnPncyCVqhC6spxfBMscbPkDCoW7YNFMcLmMvjPhvziX",
+    "hash": "7GBG4W8zXew1qv7tXcZdmwnFpsS7uNHKwij8sPo3pTnC",
     "outcomes": [
       {
-        "gas_burnt": 1684396968127,
+        "gas_burnt": 1684455383803,
         "logs": [],
         "profile": {
           "BASE": 2118144888,
@@ -625,7 +621,6 @@
           "FUNCTION_CALL_BASE": 200000000000,
           "FUNCTION_CALL_BYTE": 24595274,
           "NEW_ACTION_RECEIPT": 181032964624,
-          "READ_CACHED_TRIE_NODE": 2280000000,
           "READ_MEMORY_BASE": 13049316000,
           "READ_MEMORY_BYTE": 505577289,
           "READ_REGISTER_BASE": 5034330372,
@@ -637,8 +632,8 @@
           "STORAGE_WRITE_EVICTED_BYTE": 1766451885,
           "STORAGE_WRITE_KEY_BYTE": 352414335,
           "STORAGE_WRITE_VALUE_BYTE": 3474076368,
-          "TOUCHING_TRIE_NODE": 11400000000,
-          "WASM_INSTRUCTION": 36378156540,
+          "TOUCHING_TRIE_NODE": 13680000000,
+          "WASM_INSTRUCTION": 36436572216,
           "WRITE_MEMORY_BASE": 8411384583,
           "WRITE_MEMORY_BYTE": 280548516,
           "WRITE_REGISTER_BASE": 8596567458,
@@ -658,7 +653,6 @@
           "BASE": 3177217332,
           "CONTRACT_LOADING_BASE": 35445963,
           "CONTRACT_LOADING_BYTES": 46419217130,
-          "READ_CACHED_TRIE_NODE": 2280000000,
           "READ_MEMORY_BASE": 7829589600,
           "READ_MEMORY_BYTE": 216675981,
           "READ_REGISTER_BASE": 7551495558,
@@ -670,7 +664,7 @@
           "STORAGE_WRITE_EVICTED_BYTE": 3597138384,
           "STORAGE_WRITE_KEY_BYTE": 352414335,
           "STORAGE_WRITE_VALUE_BYTE": 1457871333,
-          "TOUCHING_TRIE_NODE": 11400000000,
+          "TOUCHING_TRIE_NODE": 13680000000,
           "WASM_INSTRUCTION": 7826055072,
           "WRITE_MEMORY_BASE": 11215179444,
           "WRITE_MEMORY_BYTE": 430355976,
@@ -701,6 +695,6 @@
         }
       }
     ],
-    "total_burnt": 3565092692670
+    "total_burnt": 3565151108346
   }
 }

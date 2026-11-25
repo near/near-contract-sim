@@ -11,12 +11,11 @@ use near_primitives::trie_key::{TrieKey, col};
 use near_primitives::types::{
     AccountId, Balance, BlockHeight, Gas, Nonce, NonceIndex, PromiseYieldStatus,
 };
-use near_primitives::version::ProtocolFeature;
 use near_primitives::views::AccountView;
+use near_runtime::state_viewer::errors::{ViewAccessKeyError, ViewStateError};
 use near_store::TrieAccess;
 use near_store::trie::AccessOptions;
 use near_vm_runner::ContractCode;
-use node_runtime::state_viewer::errors::ViewStateError;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::time::Duration;
@@ -339,11 +338,11 @@ impl Sim {
     /// 0, or rewinds below a held receipt. A transaction already queued
     /// (`submit` queues nothing) leaves the pin.
     #[track_caller]
-    pub(crate) fn submit_pinned(
+    pub(crate) fn submit_pinned<T>(
         &mut self,
         local: bool,
-        submit: impl FnOnce(&mut Chain) -> CryptoHash,
-    ) -> CryptoHash {
+        submit: impl FnOnce(&mut Chain) -> T,
+    ) -> T {
         let Pinned { height, time } = self.pinned;
         let k: u64 = if local { 1 } else { 2 };
         let room = |what: &str, at: u64, need: u64, unit: &str| {
@@ -378,9 +377,9 @@ impl Sim {
              (Fault::Hold): settle() first",
             self.chain.height
         );
-        let queued = self.chain.queued().count();
+        let queued = self.chain.pooled();
         let hash = submit(&mut self.chain);
-        if self.chain.queued().count() > queued {
+        if self.chain.pooled() > queued {
             (self.chain.height, self.chain.timestamp_ns) = (h, t);
             self.pinned = Pinned::default();
         }
@@ -633,7 +632,8 @@ impl Sim {
         out
     }
 
-    /// Every transaction submitted, setup included, in order.
+    /// Every transaction submitted, setup included, in order, and the
+    /// unique id of every external call a chunk included.
     pub fn txs(&self) -> &[CryptoHash] {
         &self.chain.log().roots
     }
@@ -661,7 +661,6 @@ impl Sim {
         let id = id.into_account_id();
         assert!(self.stored(&id).is_none(), "account {id} already exists");
         assert_storable(balance);
-        self.assert_key_supported(&secret_key.public_key());
         let bytes = self.config.runtime_config().fees.storage_usage_config.num_bytes_account;
         let account = NearAccount::new(balance, Balance::ZERO, AccountContract::None, bytes);
         self.chain.write(&self.config, |tu| near_store::set_account(tu, id.clone(), &account));
@@ -671,13 +670,11 @@ impl Sim {
 
     /// Makes `secret_key` the key `id` signs with, adding it as a
     /// full-access key in the trie if missing. Panics if the account doesn't
-    /// exist, or the protocol version lacks the key type (ML-DSA needs
-    /// `PostQuantumSignatures`).
+    /// exist.
     #[track_caller]
     pub fn set_key(&mut self, id: impl IntoAccountId, secret_key: &SecretKey) {
         let id = id.into_account_id();
         let (pk, ak) = (secret_key.public_key(), AccessKey::full_access());
-        self.assert_key_supported(&pk);
         if self.access_key(&id, &pk).is_none() {
             let mut acc = self.existing(&id);
             let suc = &self.config.runtime_config().fees.storage_usage_config;
@@ -935,16 +932,23 @@ impl Sim {
         near_store::get_access_key(&tu, &id.into_account_id(), pk).expect("storage")
     }
 
-    /// Every access key of `id`, in trie order (ML-DSA-65 as hash handles).
+    /// Every access key of `id`, in trie order (ML-DSA-65 as hash handles):
+    /// none for a missing or uninitialized account.
     #[track_caller]
     pub fn access_keys(&self, id: impl IntoAccountId) -> Vec<(PublicKeyHandle, AccessKey)> {
         let id = id.into_account_id();
         let trie = self.chain.trie();
         let (mut keys, mut after) = (vec![], None);
         loop {
-            let (page, next) = VIEWER
-                .view_access_keys(&trie, &id, after.as_ref(), Some(std::num::NonZeroU32::MAX))
-                .unwrap_or_else(|e| panic!("view_access_keys({id}): {e:?}"));
+            let page = Some(std::num::NonZeroU32::MAX);
+            let (page, next) = match VIEWER.view_access_keys(&trie, &id, after.as_ref(), page) {
+                Ok(page) => page,
+                Err(
+                    ViewAccessKeyError::AccountDoesNotExist { .. }
+                    | ViewAccessKeyError::UninitializedAccount { .. },
+                ) => return vec![],
+                Err(e) => panic!("view_access_keys({id}): {e:?}"),
+            };
             keys.extend(page);
             let Some(next) = next else { return keys };
             after = Some(next);
@@ -977,18 +981,6 @@ impl Sim {
     fn existing(&self, id: &AccountId) -> NearAccount {
         let Some(account) = self.stored(id) else { panic!("account {id} does not exist") };
         account
-    }
-
-    #[track_caller]
-    fn assert_key_supported(&self, pk: &PublicKey) {
-        let v = self.config.protocol_version;
-        let pq = ProtocolFeature::PostQuantumSignatures;
-        assert!(
-            !matches!(pk.key_type(), KeyType::MLDSA65) || pq.enabled(v),
-            "{} keys need protocol {} or later; config.protocol_version is {v}",
-            pk.key_type(),
-            pq.protocol_version()
-        );
     }
 
     /// One above the on-chain, queued and delegated nonces of

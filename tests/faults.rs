@@ -103,6 +103,23 @@ fn a_resolver_out_of_gas_leaves_a_credit_and_a_refund() {
     );
 }
 
+/// Before protocol 89 a gas refund is a first-version `Action` receipt,
+/// whose deposit a starved callback's freed gas goes to all the same.
+#[test]
+fn a_resolver_out_of_gas_before_protocol_89_refunds_its_gas() {
+    for v in [88, 89] {
+        let mut sim = vault_sim();
+        sim.config.protocol_version = v;
+        let out = deposit(&mut sim, 40)
+            .inject(Receipts::callback("resolve_deposit"), Fault::OutOfGas)
+            .transact();
+        let resolve = out.expect_receipt("resolve_deposit");
+        assert_eq!(resolve.failure(), Some(Failure::OutOfGas), "{out}");
+        assert_eq!(books(&sim), (100, 0, 40), "protocol {v}: {out}");
+        sim.findings().assert_none();
+    }
+}
+
 /// alice.near deposits into the vault: the vault pair's one op.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 enum VaultOp {

@@ -251,7 +251,8 @@ impl Receipts {
         Receipts { exact: true, ..Self::call(receiver, method).nth(k) }
     }
 
-    /// The same receipts of transaction `hash` instead: what a
+    /// The same receipts of transaction `hash` (or of an included external
+    /// call, by its unique id) instead: what a
     /// [`Fault::HoldUntil`] in a later transaction (or one queued after it
     /// in the same block) waits for, as in
     /// `HoldUntil(Receipts::callback("on_deposit").in_tx(t1))`. Counts as
@@ -259,7 +260,7 @@ impl Receipts {
     /// receipt; never its first receipt, nor one congestion control held
     /// back. Only a `HoldUntil` takes it: submitting a transaction whose
     /// injection selects with it panics, as does one whose `hash` names no
-    /// transaction submitted before it. One from before the sim was loaded
+    /// transaction submitted, or external call included, before it. One from before the sim was loaded
     /// from a snapshot ([`Sim::cached`](crate::Sim::cached), a
     /// [`Fixture`](crate::Fixture)) settled, so it is refused as already
     /// run; what a yield it parked spawns after the load isn't counted. A
@@ -411,7 +412,7 @@ mod tests {
         assert!(msg.starts_with("Receipts::action(\"Unstake\"): not one of nearcore's"), "{msg}");
     }
 
-    /// nearcore 2.14.0's two newest `Action` variants are kinds too.
+    /// nearcore's two newest `Action` variants are kinds too.
     #[test]
     fn the_newest_actions_are_kinds() {
         for kind in ["DelegateV2", "UniversalStateInit"] {

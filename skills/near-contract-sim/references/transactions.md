@@ -2,8 +2,8 @@
 
 Use this page to call a contract, send several actions, pick gas, sign
 with other keys, relay a meta transaction, sign a payload a contract
-verifies, publish and use global contracts, or deliver a call as a
-callback or from another predecessor.
+verifies, publish and use global contracts, deliver a call as a
+callback or from another predecessor, or send an unsigned external call.
 
 ## Build and send
 
@@ -170,3 +170,39 @@ example). The signer still signs and pays; a failed deposit goes back
 to it. Its failure is the transaction's result, and the tree marks the
 receipt `[delivered from <id>]`. Panics if the signer is the receiver,
 with `promise_results`, or in a delegate.
+
+## External calls
+
+From protocol 89, anyone can call a contract's reserved
+`__external_call` method without signing (NEP-667). The contract accepts
+the call by returning and pays for it: the fees, the gas its run burns
+and the gas it attaches to promises. A call it refuses (any failure) is
+never included and charges nobody. `sim.external_call(contract,
+payload).transact()` returns an `ExternalCallOutcome`: `Included`,
+`Refused` (the error and what the run logged), or `Repeat` of a call the
+contract accepted within 1,000 blocks (`tests/external_calls.rs`):
+
+```rust
+    let out = sim.external_call(PROBE, vec![1]).transact();
+    assert_eq!(out.assert_refused(), Failure::Panic("refused".into()));
+```
+
+- **The run.** `predecessor_account_id`, `signer_account_pk`,
+  `prepaid_gas`, `random_seed` and yields fail it. The signer and
+  `refund_to` are the contract, the deposit is 0, the balance is the one
+  before the charge, and a promise gets exactly the gas it attaches.
+  Every call down the chain carries
+  `AuthorizationContext::ExternalContractCall`.
+- **Limits.** 20 Tgas burnt, fees included; a 20 KiB call; a 50 KiB
+  recorded storage proof, a remove counting 2,000 bytes. An ordinary
+  call of `__external_call` fails with `ReservedMethodName`.
+- **The chunk** takes one call per contract, after its signed
+  transactions. The run sees the parent block: `env::block_height()` is
+  one below the inclusion's.
+- `.state_init(raw)` carries a NEP-655 state init that installs on an
+  uninitialized universal account. `.forced()` skips the producer's dry
+  run, so apply alone decides. A view of `__external_call` is the dry run
+  on the last block, as a node's `query` is.
+- The inclusion's unique id is in `sim.txs()`, `sim.outcome(id)` reads
+  it, and a `HoldUntil` waits on its receipts with `in_tx(id)`.
+  `Tx::inject` has no external-call form.

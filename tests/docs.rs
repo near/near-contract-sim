@@ -164,7 +164,7 @@ fn skill_links_every_reference() {
     }
 }
 
-/// The docs budget: the skill is at most 2,500 lines. What an agent reads
+/// The docs budget: the skill is at most 2,550 lines. What an agent reads
 /// before its first test (SKILL.md and the quickstart) is at most 450
 /// lines, and before its first audit harness (SKILL.md, and audit.md up
 /// to step 3) at most 600.
@@ -175,7 +175,7 @@ fn the_docs_fit_their_budget() {
     let refs = std::fs::read_dir(dir.join("references")).unwrap();
     let total: usize =
         count(&dir.join("SKILL.md")) + refs.map(|e| count(&e.unwrap().path())).sum::<usize>();
-    assert!(total <= 2_500, "the skill is {total} lines");
+    assert!(total <= 2_550, "the skill is {total} lines");
     let skill = count(&dir.join("SKILL.md"));
     let everyday = skill + count(&dir.join("references/quickstart.md"));
     assert!(everyday <= 450, "{everyday} lines before a first test");

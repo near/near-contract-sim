@@ -1,6 +1,6 @@
 [workspace]
-# Not on crates.io (nearcore's runtime crates aren't published): versions
-# come from `v*` git tags, and a release is a tag plus a GitHub release.
+# Not on crates.io yet: versions come from `v*` git tags, and a release is
+# a tag plus a GitHub release.
 git_only = true
 # tests/api/public.txt and `!` titles track the API; a semver check would
 # build nearcore twice on every push to main.

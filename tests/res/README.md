@@ -66,7 +66,7 @@ tests) that load each one, directly or through a helper.
 | `receiver.wasm` | custody.wasm's notify receiver ([tests/contracts/receiver](../contracts/receiver)): `on_notify` returns half of each position to refund. Not an NEP-141 receiver: that is ft_receiver.wat. | `intents_like.rs` |
 | `refund_book.wat` | `deposit` credits ids, calls a sink, then `resolve` on 3 Tgas plus 0.2 Tgas an id, while its cost is per distinct id it removes. | `margin.rs` |
 | `refund_ledger.wat` | `send` calls the receiver's `on_receive`, then `resolve`; the refund is capped by the receiver's credit, not by what was sent, so a hostile reply drains it. | `axes.rs`, `books.rs`, `explore_search.rs`, `fault_address.rs` |
-| `sandbox_gas_2.14.0.json` | Data, not a contract: per-scenario gas, profiles, logs and statuses recorded from a neard 2.14.0 sandbox at protocol 88. | `gas_vs_sandbox.rs` |
+| `sandbox_gas_2.15.0-rc.1.json` | Data, not a contract: per-scenario gas, profiles, logs and statuses recorded from a neard 2.15.0-rc.1 sandbox at protocol 89. | `gas_vs_sandbox.rs` |
 | `self_only.wat` | `start` calls its own callbacks; `on_done` lacks a predecessor check (a missing `#[private]`), `on_done_guarded` has one. | `outsider.rs` |
 | `self_only_peer.wat` | Deployed twice: `forward` calls the peer's `land`, which writes, and `picky`, which panics unless the signer's id is 10 bytes. | `outsider.rs` |
 | `settle_starves.wat` | `pay` calls `ping`, then `on_pay` with the leftover gas, and succeeds even when `on_pay` starves. | `explore_scan.rs`, `explore_search.rs`, `gas_edges.rs`, `scan_cost.rs` |

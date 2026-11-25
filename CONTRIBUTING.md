@@ -25,8 +25,7 @@
 - **cargo-nextest** (optional; `cargo test` runs the same tests) and
   **Docker** (only for the differential test).
 
-The first build compiles nearcore from git, about 580 crates, so it takes
-a while.
+The first build compiles nearcore, about 580 crates, so it takes a while.
 
 ## The checks CI runs
 

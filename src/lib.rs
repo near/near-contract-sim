@@ -102,6 +102,7 @@
 
 mod cache;
 mod chain;
+mod ecc;
 mod edges;
 mod effects;
 pub mod explore;
@@ -121,6 +122,7 @@ mod trap;
 mod tx;
 
 pub use chain::{Config, GasLimits};
+pub use ecc::{ExternalCall, ExternalCallOutcome, ExternalCallRefusal, SentCall};
 pub use effects::{
     Delta, Effects, NearKind, NearMove, PendingReceipt, PendingState, StorageChange, Token,
     TokenMove, Unobserved, WhichToken,

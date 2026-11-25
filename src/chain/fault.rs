@@ -4,9 +4,9 @@
 //! data receipts that carry their results can be rewritten before nearcore
 //! runs them. Gas a fault takes from a receipt goes into its creator's gas
 //! refund, sent in the same block, so the supply ledger needs nothing.
-//! The calls are first-version `Action` receipts (a delegate's inner one)
-//! or `ActionV2` ones (what a contract creates), and a fault treats both
-//! alike.
+//! The calls are `ActionV3` receipts from protocol 89 (`PinReceiptFees`),
+//! and before it first-version `Action` receipts (a delegate's inner one) or
+//! `ActionV2` ones (what a contract creates); a fault treats them alike.
 //!
 //! Each receipt has three slots, what it runs with (`PromiseFailed`,
 //! `OutOfGas`, `Gas`, `ReturnValue`), when it leaves (`Hold`, `HoldUntil`)
@@ -22,7 +22,7 @@ use near_primitives::action::{Action, TransferAction};
 use near_primitives::hash::{CryptoHash, hash};
 use near_primitives::receipt::{Receipt, ReceiptEnum};
 use near_primitives::transaction::ExecutionOutcomeWithId;
-use near_primitives::types::{Balance, Gas};
+use near_primitives::types::{Balance, Gas, ProtocolVersion};
 use std::collections::{HashMap, HashSet};
 
 /// A transaction's injections and what they have met so far.
@@ -228,6 +228,7 @@ impl Chain {
         executed: &mut [ExecutionOutcomeWithId],
         outgoing: &mut Vec<Receipt>,
         buffered: &[Receipt],
+        protocol_version: ProtocolVersion,
     ) -> HashMap<CryptoHash, Wait> {
         let mut hold = HashMap::new();
         if self.faults.is_empty() && self.history.is_empty() {
@@ -241,6 +242,10 @@ impl Chain {
         for (i, o) in executed.iter().enumerate() {
             let tx = if self.log.txs.contains_key(&o.id) {
                 own.extend(o.outcome.receipt_ids.first());
+                o.id
+            } else if self.log.eccs.contains_key(&o.id) {
+                // An external call has no receipt of its own: the first is
+                // a promise.
                 o.id
             } else {
                 match root.get(&o.id).or(self.log.origin.get(&o.id)) {
@@ -398,9 +403,9 @@ impl Chain {
         for Due { tx, i, j, at, fault, site, inputs, lenient } in due {
             let id = *outgoing[j].receipt_id();
             let starved = match &fault {
-                Fault::OutOfGas => self.starve(j, None, executed, &creator, outgoing),
+                Fault::OutOfGas => self.starve(j, None, executed, &creator, outgoing, protocol_version),
                 Fault::Gas(g) => match calls(&outgoing[j]) {
-                    1 => self.starve(j, Some(*g), executed, &creator, outgoing),
+                    1 => self.starve(j, Some(*g), executed, &creator, outgoing, protocol_version),
                     n => Err(format!("Fault::Gas needs one function call, and it makes {n}")),
                 },
                 Fault::PromiseFailed => {
@@ -418,7 +423,7 @@ impl Chain {
                                 let id = *outgoing[k].receipt_id();
                                 // It makes a call, and 1 gas a call is the
                                 // least any attaches: nothing to refuse.
-                                let starved = self.starve(k, None, executed, &creator, outgoing);
+                                let starved = self.starve(k, None, executed, &creator, outgoing, protocol_version);
                                 starved.expect("lowering a call's gas");
                                 self.log.faulted.entry(id).or_insert(Fault::OutOfGas);
                             }
@@ -486,6 +491,7 @@ impl Chain {
         executed: &mut [ExecutionOutcomeWithId],
         creator: &HashMap<CryptoHash, usize>,
         outgoing: &mut Vec<Receipt>,
+        protocol_version: ProtocolVersion,
     ) -> Result<(), String> {
         let id = *outgoing[j].receipt_id();
         let fcs: Vec<Gas> = function_calls(&outgoing[j]).into_iter().map(|c| c.1).collect();
@@ -496,8 +502,8 @@ impl Chain {
         let each = gas.unwrap_or(Gas::from_gas(1));
         let after = Gas::from_gas(each.as_gas().saturating_mul(fcs.len() as u64));
         let a = action_receipt(&outgoing[j]).expect("a receipt that runs calls");
-        let (signer, key, price) =
-            (a.signer_id().clone(), a.signer_public_key().clone(), a.gas_price());
+        let (signer, authorization, price) =
+            (a.signer_id().clone(), a.authorization_context().into_owned(), a.gas_price());
         let yocto = |g: Gas| u128::from(g.as_gas()) * price.as_yoctonear();
         let freed = yocto(before.saturating_sub(after));
         let taken = yocto(after.saturating_sub(before));
@@ -513,16 +519,18 @@ impl Chain {
                  yocto of unused gas to refund: no creator could have attached it"
             ));
         }
-        // nearcore 2.14 makes every receipt a contract creates `ActionV2`,
-        // and a delegate's inner one a first-version `Action`.
+        // nearcore 2.15 makes every new action receipt `ActionV3`; older
+        // versions made `ActionV2` and first-version `Action` ones.
         let actions = match outgoing[j].receipt_mut() {
             ReceiptEnum::Action(a) => &mut a.actions,
             ReceiptEnum::ActionV2(a) => &mut a.actions,
+            ReceiptEnum::ActionV3(a) => &mut a.actions,
             _ => unreachable!("a receipt that runs calls is an action receipt"),
         };
         set_gas(actions, each);
         let refund = refund.unwrap_or_else(|| {
-            let Receipt::V0(mut r) = Receipt::new_gas_refund(&signer, Balance::ZERO, key);
+            let Receipt::V0(mut r) =
+                Receipt::new_gas_refund(&signer, Balance::ZERO, authorization, protocol_version);
             r.receipt_id = hash(&[id.as_ref(), b"fault refund"].concat());
             parent.outcome.receipt_ids.push(r.receipt_id);
             outgoing.push(Receipt::V0(r));
@@ -544,10 +552,12 @@ fn refund(r: &Receipt) -> Balance {
 
 /// What a gas refund pays back, to change.
 fn refund_deposit(r: &mut Receipt) -> &mut Balance {
-    let ReceiptEnum::Action(a) = r.receipt_mut() else {
-        unreachable!("a gas refund is a first-version action receipt")
+    let actions = match r.receipt_mut() {
+        ReceiptEnum::Action(a) => &mut a.actions,
+        ReceiptEnum::ActionV3(a) => &mut a.actions,
+        _ => unreachable!("a gas refund is an Action or ActionV3 receipt"),
     };
-    let [Action::Transfer(TransferAction { deposit })] = &mut a.actions[..] else {
+    let [Action::Transfer(TransferAction { deposit })] = &mut actions[..] else {
         unreachable!("a gas refund is one transfer")
     };
     deposit

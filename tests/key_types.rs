@@ -7,7 +7,6 @@ mod common;
 use common::*;
 use near_contract_sim::nearcore::near_parameters::cost::SignatureKind;
 use near_contract_sim::{AccessKey, KeyType, PublicKeyHandle, SecretKey, Sim};
-use std::panic::{AssertUnwindSafe, catch_unwind};
 
 const TYPES: [KeyType; 3] = [KeyType::ED25519, KeyType::SECP256K1, KeyType::MLDSA65];
 
@@ -99,33 +98,20 @@ fn borsh_len_full_access() -> u64 {
     borsh::object_length(&AccessKey::full_access()).unwrap() as u64
 }
 
+/// Every protocol the pinned nearcore runs, 85 the oldest, takes ML-DSA-65
+/// keys, both written directly and added by a transaction.
 #[test]
-fn ml_dsa_needs_protocol_85() {
+fn ml_dsa_keys_work_on_the_oldest_protocol() {
     let mut sim = Sim::new();
-    sim.config.protocol_version = 84;
+    sim.config.protocol_version = 85;
     sim.create_account("alice.near", near(10));
-    let e = err(&sim
-        .tx("alice.near", "alice.near")
-        .add_key(SecretKey::from_seed(KeyType::MLDSA65, "x").public_key(), AccessKey::full_access())
-        .transact());
-    assert!(e.contains("PostQuantumSignatures"), "{e}");
-    // Nor can one be written directly.
-    let pq = SecretKey::from_seed(KeyType::MLDSA65, "x");
-    let msg = "ml-dsa-65 keys need protocol 85 or later; config.protocol_version is 84";
-    let set = catch_unwind(AssertUnwindSafe(|| sim.set_key("alice.near", &pq)));
-    assert_eq!(panic_message(set), msg);
-    let create =
-        catch_unwind(AssertUnwindSafe(|| sim.create_account_with_key("pq.near", near(1), &pq)));
-    assert_eq!(panic_message(create), msg);
-    assert!(sim.account("pq.near").is_none());
-    // secp256k1 predates all of this.
     sim.tx("alice.near", "alice.near")
-        .add_key(
-            SecretKey::from_seed(KeyType::SECP256K1, "x").public_key(),
-            AccessKey::full_access(),
-        )
+        .add_key(SecretKey::from_seed(KeyType::MLDSA65, "x").public_key(), AccessKey::full_access())
         .transact()
         .assert_success();
+    let pq = SecretKey::from_seed(KeyType::MLDSA65, "y");
+    sim.create_account_with_key("pq.near", near(1), &pq);
+    sim.tx("pq.near", "alice.near").transfer(near(0)).transact().assert_success();
 }
 
 #[test]

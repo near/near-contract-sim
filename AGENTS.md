@@ -1,7 +1,7 @@
 # Working on near-contract-sim
 
 A Rust crate: an in-process, single-shard NEAR chain for contract tests,
-run by nearcore 2.14.0's own `Runtime::apply` over an in-memory trie. Its
+run by nearcore 2.15.0-rc.1's own `Runtime::apply` over an in-memory trie. Its
 users are mostly coding agents writing contract tests, through the skill
 in `skills/near-contract-sim/`.
 
@@ -21,7 +21,7 @@ tests/consumer/run.sh                            # the docs' code in a fresh con
 
 All of these must pass before a change is done. `RUSTDOCFLAGS="-D
 warnings" cargo doc --no-deps --all-features` must too, since CI runs it.
-The first build compiles nearcore from git and is slow; later ones are
+The first build compiles nearcore and is slow; later ones are
 incremental. Run a single test file while iterating and the full suite
 before finishing.
 
@@ -67,8 +67,8 @@ before finishing.
   meant.
 - **Keep the docs compiling.** A changed example changes its copy under
   `src/`, `tests/` or `examples/` as well, which `tests/docs.rs` checks.
-- **One nearcore.** Every nearcore crate comes from the same git tag
-  (`Cargo.toml`); don't add one from another source.
+- **One nearcore.** Every nearcore crate in the tree is the same release,
+  pinned with `=` in `Cargo.toml`; a new one in the tree gets a pin too.
 - **No build-machine paths in fixtures.** Build a wasm with its
   `build.sh`, which remaps them; CI rejects a tracked file that holds a
   home or temporary directory path.

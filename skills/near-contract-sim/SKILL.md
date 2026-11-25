@@ -23,7 +23,7 @@ tests and near-workspaces sandbox tests.
 |---|---|---|
 | `Sim`, `Fixture` | the chain, setup built once, accounts, contract state, the toolchain and CI | [references/sim.md](references/sim.md) |
 | a contract without source | deploying a `.wat` or a prebuilt wasm, its exports, raw args and returns, asserting on storage | [references/sim.md](references/sim.md) |
-| `Tx` | a signed transaction: calls, gas, keys, relayers, signed payloads, global contracts, a callback on picked results | [references/transactions.md](references/transactions.md) |
+| `Tx` | a signed transaction: calls, gas, keys, relayers, signed payloads, global contracts, a callback on picked results; external calls (NEP-667) | [references/transactions.md](references/transactions.md) |
 | `TxOutcome`, `Effects` | what a call did, receipt by receipt; logs, gas, who paid whom; the built-in findings | [references/outcomes-and-effects.md](references/outcomes-and-effects.md) |
 | `Fault`, `Receipts` | a callee that fails, a callback short of gas, a late receipt | [references/faults.md](references/faults.md) |
 | `Stub` | a contract that answers as the test says; the calls an account got | [references/stubs.md](references/stubs.md) |

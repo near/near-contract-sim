@@ -199,7 +199,7 @@ async fn blocks_and_status_are_the_logs() {
         (header.gas_price.as_yoctonear(), header.total_supply.as_yoctonear()),
         (100_000_000, supply)
     );
-    assert_eq!((header.latest_protocol_version, head.author.as_str()), (88, "validator.near"));
+    assert_eq!((header.latest_protocol_version, head.author.as_str()), (89, "validator.near"));
     let chunk = &head.chunks[0];
     assert_eq!((chunk.height_created, chunk.height_included), (h, h));
     assert_eq!(chunk.gas_limit, 1_000_000_000_000_000);
@@ -222,7 +222,7 @@ async fn blocks_and_status_are_the_logs() {
     let sync = &status.sync_info;
     assert_eq!((sync.latest_block_height, sync.latest_block_hash), (h + 1, after.header.hash));
     assert_eq!((status.chain_id.as_str(), status.genesis_hash), ("localnet", genesis.header.hash));
-    assert_eq!((status.protocol_version, status.version.build.as_str()), (88, "near-contract-sim"));
+    assert_eq!((status.protocol_version, status.version.build.as_str()), (89, "near-contract-sim"));
     assert_eq!(sync.latest_state_root, Some(after.header.prev_state_root));
     let earliest = (sync.earliest_block_height, sync.earliest_block_hash);
     assert_eq!(earliest, (Some(0), Some(genesis.header.hash)), "every state is kept");
@@ -238,7 +238,7 @@ async fn blocks_and_status_are_the_logs() {
     // block applied on.
     node.with(|sim| (sim.config.seed, sim.config.protocol_version) = (7, 86));
     let again = rpc.block(BlockReference::genesis()).await.unwrap().header;
-    assert_eq!((again.hash, again.latest_protocol_version), (genesis.header.hash, 88));
+    assert_eq!((again.hash, again.latest_protocol_version), (genesis.header.hash, 89));
     assert_eq!(rpc.status().await.unwrap().genesis_hash, genesis.header.hash);
 }
 
@@ -401,7 +401,8 @@ async fn errors_reach_near_kit_typed() {
     let e = rpc.view_access_key_list_page(&id("bob.near"), None, None, at).await.unwrap_err();
     assert!(matches!(e, RpcError::TooManyAccessKeys { limit: 100, .. }), "{e:?}");
     assert_eq!(bob.access_keys("bob.near").await.unwrap().keys.len(), 101, "paginated");
-    assert!(alice.access_keys("nobody.near").await.unwrap().keys.is_empty(), "not an error");
+    let e = rpc_error(alice.access_keys("nobody.near").await);
+    assert!(matches!(e, RpcError::AccountNotFound { .. }), "{e:?}");
     let e = rpc_error(alice.balance("alice.near").at_block(10_000).await);
     assert!(matches!(e, RpcError::UnknownBlock(_)), "{e:?}");
     let e = rpc_error(alice.validators().await);
@@ -762,7 +763,7 @@ async fn patches_write_at_once() {
 
 /// A world set up on the sim and patched into a sandbox, where the same
 /// near-kit scenario burns the same gas. It needs a fresh sandbox of its own
-/// (`nearprotocol/sandbox:2.14.0`) at `NCS_SANDBOX_RPC`, as CI's
+/// (`nearprotocol/sandbox:2.15.0-rc.1`) at `NCS_SANDBOX_RPC`, as CI's
 /// differential job gives it.
 #[tokio::test]
 #[ignore = "needs a fresh sandbox: set NCS_SANDBOX_RPC"]
@@ -824,4 +825,77 @@ async fn a_block_reports_a_supply_above_i128_max() {
     assert_eq!(status, 200, "{block}");
     let total = block["result"]["header"]["total_supply"].as_str().unwrap().to_owned();
     assert_eq!(total, (1u128 << 127).to_string());
+}
+
+/// External calls through `send_tx`'s `external_call_base64`: an accepted
+/// one answers with its inclusion, under its unique id, which
+/// `EXPERIMENTAL_tx_status` and `receipt_to_tx` know; one the node's checks
+/// refuse is an invalid transaction; one the producer's dry run refuses is
+/// never included, so the wait times out. A `call_function` view of
+/// `__external_call` is the dry run.
+#[tokio::test(start_paused = true)]
+async fn external_calls_go_through_send_tx() {
+    use base64::Engine;
+    use near_contract_sim::nearcore::near_primitives::transaction::EccTransaction;
+    let b64 = |b: &[u8]| base64::engine::general_purpose::STANDARD.encode(b);
+    let mut sim = probe_sim();
+    sim.deploy("probe.near", wat("ecc_probe.wat"));
+    sim.deploy("bob.near", wat("ecc_probe.wat"));
+    let node = SimTransport::new(sim);
+    let send = |to: &str, payload: Vec<u8>| {
+        let ecc = EccTransaction::new(to.parse().unwrap(), payload);
+        json!({"external_call_base64": b64(&borsh::to_vec(&ecc).unwrap()),
+               "wait_until": "EXECUTED_OPTIMISTIC"})
+    };
+
+    let (status, r) = post(&node, "send_tx", send("probe.near", vec![0, b'h', b'i'])).await;
+    assert_eq!(status, 200, "{r}");
+    let r = &r["result"];
+    assert_eq!(r["status"]["SuccessValue"], b64(b"hi"), "{r}");
+    assert_eq!(r["transaction"]["kind"], "external_call", "{r}");
+    assert_eq!(r["transaction"]["contract_id"], "probe.near", "{r}");
+    let unique = r["transaction"]["transaction_id"].as_str().unwrap().to_string();
+    assert_eq!(r["transaction_outcome"]["id"], unique, "{r}");
+    assert_eq!(r["transaction_outcome"]["outcome"]["logs"], json!(["accepted"]), "{r}");
+    assert_eq!(r["receipts_outcome"], json!([]), "{r}");
+    let (_, st) = post(
+        &node,
+        "EXPERIMENTAL_tx_status",
+        json!({"tx_hash": unique, "sender_account_id": "probe.near", "wait_until": "FINAL"}),
+    )
+    .await;
+    assert_eq!(st["result"]["transaction"]["transaction_id"], unique, "{st}");
+
+    // A promise's receipt names the call as its origin.
+    let mut p = vec![13u8];
+    p.extend(5_000_000_000_000u64.to_le_bytes());
+    p.extend([0u8; 8 + 16]);
+    p.push(4);
+    p.extend(b"pingbob.near");
+    let (_, r) = post(&node, "send_tx", send("probe.near", p)).await;
+    let r = &r["result"];
+    assert_eq!(r["status"]["SuccessValue"], b64(b"pong"), "{r}");
+    let receipt = r["receipts_outcome"][0]["id"].clone();
+    let (_, found) =
+        post(&node, "EXPERIMENTAL_receipt_to_tx", json!({"receipt_id": receipt})).await;
+    assert_eq!(found["result"]["sender_account_id"], "probe.near", "{found}");
+    assert_eq!(found["result"]["transaction_hash"], r["transaction"]["transaction_id"]);
+
+    // Refused before the pool: alice has no contract.
+    assert_eq!(fails(&node, "send_tx", send("alice.near", vec![])).await.1, "INVALID_TRANSACTION");
+    // Refused by the dry run: never included.
+    assert_eq!(fails(&node, "send_tx", send("probe.near", vec![1])).await.1, "TIMEOUT_ERROR");
+
+    let view = |payload: &[u8]| {
+        json!({"request_type": "call_function", "finality": "optimistic",
+               "account_id": "probe.near", "method_name": "__external_call",
+               "args_base64": b64(payload)})
+    };
+    let (_, v) = post(&node, "query", view(&[0, b'o', b'k'])).await;
+    assert_eq!(v["result"]["result"], json!(b"ok".to_vec()), "{v}");
+    assert_eq!(v["result"]["logs"], json!(["accepted"]), "{v}");
+    let (_, v) = post(&node, "query", view(&[19])).await;
+    assert_eq!(v["error"]["cause"]["name"], "EXTERNAL_CALL_REFUSED", "{v}");
+    assert_eq!(v["error"]["code"], -32000, "{v}");
+    assert_eq!(v["error"]["cause"]["info"]["logs"], json!(["accepted"]), "{v}");
 }

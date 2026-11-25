@@ -14,12 +14,17 @@ use near_primitives::errors::{EpochError, InvalidTxError};
 use near_primitives::hash::{CryptoHash, hash};
 use near_primitives::receipt::Receipt;
 use near_primitives::shard_layout::ShardLayout;
-use near_primitives::transaction::{ExecutionOutcomeWithId, SignedTransaction};
-use near_primitives::types::{AccountId, Balance, EpochId, EpochInfoProvider, Gas, ShardId};
-use node_runtime::config::tx_cost;
-use node_runtime::{
-    ApplyResult, ApplyState, Runtime, SignedValidPeriodTransactions, ValidatorAccountsUpdate,
+use near_primitives::transaction::{
+    EccTransaction, ExecutionOutcomeWithId, SignedTransaction, TransactionEnvelope,
 };
+use near_primitives::types::{AccountId, Balance, EpochId, EpochInfoProvider, Gas, ShardId};
+use near_primitives::utils::create_ecc_outcome_id;
+use near_runtime::config::tx_cost;
+use near_runtime::{
+    ApplyResult, ApplyState, PrevBlockContext, Runtime, SignedValidPeriodTransactions,
+    ValidatorAccountsUpdate,
+};
+use std::sync::Arc;
 
 impl Chain {
     /// Runs the chunk: `txs` and the `incoming` receipts. Panics where
@@ -31,9 +36,16 @@ impl Chain {
         validators: &Option<ValidatorAccountsUpdate>,
         incoming: &[Receipt],
         txs: Vec<SignedTransaction>,
+        eccs: Vec<EccTransaction>,
     ) -> ApplyResult {
         let e = apply_state.epoch_height;
-        let taken: Vec<CryptoHash> = txs.iter().map(SignedTransaction::get_hash).collect();
+        // The outcome ids: a transaction's hash, a call's unique id.
+        let height = apply_state.block_height;
+        let taken: Vec<CryptoHash> = (txs.iter().map(SignedTransaction::get_hash))
+            .chain(eccs.iter().map(|c| create_ecc_outcome_id(c.hash_without_state_init(), height)))
+            .collect();
+        let envelopes: Vec<TransactionEnvelope> =
+            (txs.into_iter().map(Into::into)).chain(eccs.into_iter().map(Into::into)).collect();
         // Record reads like a chunk producer does (state witness): past the
         // soft limit the runtime delays the remaining receipts, and a single
         // receipt reading more than `per_receipt_storage_proof_size_limit`
@@ -47,7 +59,7 @@ impl Chain {
                 validators,
                 apply_state,
                 incoming,
-                SignedValidPeriodTransactions::new(txs, vec![true; taken.len()]),
+                SignedValidPeriodTransactions::new(envelopes, vec![true; taken.len()]),
                 &SimEpochInfo::new(config),
                 Default::default(),
             )
@@ -80,7 +92,7 @@ impl Chain {
         ApplyState {
             apply_reason: ApplyChunkReason::UpdateTrackedShard,
             block_height: height,
-            prev_block_hash: self.prev_block_hash(config),
+            prev_block: self.prev_block(config),
             shard_id: self.shard_uid.shard_id(),
             // Every epoch's id is the default: nearcore's runtime only keys
             // `EpochInfoProvider` lookups with it, which answer the same for
@@ -96,7 +108,9 @@ impl Chain {
             random_seed: self.random_seed(config, height),
             current_protocol_version: config.protocol_version,
             config: config.runtime_config().clone(),
+            config_store: Arc::clone(config.runtime_config_store()),
             next_wasm_config: None,
+            vm_generation: config.runtime_config_store().vm_generation(config.protocol_version),
             cache: Some(contract_cache()),
             is_new_chunk: true,
             save_receipt_to_tx: false,
@@ -104,6 +118,18 @@ impl Chain {
             bandwidth_requests: self.carry.bandwidth_requests.clone(),
             trie_access_tracker_state: Default::default(),
             on_post_state_ready: None,
+        }
+    }
+
+    /// The last block, which the next one applies on: what an external call
+    /// in it sees as its block.
+    pub(super) fn prev_block(&self, config: &Config) -> PrevBlockContext {
+        PrevBlockContext {
+            hash: self.prev_block_hash(config),
+            height: self.height,
+            epoch_id: EpochId::default(),
+            epoch_height: self.epoch_height(config, self.height),
+            timestamp: self.timestamp_ns,
         }
     }
 
@@ -131,17 +157,7 @@ impl Chain {
     ) -> (Vec<SignedTransaction>, Vec<ExecutionOutcomeWithId>) {
         let rc = config.runtime_config();
         let cc = CongestionControl::new(rc.congestion_control_config, self.carry.congestion(), 0);
-        if let ShardAcceptsTransactions::No(reason) = cc.shard_accepts_transactions() {
-            let congestion_level = match reason {
-                RejectTransactionReason::IncomingCongestion { congestion_level }
-                | RejectTransactionReason::OutgoingCongestion { congestion_level }
-                | RejectTransactionReason::MemoryCongestion { congestion_level } => {
-                    congestion_level
-                }
-                RejectTransactionReason::MissedChunks { .. } => unreachable!("no missed chunks"),
-            };
-            let shard_id = self.shard_uid.shard_id().into();
-            let err = InvalidTxError::ShardCongested { shard_id, congestion_level };
+        if let Some(err) = self.shard_congested(config) {
             let refused = std::mem::take(&mut self.mempool)
                 .iter()
                 .map(|h| ExecutionOutcomeWithId::failed(&self.log.txs[h], err.clone()))
@@ -152,7 +168,7 @@ impl Chain {
             (cc.process_tx_limit(), rc.witness_config.combined_transactions_size_limit as u64);
         let (mut gas, mut size, mut take) = (Gas::ZERO, 0u64, 0);
         for tx in self.queued() {
-            let tx_size = tx.size_for_limits(config.protocol_version);
+            let tx_size = tx.size_for_limits();
             // These cannot execute. Let the runtime report its validation
             // error without an un-packable head blocking the whole queue.
             if tx_size > rc.wasm_config.limit_config.max_transaction_size {
@@ -170,6 +186,25 @@ impl Chain {
         }
         let txs = self.mempool.drain(..take).map(|h| (*self.log.txs[&h]).clone()).collect();
         (txs, vec![])
+    }
+
+    /// Why the shard takes no transactions or calls in the next chunk, if
+    /// it doesn't: its congestion level (from the previous chunk) is at or
+    /// above `reject_tx_congestion_threshold`.
+    pub(super) fn shard_congested(&self, config: &Config) -> Option<InvalidTxError> {
+        let rc = config.runtime_config();
+        let cc = CongestionControl::new(rc.congestion_control_config, self.carry.congestion(), 0);
+        let ShardAcceptsTransactions::No(reason) = cc.shard_accepts_transactions() else {
+            return None;
+        };
+        let congestion_level = match reason {
+            RejectTransactionReason::IncomingCongestion { congestion_level }
+            | RejectTransactionReason::OutgoingCongestion { congestion_level }
+            | RejectTransactionReason::MemoryCongestion { congestion_level } => congestion_level,
+            RejectTransactionReason::MissedChunks { .. } => unreachable!("no missed chunks"),
+        };
+        let shard_id = self.shard_uid.shard_id().into();
+        Some(InvalidTxError::ShardCongested { shard_id, congestion_level })
     }
 }
 

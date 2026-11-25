@@ -5,6 +5,7 @@
 
 mod apply;
 mod callback;
+mod ecc;
 mod epoch;
 mod fault;
 mod log;
@@ -16,6 +17,7 @@ mod watch;
 
 #[cfg(feature = "near-kit")]
 pub(crate) use apply::VALIDATOR;
+pub(crate) use ecc::Verdict;
 pub(crate) use epoch::Epochs;
 pub(crate) use log::{Block, Log, action_receipt, calls, is_gas_refund, method_names};
 pub(crate) use reply::BoundReply;
@@ -28,7 +30,7 @@ use fault::Faulting;
 use near_parameters::{RuntimeConfig, RuntimeConfigStore};
 use near_primitives::errors::{ActionError, ActionErrorKind, FunctionCallError, TxExecutionError};
 use near_primitives::hash::{CryptoHash, hash};
-use near_primitives::receipt::{Receipt, ReceiptOrStateStoredReceipt, ReceiptSource};
+use near_primitives::receipt::{Receipt, ReceiptSource, StateStoredReceipt};
 use near_primitives::shard_layout::{ShardLayout, ShardUId};
 use near_primitives::transaction::{ExecutionStatus, SignedTransaction};
 use near_primitives::trie_key::TrieKey;
@@ -50,8 +52,8 @@ use std::time::Duration;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Config {
     /// The version whose fees, limits and wasm config the next block runs
-    /// with; changing it runs no migrations. The pinned nearcore runs 84 to
-    /// 88, and its `PROTOCOL_VERSION`, 88, is the default.
+    /// with; changing it runs no migrations. The pinned nearcore runs 85 to
+    /// 89, and its `PROTOCOL_VERSION`, 89, is the default.
     /// [`runtime_config`](Self::runtime_config) and
     /// [`Sim::step`](crate::Sim::step) panic on any other.
     pub protocol_version: ProtocolVersion,
@@ -115,8 +117,11 @@ pub struct Config {
     /// penalties. To price a defect at an older (or newer) version's
     /// costs, as a sandbox on that version would, while contracts run on
     /// the pinned semantics: an approximation, labeled as such on every
-    /// report made under it, and never merged into a default one. Any `n` the
-    /// store holds (it keeps a config per change since genesis).
+    /// report made under it, and never merged into a default one. Any `n`
+    /// from 85 to 89, the versions the pinned nearcore's store holds: 2.15
+    /// dropped the configs of older versions, so
+    /// [`runtime_config`](Self::runtime_config) and
+    /// [`Sim::step`](crate::Sim::step) panic on any other.
     pub gas_pricing: Option<ProtocolVersion>,
 }
 
@@ -218,7 +223,21 @@ impl Config {
             supported.contains(&v),
             "config.protocol_version {v} is not supported (supported: {supported:?})"
         );
+        if let Some(p) = self.gas_pricing {
+            assert!(
+                supported.contains(&p),
+                "config.gas_pricing {p} is not supported (supported: {supported:?}): the \
+                 pinned nearcore's config store holds no other version's prices"
+            );
+        }
         limited_config(v, self.gas_limits, self.gas_pricing)
+    }
+
+    /// Every supported version's [`runtime_config`](Self::runtime_config)
+    /// under these limits and pricing: what a receipt's static fees are
+    /// priced with, by the version it was created at.
+    pub(crate) fn runtime_config_store(&self) -> &'static Arc<RuntimeConfigStore> {
+        config_store(self.gas_limits, self.gas_pricing)
     }
 
     /// What one transaction may attach: `max_total_prepaid_gas`. The
@@ -278,7 +297,7 @@ pub(crate) struct ViewAt {
 /// Unchecked: a block's version was checked when it ran. The protocol's
 /// own limits: what fees read (no fee depends on a gas ceiling).
 pub(crate) fn runtime_config(v: ProtocolVersion) -> &'static Arc<RuntimeConfig> {
-    static STORE: LazyLock<RuntimeConfigStore> = LazyLock::new(|| RuntimeConfigStore::new(None));
+    static STORE: LazyLock<RuntimeConfigStore> = LazyLock::new(RuntimeConfigStore::new);
     STORE.get_config(v)
 }
 
@@ -330,6 +349,23 @@ fn limited_config(
     })
 }
 
+/// The store of [`limited_config`] for every supported version, built once
+/// per (limits, pricing) and kept for the process.
+fn config_store(
+    limits: GasLimits,
+    pricing: Option<ProtocolVersion>,
+) -> &'static Arc<RuntimeConfigStore> {
+    type Stores = HashMap<(GasLimits, Option<ProtocolVersion>), &'static Arc<RuntimeConfigStore>>;
+    static STORES: LazyLock<std::sync::Mutex<Stores>> = LazyLock::new(Default::default);
+    let mut built = STORES.lock().unwrap_or_else(|e| e.into_inner());
+    built.entry((limits, pricing)).or_insert_with(|| {
+        let configs = (MIN_SUPPORTED_PROTOCOL_VERSION..=PROTOCOL_VERSION)
+            .map(|v| (v, Arc::clone(limited_config(v, limits, pricing))))
+            .collect();
+        Box::leak(Box::new(Arc::new(RuntimeConfigStore::new_custom(configs))))
+    })
+}
+
 #[derive(Clone)]
 pub(crate) struct Chain {
     tries: ShardTries,
@@ -341,6 +377,10 @@ pub(crate) struct Chain {
     pub timestamp_ns: u64,
     /// Transactions for the next block, in submission order.
     mempool: Vec<CryptoHash>,
+    /// Every send of an external call, and the pending ones, in order:
+    /// see `ecc.rs`. Not snapshotted.
+    sends: Vec<ecc::Send>,
+    ecc_pool: Vec<usize>,
     /// Receipts for the next block.
     incoming: Vec<Receipt>,
     /// Receipts holds keep back (`order.rs`), in the order they go out, each
@@ -377,6 +417,8 @@ impl Chain {
             height,
             timestamp_ns,
             mempool: vec![],
+            sends: vec![],
+            ecc_pool: vec![],
             incoming: vec![],
             holding: VecDeque::new(),
             carry: Carry::new(shard_uid.shard_id()),
@@ -488,7 +530,7 @@ impl Chain {
     }
 
     /// Panics unless each `Receipts::in_tx` is a `HoldUntil`'s and names a
-    /// transaction submitted before.
+    /// transaction submitted before, or an external call included before.
     #[track_caller]
     fn check_in_tx(&self, injections: &[(Receipts, Fault)]) {
         for (at, fault) in injections {
@@ -501,7 +543,7 @@ impl Chain {
                 && let Some(t) = until.tx_of()
             {
                 assert!(
-                    self.log.txs.contains_key(&t),
+                    self.log.is_root(&t),
                     "{fault} at {at}: {t} names no transaction submitted before this one"
                 );
             }
@@ -510,6 +552,11 @@ impl Chain {
 
     pub(crate) fn queued(&self) -> impl Iterator<Item = &SignedTransaction> {
         self.mempool.iter().map(|h| &*self.log.txs[h])
+    }
+
+    /// Transactions and external calls waiting for a block.
+    pub(crate) fn pooled(&self) -> usize {
+        self.mempool.len() + self.ecc_pool.len()
     }
 
     /// Applies block `height + 1`, one `block_time` after the last, and makes
@@ -528,13 +575,25 @@ impl Chain {
         self.timestamp_ns = apply_state.block_timestamp;
         let incoming = std::mem::take(&mut self.incoming);
         let (txs, mut outcomes) = self.take_chunk_transactions(config);
-        let mut res = self.apply_chunk(config, &apply_state, &validators, &incoming, txs);
+        let size = txs.iter().map(SignedTransaction::size_for_limits).sum();
+        let eccs = self.take_chunk_eccs(config, &apply_state, &txs, size);
+        let mut res = self.apply_chunk(config, &apply_state, &validators, &incoming, txs, eccs);
+        self.remember_eccs(apply_state.block_height, &res.external_calls);
         // Before the log records the bodies, so a delivered callback's, and a
         // faulted receipt's, is its own.
-        self.rewrite_callbacks(outcomes.iter().chain(&res.outcomes), &mut res.outgoing_receipts);
+        self.rewrite_callbacks(
+            outcomes.iter().chain(&res.outcomes),
+            &mut res.outgoing_receipts,
+            config.protocol_version,
+        );
         let buffered: Vec<Receipt> =
             res.state_changes.iter().filter_map(buffered_receipt).collect();
-        let hold = self.apply_faults(&mut res.outcomes, &mut res.outgoing_receipts, &buffered);
+        let hold = self.apply_faults(
+            &mut res.outcomes,
+            &mut res.outgoing_receipts,
+            &buffered,
+            config.protocol_version,
+        );
         let before = self.trie();
         self.log.note_writes(&res.state_changes, |k| {
             before.get(&k.to_vec(), AccessOptions::DEFAULT).expect("storage")
@@ -573,7 +632,7 @@ impl Chain {
             height: self.height,
             timestamp_ns: self.timestamp_ns,
             hash: block_hash(config.seed, self.log.blocks.len() as u64 + 1),
-            prev_hash: apply_state.prev_block_hash,
+            prev_hash: apply_state.prev_block.hash,
             prev_state_root,
             protocol_version: config.protocol_version,
             pricing: config.gas_pricing,
@@ -612,7 +671,10 @@ impl Chain {
 
     /// Settled but for held receipts.
     fn is_quiet(&self) -> bool {
-        self.mempool.is_empty() && self.incoming.is_empty() && self.carry.is_empty()
+        self.mempool.is_empty()
+            && !self.has_pooled_eccs()
+            && self.incoming.is_empty()
+            && self.carry.is_empty()
     }
 }
 
@@ -654,7 +716,7 @@ fn block_hash(seed: u64, n: u64) -> CryptoHash {
 fn buffered_receipt(c: &RawStateChangesWithTrieKey) -> Option<Receipt> {
     let TrieKey::BufferedReceipt { .. } = c.trie_key else { return None };
     let v = c.changes.last()?.data.as_deref()?;
-    Some(ReceiptOrStateStoredReceipt::try_from_slice(v).expect("a buffered receipt").into_receipt())
+    Some(StateStoredReceipt::try_from_slice(v).expect("a buffered receipt").into_receipt())
 }
 
 /// Says once per process that an epoch began with stake and

@@ -205,7 +205,7 @@ fn config_block_time_gas_price_and_protocol_version() {
     // config.runtime_config() is the real config for the chosen protocol version.
     assert_eq!(
         sim.config.runtime_config().wasm_config.limit_config.max_total_prepaid_gas,
-        near_contract_sim::nearcore::near_parameters::RuntimeConfigStore::new(None)
+        near_contract_sim::nearcore::near_parameters::RuntimeConfigStore::new()
             .get_config(86)
             .wasm_config
             .limit_config
