@@ -185,9 +185,10 @@ fn the_docs_fit_their_budget() {
 }
 
 /// One form of the dependency: the quickstart and the README add the same
-/// `[dev-dependencies]`, pinned by the `rev` of a release's commit (every
-/// page names the same one), and no page puts the simulator under
-/// `[dependencies]`.
+/// `[dev-dependencies]`, the crates.io version of a release (every page
+/// names the same one), and no page puts the simulator under
+/// `[dependencies]`. The release is CHANGELOG.md's newest, or the one
+/// before it while a release's own pull request bumps the version.
 #[test]
 fn the_dependency_has_one_form() {
     let deps = |page: &str| -> String {
@@ -199,10 +200,15 @@ fn the_dependency_has_one_form() {
     };
     let quickstart = deps("skills/near-contract-sim/references/quickstart.md");
     assert!(quickstart.starts_with("[dev-dependencies]\n"), "{quickstart}");
-    let rev = quickstart.split(", rev = \"").nth(1).and_then(|r| r.split_once("\" }"));
-    let rev = rev.unwrap_or_else(|| panic!("no rev: {quickstart}")).0;
-    let commit = rev.len() == 40 && rev.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
-    assert!(commit, "rev {rev:?} is no 40-digit commit: {quickstart}");
+    let version = quickstart.split("near-contract-sim = \"").nth(1).and_then(|r| r.split_once('"'));
+    let version = version.unwrap_or_else(|| panic!("no version: {quickstart}")).0;
+    let changelog = std::fs::read_to_string(manifest_dir().join("CHANGELOG.md")).unwrap();
+    let releases: Vec<&str> = changelog
+        .lines()
+        .filter_map(|l| l.strip_prefix("## ")?.split(' ').next())
+        .take(2)
+        .collect();
+    assert!(releases.contains(&version), "{version} is no recent release: {releases:?}");
     assert_eq!(deps("README.md"), quickstart);
     for (page, text) in pages() {
         for block in blocks(&text, "toml") {
@@ -213,7 +219,7 @@ fn the_dependency_has_one_form() {
                 }
                 if line.starts_with("near-contract-sim = ") {
                     assert_eq!(table, "[dev-dependencies]", "{page}: {line}");
-                    assert!(line.contains(&format!("rev = \"{rev}\"")), "{page}: {line}");
+                    assert!(line.contains(&format!("\"{version}\"")), "{page}: {line}");
                 }
             }
         }

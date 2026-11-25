@@ -34,7 +34,7 @@ and a `Cargo.lock` if the contract had none, worth committing.
 
 ```toml
 [dev-dependencies]
-near-contract-sim = { git = "https://github.com/near/near-contract-sim", rev = "3adfe183685ec9e89f847c4447858587b3233719" }
+near-contract-sim = "0.3.0-rc.1"
 cargo-near-build = "0.11"
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
@@ -45,9 +45,9 @@ opt-level = 2
 debug = false
 ```
 
-The crate isn't on crates.io yet, so it is a git dependency: pin `rev` to
-the commit of a release tag (`v0.2.3`'s is shown), and keep it pinned. Set the profile before the
-first build: unoptimized nearcore can take a minute for one large call.
+The version is a release candidate, which Cargo takes only when it is
+named: keep it as shown. Set the profile before the first build:
+unoptimized nearcore can take a minute for one large call.
 
 nearcore's VM has 1000 wasm instances per process, and its idle rayon
 workers spin: cap both in `.cargo/config.toml`, where no one has to remember it:

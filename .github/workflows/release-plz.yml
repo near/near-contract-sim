@@ -1,8 +1,8 @@
 # The release-plz quickstart workflow (https://release-plz.dev/docs/github/quickstart),
-# without CARGO_REGISTRY_TOKEN (release-plz.toml: git_only, not on crates.io yet),
-# with the toolchain installed as ci.yml does (the channel that
-# rust-toolchain.toml pins, not a second `stable`), and with one added
-# step: CI on the release branch.
+# publishing with crates.io's trusted publishing (`id-token: write`), with the
+# toolchain installed as ci.yml does (the channel that
+# rust-toolchain.toml pins, not a second `stable`), and with two added
+# steps: libclang for the publish's build, and CI on the release branch.
 name: Release-plz
 
 on:
@@ -13,10 +13,13 @@ on:
 jobs:
   release-plz-release:
     name: Release-plz release
-    runs-on: ubuntu-latest
+    # A publish builds the packaged crate, nearcore with it: ci.yml's runner.
+    runs-on: warp-ubuntu-2404-x64-8x
+    timeout-minutes: 60
     permissions:
       contents: write
       pull-requests: read
+      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -25,10 +28,18 @@ jobs:
           persist-credentials: false
       - name: Install Rust (rust-toolchain.toml)
         run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+      # As in ci.yml: librocksdb-sys runs bindgen, which needs libclang.
+      - name: Install libclang
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends llvm clang libclang-dev
       - name: Run release-plz
         uses: release-plz/action@v0.5
         with:
           command: release
+          # Only the crate's first publish, which trusted publishing can't
+          # do. Unset, release-plz takes a token by trusted publishing.
+          token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

@@ -23,4 +23,4 @@ them not to.
 
 ## Supported versions
 
-Before 1.0 only the latest release (a git tag, `vX.Y.Z`) gets fixes.
+Before 1.0 only the latest release on crates.io gets fixes.

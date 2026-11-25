@@ -1,7 +1,7 @@
 [workspace]
-# Not on crates.io yet: versions come from `v*` git tags, and a release is
-# a tag plus a GitHub release.
-git_only = true
+# A release publishes to crates.io, tags `vX.Y.Z` and makes a GitHub
+# release, marked a prerelease for a version like `0.3.0-rc.1`.
+git_release_type = "auto"
 # tests/api/public.txt and `!` titles track the API; a semver check would
 # build nearcore twice on every push to main.
 semver_check = false
